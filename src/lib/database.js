@@ -115,11 +115,10 @@ export function applyInspectionFilter(inspection, rawFilterInput) {
     addIssue(issues, issue.level, issue.context, issue.message);
   }
 
-  const unfilteredCounts = {
-    files: countRecordsByKind(inspection.filesystemRecords, 'file'),
-    folders: countRecordsByKind(inspection.filesystemRecords, 'folder'),
-    archives: inspection.archiveViews.length,
-  };
+  const unfilteredCounts = countInspectionResultRecords(
+    inspection.filesystemRecords,
+    inspection.archiveViews,
+  );
 
   if (!filterState.isFiltering) {
     return {
@@ -149,11 +148,7 @@ export function applyInspectionFilter(inspection, rawFilterInput) {
     .filter((archive) => archive.summaryRecords.length > 0 || archive.keepWhenEmpty)
     .map(({ keepWhenEmpty, ...archive }) => archive);
 
-  const resultCounts = {
-    files: countRecordsByKind(filesystemRecords, 'file'),
-    folders: countRecordsByKind(filesystemRecords, 'folder'),
-    archives: archiveViews.length,
-  };
+  const resultCounts = countInspectionResultRecords(filesystemRecords, archiveViews);
 
   return {
     ...inspection,
@@ -1725,6 +1720,20 @@ function intersectsSet(left, right) {
 
 function countRecordsByKind(records, kind) {
   return records.filter((record) => record.kind === kind).length;
+}
+
+function countInspectionResultRecords(filesystemRecords, archiveViews) {
+  const archiveSummaryRecords = archiveViews.flatMap((archive) =>
+    Array.isArray(archive.summaryRecords) ? archive.summaryRecords : [],
+  );
+
+  return {
+    files: countRecordsByKind(filesystemRecords, 'file') + countRecordsByKind(archiveSummaryRecords, 'file'),
+    folders:
+      countRecordsByKind(filesystemRecords, 'folder') +
+      countRecordsByKind(archiveSummaryRecords, 'folder'),
+    archives: archiveViews.length,
+  };
 }
 
 function buildInspectionFilterSummary(filterState, resultCounts) {

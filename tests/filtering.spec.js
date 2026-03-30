@@ -16,7 +16,7 @@ test('FILTER applies downloader-style positive and negative terms across files a
   const filterInput = page.getByLabel('FILTER');
   await filterInput.fill('a !b');
 
-  await expect(page.getByText('Showing 3 files, 3 folders, and 1 archives for this filter.')).toBeVisible();
+  await expect(page.getByText('Showing 5 files, 5 folders, and 1 archives for this filter.')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'file_a.rbf' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'plain.rbf' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'essential.rbf' })).toBeVisible();
@@ -43,7 +43,7 @@ test('FILTER ignores inherited terms with a warning and keeps the remaining filt
   const filterInput = page.getByLabel('FILTER');
   await filterInput.fill('[mister] b');
 
-  await expect(page.getByText('Showing 3 files, 3 folders, and 1 archives for this filter.')).toBeVisible();
+  await expect(page.getByText('Showing 5 files, 5 folders, and 1 archives for this filter.')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'file_b.rbf' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'file_a.rbf' })).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'plain.rbf' })).toBeVisible();

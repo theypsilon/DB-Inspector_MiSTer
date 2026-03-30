@@ -187,8 +187,24 @@ test('archive summaries are filtered with the same semantics as filesystem entri
 
   assert.equal(result.activeFilter.hasError, false);
   assert.equal(result.archiveViews.length, 1);
+  assert.deepEqual(result.activeFilter.resultCounts, {
+    files: 2,
+    folders: 2,
+    archives: 1,
+  });
   assert.deepEqual(listTreePaths(result.archiveViews[0].tree, 'file'), ['games/archives/a.cht', 'games/archives/plain.cht']);
   assert.deepEqual(listTreePaths(result.archiveViews[0].tree, 'folder'), ['games/', 'games/archives/', 'games/archives/a/', 'games/archives/plain/']);
+});
+
+test('result counts include both top-level content and archive summary content', () => {
+  const result = applyInspectionFilter(createMixedArchiveInspection(), 'a !b');
+
+  assert.equal(result.activeFilter.hasError, false);
+  assert.deepEqual(result.activeFilter.resultCounts, {
+    files: 5,
+    folders: 5,
+    archives: 1,
+  });
 });
 
 function createFilesABCInspection({ prefix = '' } = {}) {
@@ -259,6 +275,33 @@ function createFoobarInspection() {
 
 function createArchiveInspection() {
   return createInspection({
+    archives: [
+      archiveView('filter_archive', [
+        fileRecord('games/archives/a.cht', ['a']),
+        fileRecord('games/archives/b.cht', ['b']),
+        fileRecord('games/archives/plain.cht'),
+        folderRecord('games/archives/a/', ['a']),
+        folderRecord('games/archives/b/', ['b']),
+        folderRecord('games/archives/plain/'),
+      ]),
+    ],
+  });
+}
+
+function createMixedArchiveInspection() {
+  return createInspection({
+    files: [
+      fileRecord('games/A/file_a.rbf', ['a']),
+      fileRecord('games/B/file_b.rbf', ['b']),
+      fileRecord('games/plain/plain.rbf'),
+      fileRecord('games/essential/essential.rbf', ['essential']),
+    ],
+    folders: [
+      folderRecord('games/A/', ['a']),
+      folderRecord('games/B/', ['b']),
+      folderRecord('games/plain/'),
+      folderRecord('games/essential/', ['essential']),
+    ],
     archives: [
       archiveView('filter_archive', [
         fileRecord('games/archives/a.cht', ['a']),
