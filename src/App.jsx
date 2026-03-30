@@ -16,6 +16,8 @@ import {
 } from './lib/database.js';
 
 const DATABASE_URL_PARAM = 'database-url';
+const INITIAL_TREE_RENDER_COUNT = 120;
+const TREE_RENDER_CHUNK_SIZE = 180;
 
 export default function App() {
   const fileInputRef = useRef(null);
@@ -856,91 +858,48 @@ const IniPickerModal = memo(function IniPickerModal({ iniSource, onClose, onOpen
 });
 
 const FilesystemSection = memo(function FilesystemSection({ tree }) {
-  const [detailed, setDetailed] = useState(false);
-  const [collapsedIds, setCollapsedIds] = useState(() => new Set());
-  const [detailOverrides, setDetailOverrides] = useState(() => new Map());
   const index = useMemo(() => buildFlatNodeIndex(tree.children), [tree]);
-  const visibleRows = useMemo(
-    () => collectVisibleRows(index.rootIds, index.rowsById, collapsedIds),
-    [index, collapsedIds],
-  );
-
-  const handleDetailedChange = useCallback((nextDetailed) => {
-    startTransition(() => {
-      setDetailed(nextDetailed);
-    });
-  }, []);
-
-  const handleExpandAll = useCallback(() => {
-    startTransition(() => {
-      setCollapsedIds(new Set());
-    });
-  }, []);
-
-  const handleCollapseAll = useCallback(() => {
-    startTransition(() => {
-      setCollapsedIds(new Set(index.collapsibleIds));
-    });
-  }, [index]);
-
-  const handleToggleCollapsed = useCallback((rowId) => {
-    startTransition(() => {
-      setCollapsedIds((current) => toggleSetMembership(current, rowId));
-    });
-  }, []);
-
-  const handleToggleDetails = useCallback(
-    (rowId) => {
-      startTransition(() => {
-        setDetailOverrides((current) => toggleDetailOverride(current, rowId, detailed));
-      });
-    },
-    [detailed],
-  );
 
   return (
-    <CollapsibleSection
+    <TreeSection
       label="Filesystem"
       title="Files and folders"
-      defaultOpen
-      actions={
-        <SectionControls
-          detailed={detailed}
-          onDetailedChange={handleDetailedChange}
-          onExpandAll={handleExpandAll}
-          onCollapseAll={handleCollapseAll}
-        />
-      }
-    >
-      {visibleRows.length ? (
-        <div className="tree-root">
-          {visibleRows.map((row) => (
-            <FlatNodeRow
-              key={row.id}
-              row={row}
-              collapsed={collapsedIds.has(row.id)}
-              detailsVisible={detailOverrides.get(row.id) ?? detailed}
-              onToggleCollapsed={handleToggleCollapsed}
-              onToggleDetails={handleToggleDetails}
-            />
-          ))}
-        </div>
-      ) : (
-        <EmptyState message="No top-level files or folders were found." />
-      )}
-    </CollapsibleSection>
+      listClassName="tree-root"
+      emptyMessage="No top-level files or folders were found."
+      index={index}
+    />
   );
 });
 
 const ArchiveSummariesSection = memo(function ArchiveSummariesSection({ archiveViews }) {
+  const index = useMemo(() => buildFlatArchiveIndex(archiveViews), [archiveViews]);
+
+  return (
+    <TreeSection
+      label="Archives"
+      title="Archive summaries"
+      listClassName="archive-list"
+      emptyMessage="This database does not define any archives."
+      index={index}
+    />
+  );
+});
+
+const TreeSection = memo(function TreeSection({
+  label,
+  title,
+  listClassName,
+  emptyMessage,
+  index,
+}) {
   const [detailed, setDetailed] = useState(false);
   const [collapsedIds, setCollapsedIds] = useState(() => new Set());
   const [detailOverrides, setDetailOverrides] = useState(() => new Map());
-  const index = useMemo(() => buildFlatArchiveIndex(archiveViews), [archiveViews]);
-  const visibleRows = useMemo(
-    () => collectVisibleRows(index.rootIds, index.rowsById, collapsedIds),
+  const visibleRowIds = useMemo(
+    () => collectVisibleRowIds(index.rootIds, index.rowsById, collapsedIds),
     [index, collapsedIds],
   );
+  const renderedRowIds = useProgressiveRows(visibleRowIds);
 
   const handleDetailedChange = useCallback((nextDetailed) => {
     startTransition(() => {
@@ -977,8 +936,8 @@ const ArchiveSummariesSection = memo(function ArchiveSummariesSection({ archiveV
 
   return (
     <CollapsibleSection
-      label="Archives"
-      title="Archive summaries"
+      label={label}
+      title={title}
       defaultOpen
       actions={
         <SectionControls
@@ -989,11 +948,16 @@ const ArchiveSummariesSection = memo(function ArchiveSummariesSection({ archiveV
         />
       }
     >
-      {visibleRows.length ? (
-        <div className="archive-list">
-          {visibleRows.map((row) =>
-            row.type === 'archive' ? (
-              <FlatArchiveRow
+      {renderedRowIds.length ? (
+        <div className={listClassName}>
+          {renderedRowIds.map((rowId) => {
+            const row = index.rowsById.get(rowId);
+            if (!row) {
+              return null;
+            }
+
+            return (
+              <TreeEntryRow
                 key={row.id}
                 row={row}
                 collapsed={collapsedIds.has(row.id)}
@@ -1001,20 +965,17 @@ const ArchiveSummariesSection = memo(function ArchiveSummariesSection({ archiveV
                 onToggleCollapsed={handleToggleCollapsed}
                 onToggleDetails={handleToggleDetails}
               />
-            ) : (
-              <FlatNodeRow
-                key={row.id}
-                row={row}
-                collapsed={collapsedIds.has(row.id)}
-                detailsVisible={detailOverrides.get(row.id) ?? detailed}
-                onToggleCollapsed={handleToggleCollapsed}
-                onToggleDetails={handleToggleDetails}
-              />
-            ),
-          )}
+            );
+          })}
+          {renderedRowIds.length < visibleRowIds.length ? (
+            <p className="tree-progress">
+              Rendering {renderedRowIds.length.toLocaleString()} of{' '}
+              {visibleRowIds.length.toLocaleString()} visible entries...
+            </p>
+          ) : null}
         </div>
       ) : (
-        <EmptyState message="This database does not define any archives." />
+        <EmptyState message={emptyMessage} />
       )}
     </CollapsibleSection>
   );
@@ -1097,84 +1058,39 @@ function ModalFrame({ label, title, onClose, footer, children }) {
   );
 }
 
-const FlatArchiveRow = memo(function FlatArchiveRow({
+const TreeEntryRow = memo(function TreeEntryRow({
   row,
   collapsed,
   detailsVisible,
   onToggleCollapsed,
   onToggleDetails,
 }) {
-  const { archive, childIds } = row;
-  return (
-    <article
-      className={row.depth ? 'tree-entry tree-entry-indented archive-card' : 'tree-entry archive-card'}
-      style={buildTreeDepthStyle(row.depth)}
-    >
-      <div className="tree-row">
-        <button
-          type="button"
-          className="collapse-button"
-          onClick={() => onToggleCollapsed(row.id)}
-        >
-          {collapsed ? '+' : '-'}
-        </button>
-        <div className="tree-card archive-surface">
-          <div className="tree-heading">
-            <div className="tree-title-row">
-              <span className="node-badge archive-badge">ZIP</span>
-              <h3>{archive.title}</h3>
-            </div>
-            <div className="tree-heading-actions">
-              <div className="node-action-row">
-                <button
-                  type="button"
-                  className="inline-action-button"
-                  onClick={() => onToggleDetails(row.id)}
-                >
-                  {detailsVisible ? 'Hide details' : 'Show details'}
-                </button>
-              </div>
-              <code>{archive.id}</code>
-            </div>
-          </div>
-          <PrimaryFieldRow fields={archive.primaryFields} />
-          {detailsVisible ? <MetadataList fields={archive.details} /> : null}
-          {archive.issues.length ? (
-            <ul className="inline-issues">
-              {archive.issues.map((issue) => (
-                <li key={issue.id} className={`issue issue-${issue.level}`}>
-                  <span className="issue-level">{issue.level}</span>
-                  <span>{issue.message}</span>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          {!collapsed && !childIds.length ? (
-            <div className="archive-empty-inline">
-              <EmptyState message="No summary entries could be rendered for this archive." />
-            </div>
-          ) : null}
-        </div>
-      </div>
-    </article>
-  );
-});
-
-const FlatNodeRow = memo(function FlatNodeRow({
-  row,
-  collapsed,
-  detailsVisible,
-  onToggleCollapsed,
-  onToggleDetails,
-}) {
-  const { node, canCollapse } = row;
-  const bodyCollapsed = node.kind === 'file' && collapsed;
+  const isArchive = row.type === 'archive';
+  const canCollapse = row.canCollapse;
+  const childIds = row.childIds;
+  const title = isArchive ? row.archive.title : row.node.name;
+  const badge = isArchive ? 'ZIP' : row.node.badge;
+  const badgeClassName = isArchive
+    ? 'node-badge archive-badge'
+    : `node-badge ${row.node.kind === 'file' ? 'file-badge' : 'folder-badge'}`;
+  const identifier = isArchive ? row.archive.id : row.node.path;
+  const primaryFields = isArchive ? row.archive.primaryFields : row.node.primaryFields;
+  const details = isArchive ? row.archive.details : row.node.details;
+  const issues = isArchive ? row.archive.issues : [];
+  const isFile = !isArchive && row.node.kind === 'file';
+  const downloadUrl = isFile ? row.node.downloadUrl : null;
+  const bodyCollapsed = isFile && collapsed;
+  const containerClassName = [
+    'tree-entry',
+    row.depth ? 'tree-entry-indented' : '',
+    isArchive ? 'archive-card' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const Container = isArchive ? 'article' : 'div';
 
   return (
-    <div
-      className={row.depth ? 'tree-entry tree-entry-indented' : 'tree-entry'}
-      style={buildTreeDepthStyle(row.depth)}
-    >
+    <Container className={containerClassName} style={buildTreeDepthStyle(row.depth)}>
       <div className="tree-row">
         {canCollapse ? (
           <button
@@ -1187,13 +1103,11 @@ const FlatNodeRow = memo(function FlatNodeRow({
         ) : (
           <span className="collapse-spacer" />
         )}
-        <div className="tree-card">
+        <div className={isArchive ? 'tree-card archive-surface' : 'tree-card'}>
           <div className="tree-heading">
             <div className="tree-title-row">
-              <span className={`node-badge ${node.kind === 'file' ? 'file-badge' : 'folder-badge'}`}>
-                {node.badge}
-              </span>
-              <h3>{node.name}</h3>
+              <span className={badgeClassName}>{badge}</span>
+              <h3>{title}</h3>
             </div>
             <div className="tree-heading-actions">
               <div className="node-action-row">
@@ -1204,10 +1118,10 @@ const FlatNodeRow = memo(function FlatNodeRow({
                 >
                   {detailsVisible ? 'Hide details' : 'Show details'}
                 </button>
-                {node.kind === 'file' && node.downloadUrl ? (
+                {downloadUrl ? (
                   <a
                     className="download-button"
-                    href={node.downloadUrl}
+                    href={downloadUrl}
                     target="_blank"
                     rel="noreferrer"
                     download
@@ -1216,14 +1130,29 @@ const FlatNodeRow = memo(function FlatNodeRow({
                   </a>
                 ) : null}
               </div>
-              <code>{node.path}</code>
+              <code>{identifier}</code>
             </div>
           </div>
-          {!bodyCollapsed ? <PrimaryFieldRow fields={node.primaryFields} /> : null}
-          {!bodyCollapsed && detailsVisible ? <MetadataList fields={node.details} /> : null}
+          {!bodyCollapsed ? <PrimaryFieldRow fields={primaryFields} /> : null}
+          {!bodyCollapsed && detailsVisible ? <MetadataList fields={details} /> : null}
+          {issues.length ? (
+            <ul className="inline-issues">
+              {issues.map((issue) => (
+                <li key={issue.id} className={`issue issue-${issue.level}`}>
+                  <span className="issue-level">{issue.level}</span>
+                  <span>{issue.message}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {isArchive && !collapsed && !childIds.length ? (
+            <div className="archive-empty-inline">
+              <EmptyState message="No summary entries could be rendered for this archive." />
+            </div>
+          ) : null}
         </div>
       </div>
-    </div>
+    </Container>
   );
 });
 
@@ -1325,8 +1254,8 @@ function buildFlatArchiveIndex(archiveViews) {
   };
 }
 
-function collectVisibleRows(rootIds, rowsById, collapsedIds) {
-  const visibleRows = [];
+function collectVisibleRowIds(rootIds, rowsById, collapsedIds) {
+  const visibleRowIds = [];
 
   function visit(rowId) {
     const row = rowsById.get(rowId);
@@ -1334,7 +1263,7 @@ function collectVisibleRows(rootIds, rowsById, collapsedIds) {
       return;
     }
 
-    visibleRows.push(row);
+    visibleRowIds.push(rowId);
     if (row.childIds.length && !collapsedIds.has(row.id)) {
       for (const childId of row.childIds) {
         visit(childId);
@@ -1346,7 +1275,7 @@ function collectVisibleRows(rootIds, rowsById, collapsedIds) {
     visit(rowId);
   }
 
-  return visibleRows;
+  return visibleRowIds;
 }
 
 function toggleSetMembership(currentSet, value) {
@@ -1378,6 +1307,36 @@ function buildTreeDepthStyle(depth) {
   return { '--tree-depth': depth };
 }
 
+function useProgressiveRows(rowIds) {
+  const deferredRowIds = useDeferredValue(rowIds);
+  const [renderCount, setRenderCount] = useState(deferredRowIds.length);
+
+  useEffect(() => {
+    if (deferredRowIds.length <= INITIAL_TREE_RENDER_COUNT) {
+      setRenderCount(deferredRowIds.length);
+      return undefined;
+    }
+
+    let frameId = 0;
+    setRenderCount(INITIAL_TREE_RENDER_COUNT);
+
+    const pump = () => {
+      setRenderCount((current) => {
+        const next = Math.min(deferredRowIds.length, current + TREE_RENDER_CHUNK_SIZE);
+        if (next < deferredRowIds.length) {
+          frameId = window.requestAnimationFrame(pump);
+        }
+        return next;
+      });
+    };
+
+    frameId = window.requestAnimationFrame(pump);
+    return () => window.cancelAnimationFrame(frameId);
+  }, [deferredRowIds]);
+
+  return useMemo(() => deferredRowIds.slice(0, renderCount), [deferredRowIds, renderCount]);
+}
+
 function HighlightCard({ label, value, subvalue, accent }) {
   return (
     <div className={`highlight-card ${accent}`}>
@@ -1398,15 +1357,8 @@ function TagDictionary({ tags }) {
       className="tag-dictionary"
       open={open}
       onToggle={setOpen}
-      summaryAside={<span className="dictionary-count">{tags.length} entries</span>}
-      actions={
-        open ? (
-          <button type="button" className="secondary-button" onClick={() => setOpen(false)}>
-            Collapse
-          </button>
-        ) : null
-      }
     >
+      <p className="dictionary-meta">{tags.length} entries</p>
       {tags.length ? (
         <div className="tag-cloud">
           {tags.map((tag) => (

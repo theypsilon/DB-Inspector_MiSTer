@@ -1471,6 +1471,10 @@ function addIssue(list, level, context, message) {
 }
 
 function validateDestinationPath(path, kind, dbId, context, issues, itemLabel) {
+  if (context === 'archives.target_folder' && (path === '.' || path === './')) {
+    return path;
+  }
+
   const normalized = normalizeDestinationPath(path, kind, dbId);
   if (!normalized.ok) {
     addIssue(
