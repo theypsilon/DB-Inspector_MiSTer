@@ -826,36 +826,40 @@ export default function App() {
                   Database default: <code>{displayedInspection.overview.defaultFilter}</code>.
                 </p>
               ) : null}
-              <p className="catalog-count-inline">
-                {filterPending
-                  ? 'Updating preview...'
-                  : buildFilterSummaryCopy(displayedInspection.activeFilter)}
+              <p className="catalog-count-inline disk-usage-inline">
+                {filterPending ? (
+                  'Updating preview...'
+                ) : (
+                  <>
+                    <span>{buildFilterSummaryCopy(displayedInspection.activeFilter)}</span>
+                    {storageSummary ? (
+                      <>
+                        <span>Size:</span>
+                        <span
+                          className="disk-usage-value"
+                          title={buildRawByteHoverCopy(storageSummary)}
+                        >
+                          {formatBytes(storageSummary.clusteredBytes)}
+                        </span>
+                        <span>at</span>
+                        <select
+                          aria-label="Cluster size"
+                          className="cluster-size-select"
+                          value={clusterSizeBytes}
+                          onChange={(event) => setClusterSizeBytes(Number(event.target.value))}
+                        >
+                          {CLUSTER_SIZE_OPTIONS.map((option) => (
+                            <option key={option} value={option}>
+                              {formatBytes(option)}
+                            </option>
+                          ))}
+                        </select>
+                        <span>clusters.</span>
+                      </>
+                    ) : null}
+                  </>
+                )}
               </p>
-              {!filterPending && storageSummary ? (
-                <p className="catalog-count-inline disk-usage-inline">
-                  Disk space used:{' '}
-                  <span
-                    className="disk-usage-value"
-                    title={buildRawByteHoverCopy(storageSummary)}
-                  >
-                    {formatBytes(storageSummary.clusteredBytes)}
-                  </span>{' '}
-                  at{' '}
-                  <select
-                    aria-label="Cluster size"
-                    className="cluster-size-select"
-                    value={clusterSizeBytes}
-                    onChange={(event) => setClusterSizeBytes(Number(event.target.value))}
-                  >
-                    {CLUSTER_SIZE_OPTIONS.map((option) => (
-                      <option key={option} value={option}>
-                        {formatBytes(option)}
-                      </option>
-                    ))}
-                  </select>{' '}
-                  clusters.
-                </p>
-              ) : null}
             </CollapsibleSection>
 
             <FilesystemSection
