@@ -28,6 +28,8 @@ const DISTRIBUTION_MISTER_EXCEPTIONAL_PATHS = new Set([
   'linux/lesskey',
   'linux/glow',
 ]);
+const UPDATE_ALL_DATABASES_SOURCE_URL =
+  'https://raw.githubusercontent.com/theypsilon/Update_All_MiSTer/master/src/update_all/databases.py';
 
 export async function inspectDatabaseFile(file) {
   const bytes = new Uint8Array(await file.arrayBuffer());
@@ -53,6 +55,18 @@ export async function inspectDatabaseUrl(input) {
     containerType: decoded.containerType,
     extractedEntry: decoded.entryName,
   });
+}
+
+export async function loadRuntimeDatabaseCatalog() {
+  const response = await fetch(UPDATE_ALL_DATABASES_SOURCE_URL);
+  if (!response.ok) {
+    throw new Error(
+      `Could not fetch Update_All_MiSTer catalog source: ${response.status} ${response.statusText}.`,
+    );
+  }
+
+  const source = await response.text();
+  return parseRuntimeDatabaseCatalog(source);
 }
 
 export function formatBytes(value) {
@@ -158,6 +172,72 @@ function decodeJsonish(bytes, sourceName) {
   } catch (error) {
     throw new Error(`Could not parse JSON inside ${sourceName}: ${error.message}`);
   }
+}
+
+function parseRuntimeDatabaseCatalog(source) {
+  const constants = new Map();
+
+  for (const line of source.split('\n')) {
+    const match = line.match(/^\s*([A-Z][A-Z0-9_]*)\s*=\s*(['"])(.*?)\2\s*$/);
+    if (match) {
+      constants.set(match[1], match[3]);
+    }
+  }
+
+  const initSectionMatch = source.match(
+    /def __init__\(self\):([\s\S]*?)^\s+def all_dbs_list\(self\):/m,
+  );
+  if (!initSectionMatch) {
+    throw new Error('Could not find AllDBs.__init__ in Update_All_MiSTer databases.py.');
+  }
+
+  const entries = [];
+
+  for (const line of initSectionMatch[1].split('\n')) {
+    const match = line.match(
+      /^\s*self\.(\w+)\s*=\s*Database\(db_id=(.+?),\s*db_url=(.+?),\s*title=(.+?)\)\s*$/,
+    );
+    if (!match) {
+      continue;
+    }
+
+    const dbId = resolvePythonScalar(match[2], constants);
+    const dbUrl = resolvePythonScalar(match[3], constants);
+    const title = resolvePythonScalar(match[4], constants);
+
+    if (!dbId || !dbUrl || !title) {
+      continue;
+    }
+
+    entries.push({
+      key: match[1],
+      dbId,
+      dbUrl,
+      title,
+    });
+  }
+
+  return entries;
+}
+
+function resolvePythonScalar(token, constants) {
+  const value = String(token).trim();
+  if (!value) {
+    return '';
+  }
+
+  if (constants.has(value)) {
+    return constants.get(value) || '';
+  }
+
+  if (
+    (value.startsWith("'") && value.endsWith("'")) ||
+    (value.startsWith('"') && value.endsWith('"'))
+  ) {
+    return value.slice(1, -1).replaceAll(/\\(['"\\])/g, '$1');
+  }
+
+  return '';
 }
 
 function looksLikeZip(bytes) {
@@ -434,7 +514,6 @@ async function buildArchiveView({
     primaryFields: buildPrimaryFields({
       hash: getString(archiveFile.hash),
       size: Number(archiveFile.size),
-      system: detectSystem(archivePathInfo.displayPath) || detectSystemFromSummary(summaryRecords),
       tags: [],
     }),
     details: buildArchiveDetails({
@@ -496,13 +575,13 @@ function buildFolderRecord({ scope, context, path, dbVersion, dbId, folder, tagL
   return {
     id: `${scope}:folder:${path}`,
     kind: 'folder',
+    downloadUrl: null,
     path: pathInfo.displayPath,
     name: leafName(pathInfo.displayPath, 'folder'),
     badge: 'DIR',
     primaryFields: buildPrimaryFields({
       hash: null,
       size: null,
-      system: detectSystem(pathInfo.displayPath),
       tags: tagEntries,
     }),
     details: [
@@ -550,13 +629,13 @@ function buildFileRecord({
   return {
     id: `${scope}:file:${path}`,
     kind: 'file',
+    downloadUrl: resolvedUrl,
     path: pathInfo.displayPath,
     name: leafName(pathInfo.displayPath, 'file'),
     badge: 'FILE',
     primaryFields: buildPrimaryFields({
       hash: getString(fileRecord.hash),
       size: Number(fileRecord.size),
-      system: detectSystem(pathInfo.displayPath),
       tags: tagEntries,
     }),
     details: [
@@ -627,13 +706,13 @@ function buildArchiveFolderRecord({
   return {
     id: `archive:${archiveId}:folder:${path}`,
     kind: 'folder',
+    downloadUrl: null,
     path: pathInfo.displayPath,
     name: leafName(pathInfo.displayPath, 'folder'),
     badge: 'DIR',
     primaryFields: buildPrimaryFields({
       hash: null,
       size: null,
-      system: detectSystem(pathInfo.displayPath),
       tags: tagEntries,
     }),
     details: [
@@ -713,13 +792,13 @@ function buildArchiveFileRecord({
   return {
     id: `archive:${archiveId}:file:${path}`,
     kind: 'file',
+    downloadUrl: resolvedUrl,
     path: pathInfo.displayPath,
     name: leafName(pathInfo.displayPath, 'file'),
     badge: 'FILE',
     primaryFields: buildPrimaryFields({
       hash: getString(wrapped.hash),
       size: Number(wrapped.size),
-      system: detectSystem(pathInfo.displayPath),
       tags: tagEntries,
     }),
     details: [
@@ -748,7 +827,7 @@ function buildArchiveFileRecord({
   };
 }
 
-function buildPrimaryFields({ hash, size, system, tags }) {
+function buildPrimaryFields({ hash, size, tags }) {
   const fields = [];
 
   if (hash) {
@@ -760,10 +839,6 @@ function buildPrimaryFields({ hash, size, system, tags }) {
       label: 'Size',
       value: `${formatBytes(size)} (${size.toLocaleString()} bytes)`,
     });
-  }
-
-  if (system) {
-    fields.push({ label: 'System', value: system });
   }
 
   if (Array.isArray(tags) && tags.length) {
@@ -805,6 +880,7 @@ function insertRecord(root, record, scope) {
       current.childrenMap.set(segment, {
         id: record.id,
         kind: 'file',
+        downloadUrl: record.downloadUrl,
         name: segment,
         path: record.path,
         badge: record.badge,
@@ -822,6 +898,7 @@ function insertRecord(root, record, scope) {
         name: segment,
         path: `${branchPath}/`,
         badge: 'DIR',
+        downloadUrl: null,
         primaryFields: [],
         details: [
           { label: 'Destination', value: `${branchPath}/`, kind: 'code' },
@@ -836,6 +913,7 @@ function insertRecord(root, record, scope) {
       child.id = record.id;
       child.path = record.path;
       child.badge = record.badge;
+      child.downloadUrl = record.downloadUrl;
       child.primaryFields = record.primaryFields;
       child.details = record.details;
     }
@@ -1093,35 +1171,6 @@ function normalizeRelativePath(path, kind) {
   }
 
   return { ok: true, value: trimmed };
-}
-
-function detectSystem(path) {
-  const normalized = trimTrailingSlash(getString(path) || '');
-  if (!normalized) {
-    return null;
-  }
-
-  const segments = normalized.split('/').filter(Boolean);
-  if (segments.length < 2) {
-    return segments[0] || null;
-  }
-
-  if (['games', 'docs', 'filters', 'cheats', 'config'].includes(segments[0])) {
-    return segments[1] || segments[0];
-  }
-
-  return segments[0];
-}
-
-function detectSystemFromSummary(records) {
-  for (const record of records) {
-    const value = record.primaryFields.find((field) => field.label === 'System')?.value;
-    if (value) {
-      return value;
-    }
-  }
-
-  return null;
 }
 
 function leafName(path, kind) {

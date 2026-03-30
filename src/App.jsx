@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   inspectDatabaseFile,
   inspectDatabaseUrl,
+  loadRuntimeDatabaseCatalog,
 } from './lib/database.js';
 
 const DATABASE_URL_PARAM = 'database-url';
@@ -9,16 +10,27 @@ const DATABASE_URL_PARAM = 'database-url';
 export default function App() {
   const fileInputRef = useRef(null);
   const autoLoadHandledRef = useRef(false);
+  const inspectionRef = useRef(null);
   const [databaseUrl, setDatabaseUrl] = useState(() => readDatabaseUrlSearchParam());
   const [loadingMessage, setLoadingMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [inspection, setInspection] = useState(null);
   const [collapsedIds, setCollapsedIds] = useState(() => new Set());
+  const [databaseDetailed, setDatabaseDetailed] = useState(false);
   const [filesystemDetailed, setFilesystemDetailed] = useState(false);
   const [archivesDetailed, setArchivesDetailed] = useState(false);
+  const [nodeDetailVisibility, setNodeDetailVisibility] = useState({});
+  const [catalogOptions, setCatalogOptions] = useState([]);
+  const [catalogStatus, setCatalogStatus] = useState('loading');
+  const [catalogError, setCatalogError] = useState('');
+  const [selectedCatalogKey, setSelectedCatalogKey] = useState('');
 
-  const filesystemBranchIds = inspection ? collectTreeBranchIds(inspection.filesystemTree) : [];
-  const archiveBranchIds = inspection ? collectArchiveBranchIds(inspection.archiveViews) : [];
+  const filesystemNodeIds = inspection ? collectTreeNodeIds(inspection.filesystemTree) : [];
+  const archiveNodeIds = inspection ? collectArchiveNodeIds(inspection.archiveViews) : [];
+
+  useEffect(() => {
+    inspectionRef.current = inspection;
+  }, [inspection]);
 
   useEffect(() => {
     if (autoLoadHandledRef.current) {
@@ -34,6 +46,76 @@ export default function App() {
     void loadRemoteDatabase(sharedDatabaseUrl, { syncSearchParam: false });
   }, []);
 
+  useEffect(() => {
+    function handlePopState() {
+      const sharedDatabaseUrl = readDatabaseUrlSearchParam();
+      setDatabaseUrl(sharedDatabaseUrl);
+      setErrorMessage('');
+
+      if (sharedDatabaseUrl) {
+        void loadRemoteDatabase(sharedDatabaseUrl, { syncSearchParam: false });
+        return;
+      }
+
+      if (inspectionRef.current?.source?.sourceKind === 'url') {
+        setInspection(null);
+        setCollapsedIds(new Set());
+      }
+    }
+
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCatalog() {
+      setCatalogStatus('loading');
+      setCatalogError('');
+
+      try {
+        const entries = await loadRuntimeDatabaseCatalog();
+        if (cancelled) {
+          return;
+        }
+
+        setCatalogOptions(entries);
+        setCatalogStatus('ready');
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        setCatalogOptions([]);
+        setCatalogStatus('error');
+        setCatalogError(error.message);
+      }
+    }
+
+    void loadCatalog();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!catalogOptions.length) {
+      setSelectedCatalogKey('');
+      return;
+    }
+
+    const normalizedCurrentUrl = normalizeComparableUrl(databaseUrl);
+    const matchedOption = catalogOptions.find(
+      (option) => normalizeComparableUrl(option.dbUrl) === normalizedCurrentUrl,
+    );
+
+    setSelectedCatalogKey(matchedOption?.key ?? '');
+  }, [catalogOptions, databaseUrl]);
+
   async function loadFile(file) {
     if (!file) {
       return;
@@ -46,8 +128,9 @@ export default function App() {
       const nextInspection = await inspectDatabaseFile(file);
       setInspection(nextInspection);
       setCollapsedIds(new Set());
+      setNodeDetailVisibility({});
       setDatabaseUrl('');
-      writeDatabaseUrlSearchParam('');
+      writeDatabaseUrlSearchParam('', { pushHistory: true });
     } catch (error) {
       setInspection(null);
       setErrorMessage(error.message);
@@ -71,9 +154,10 @@ export default function App() {
       const sharedUrl = nextInspection.source.sourceLabel;
       setInspection(nextInspection);
       setCollapsedIds(new Set());
+      setNodeDetailVisibility({});
       setDatabaseUrl(sharedUrl);
       if (syncSearchParam) {
-        writeDatabaseUrlSearchParam(sharedUrl);
+        writeDatabaseUrlSearchParam(sharedUrl, { pushHistory: true });
       }
     } catch (error) {
       setInspection(null);
@@ -116,6 +200,30 @@ export default function App() {
           next.delete(nodeId);
         }
       }
+      return next;
+    });
+  }
+
+  function isNodeDetailsVisible(nodeId, defaultVisible) {
+    if (Object.hasOwn(nodeDetailVisibility, nodeId)) {
+      return nodeDetailVisibility[nodeId];
+    }
+
+    return defaultVisible;
+  }
+
+  function toggleNodeDetails(nodeId, defaultVisible) {
+    setNodeDetailVisibility((current) => {
+      const currentVisible = Object.hasOwn(current, nodeId) ? current[nodeId] : defaultVisible;
+      const nextVisible = !currentVisible;
+      const next = { ...current };
+
+      if (nextVisible === defaultVisible) {
+        delete next[nodeId];
+      } else {
+        next[nodeId] = nextVisible;
+      }
+
       return next;
     });
   }
@@ -190,6 +298,94 @@ export default function App() {
             URL so you can share the inspector state directly.
           </p>
         </section>
+
+        <section className="panel">
+          <p className="section-label">Picker</p>
+          <h2>Use Update_All_MiSTer catalog</h2>
+          <div className="url-form">
+            <label className="field-label" htmlFor="catalog-picker">
+              Database picker
+            </label>
+            <select
+              id="catalog-picker"
+              value={selectedCatalogKey}
+              onChange={(event) => {
+                const nextKey = event.target.value;
+                setSelectedCatalogKey(nextKey);
+                const option = catalogOptions.find((item) => item.key === nextKey);
+                if (option) {
+                  setDatabaseUrl(option.dbUrl);
+                }
+              }}
+              disabled={catalogStatus !== 'ready' || !catalogOptions.length}
+            >
+              <option value="">
+                {catalogStatus === 'loading'
+                  ? 'Loading picker options...'
+                  : catalogStatus === 'error'
+                    ? 'Picker unavailable'
+                    : 'Select a database'}
+              </option>
+              {catalogOptions.map((option) => (
+                <option key={option.key} value={option.key}>
+                  {option.dbId} | {option.title} | {option.dbUrl}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => {
+                const option = catalogOptions.find((item) => item.key === selectedCatalogKey);
+                if (option) {
+                  void loadRemoteDatabase(option.dbUrl);
+                }
+              }}
+              disabled={!selectedCatalogKey}
+            >
+              Open selected database
+            </button>
+          </div>
+          {selectedCatalogKey ? (
+            <div className="picker-preview">
+              {(() => {
+                const option = catalogOptions.find((item) => item.key === selectedCatalogKey);
+                if (!option) {
+                  return null;
+                }
+
+                return (
+                  <dl className="metadata-list compact-metadata">
+                    <div className="metadata-item">
+                      <dt>db_id</dt>
+                      <dd>
+                        <code>{option.dbId}</code>
+                      </dd>
+                    </div>
+                    <div className="metadata-item">
+                      <dt>Title</dt>
+                      <dd>{option.title}</dd>
+                    </div>
+                    <div className="metadata-item picker-preview-url">
+                      <dt>db_url</dt>
+                      <dd>
+                        <a href={option.dbUrl} target="_blank" rel="noreferrer">
+                          {option.dbUrl}
+                        </a>
+                      </dd>
+                    </div>
+                  </dl>
+                );
+              })()}
+            </div>
+          ) : null}
+          {catalogStatus === 'loading' ? (
+            <p className="helper-copy">
+              Reading the current `Update_All_MiSTer/src/update_all/databases.py` catalog at
+              runtime.
+            </p>
+          ) : null}
+          {catalogStatus === 'error' ? <p className="status error">{catalogError}</p> : null}
+        </section>
       </section>
 
       {(loadingMessage || errorMessage) && (
@@ -207,18 +403,26 @@ export default function App() {
                 <p className="section-label">Database</p>
                 <h2>{inspection.overview.dbId}</h2>
               </div>
-              <div className="highlight-row">
-                <HighlightCard
-                  label="Version"
-                  value={`v${inspection.overview.version}`}
-                  accent="version"
-                />
-                <HighlightCard
-                  label="Timestamp"
-                  value={inspection.overview.timestampLabel}
-                  subvalue={`Epoch ${inspection.overview.timestamp}`}
-                  accent="timestamp"
-                />
+              <div className="overview-side">
+                <div className="highlight-row">
+                  <HighlightCard
+                    label="Version"
+                    value={`v${inspection.overview.version}`}
+                    accent="version"
+                  />
+                  <HighlightCard
+                    label="Timestamp"
+                    value={inspection.overview.timestampLabel}
+                    subvalue={`Epoch ${inspection.overview.timestamp}`}
+                    accent="timestamp"
+                  />
+                </div>
+                <div className="overview-controls">
+                  <DetailedToggle
+                    detailed={databaseDetailed}
+                    onDetailedChange={setDatabaseDetailed}
+                  />
+                </div>
               </div>
             </div>
 
@@ -247,42 +451,44 @@ export default function App() {
                   },
                 ]}
               />
-              <MetadataCard
-                title="Options"
-                fields={[
-                  {
-                    label: 'base_files_url',
-                    value: inspection.overview.baseFilesUrl || 'None',
-                    kind: 'url',
-                  },
-                  {
-                    label: 'Default filter',
-                    value: inspection.overview.defaultFilter || 'None',
-                  },
-                  {
-                    label: 'Imported db_files',
-                    value: inspection.overview.importedDatabases.length
-                      ? inspection.overview.importedDatabases
-                      : ['None'],
-                  },
-                ]}
-              />
+              {databaseDetailed ? (
+                <MetadataCard
+                  title="Options"
+                  fields={[
+                    {
+                      label: 'base_files_url',
+                      value: inspection.overview.baseFilesUrl || 'None',
+                      kind: 'url',
+                    },
+                    {
+                      label: 'Default filter',
+                      value: inspection.overview.defaultFilter || 'None',
+                    },
+                    {
+                      label: 'Imported db_files',
+                      value: inspection.overview.importedDatabases.length
+                        ? inspection.overview.importedDatabases
+                        : ['None'],
+                    },
+                  ]}
+                />
+              ) : null}
             </div>
           </section>
 
-          <section className="panel">
-            <div className="section-heading">
-              <div>
-                <p className="section-label">Filesystem</p>
-                <h2>Files and folders</h2>
-              </div>
+          <CollapsibleSection
+            label="Filesystem"
+            title="Files and folders"
+            defaultOpen
+            actions={
               <SectionControls
                 detailed={filesystemDetailed}
                 onDetailedChange={setFilesystemDetailed}
-                onExpandAll={() => setSectionCollapsed(filesystemBranchIds, false)}
-                onCollapseAll={() => setSectionCollapsed(filesystemBranchIds, true)}
+                onExpandAll={() => setSectionCollapsed(filesystemNodeIds, false)}
+                onCollapseAll={() => setSectionCollapsed(filesystemNodeIds, true)}
               />
-            </div>
+            }
+          >
             {inspection.filesystemTree.children.length ? (
               <div className="tree-root">
                 {inspection.filesystemTree.children.map((node) => (
@@ -290,29 +496,31 @@ export default function App() {
                     key={node.id}
                     node={node}
                     showDetails={filesystemDetailed}
+                    areDetailsVisible={isNodeDetailsVisible}
                     collapsedIds={collapsedIds}
                     onToggle={toggleNode}
+                    onToggleDetails={toggleNodeDetails}
                   />
                 ))}
               </div>
             ) : (
               <EmptyState message="No top-level files or folders were found." />
             )}
-          </section>
+          </CollapsibleSection>
 
-          <section className="panel">
-            <div className="section-heading">
-              <div>
-                <p className="section-label">Archives</p>
-                <h2>Archive summaries</h2>
-              </div>
+          <CollapsibleSection
+            label="Archives"
+            title="Archive summaries"
+            defaultOpen
+            actions={
               <SectionControls
                 detailed={archivesDetailed}
                 onDetailedChange={setArchivesDetailed}
-                onExpandAll={() => setSectionCollapsed(archiveBranchIds, false)}
-                onCollapseAll={() => setSectionCollapsed(archiveBranchIds, true)}
+                onExpandAll={() => setSectionCollapsed(archiveNodeIds, false)}
+                onCollapseAll={() => setSectionCollapsed(archiveNodeIds, true)}
               />
-            </div>
+            }
+          >
             {inspection.archiveViews.length ? (
               <div className="archive-list">
                 {inspection.archiveViews.map((archive) => (
@@ -320,23 +528,23 @@ export default function App() {
                     key={archive.nodeId}
                     archive={archive}
                     showDetails={archivesDetailed}
+                    areDetailsVisible={isNodeDetailsVisible}
                     collapsedIds={collapsedIds}
                     onToggle={toggleNode}
+                    onToggleDetails={toggleNodeDetails}
                   />
                 ))}
               </div>
             ) : (
               <EmptyState message="This database does not define any archives." />
             )}
-          </section>
+          </CollapsibleSection>
 
-          <section className="panel">
-            <div className="section-heading">
-              <div>
-                <p className="section-label">Diagnostics</p>
-                <h2>Issues and warnings</h2>
-              </div>
-            </div>
+          <CollapsibleSection
+            label="Diagnostics"
+            title="Issues and warnings"
+            defaultOpen
+          >
             {inspection.issues.length ? (
               <ul className="issue-list">
                 {inspection.issues.map((issue) => (
@@ -350,7 +558,7 @@ export default function App() {
             ) : (
               <EmptyState message="No schema or path issues were detected by the browser-side inspector." />
             )}
-          </section>
+          </CollapsibleSection>
 
           <section className="panel">
             <TagDictionary tags={inspection.overview.tagDictionary} />
@@ -379,7 +587,7 @@ function readDatabaseUrlSearchParam() {
   return searchParams.get(DATABASE_URL_PARAM) ?? '';
 }
 
-function writeDatabaseUrlSearchParam(value) {
+function writeDatabaseUrlSearchParam(value, { pushHistory = false } = {}) {
   if (typeof window === 'undefined') {
     return;
   }
@@ -391,11 +599,35 @@ function writeDatabaseUrlSearchParam(value) {
     currentUrl.searchParams.delete(DATABASE_URL_PARAM);
   }
 
-  window.history.replaceState({}, '', currentUrl);
+  if (currentUrl.toString() === window.location.href) {
+    return;
+  }
+
+  if (pushHistory) {
+    window.history.pushState({}, '', currentUrl);
+  } else {
+    window.history.replaceState({}, '', currentUrl);
+  }
 }
 
-function ArchiveCard({ archive, showDetails, collapsedIds, onToggle }) {
+function normalizeComparableUrl(value) {
+  try {
+    return new URL(String(value).trim()).toString().toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
+function ArchiveCard({
+  archive,
+  showDetails,
+  areDetailsVisible,
+  collapsedIds,
+  onToggle,
+  onToggleDetails,
+}) {
   const collapsed = collapsedIds.has(archive.nodeId);
+  const detailsVisible = areDetailsVisible(archive.nodeId, showDetails);
 
   return (
     <article className="archive-card">
@@ -409,10 +641,21 @@ function ArchiveCard({ archive, showDetails, collapsedIds, onToggle }) {
               <span className="node-badge archive-badge">ZIP</span>
               <h3>{archive.title}</h3>
             </div>
-            <code>{archive.id}</code>
+            <div className="tree-heading-actions">
+              <div className="node-action-row">
+                <button
+                  type="button"
+                  className="inline-action-button"
+                  onClick={() => onToggleDetails(archive.nodeId, showDetails)}
+                >
+                  {detailsVisible ? 'Hide details' : 'Show details'}
+                </button>
+              </div>
+              <code>{archive.id}</code>
+            </div>
           </div>
           <PrimaryFieldRow fields={archive.primaryFields} />
-          {showDetails ? <MetadataList fields={archive.details} /> : null}
+          {detailsVisible ? <MetadataList fields={archive.details} /> : null}
           {archive.issues.length ? (
             <ul className="inline-issues">
               {archive.issues.map((issue) => (
@@ -434,8 +677,10 @@ function ArchiveCard({ archive, showDetails, collapsedIds, onToggle }) {
                 key={node.id}
                 node={node}
                 showDetails={showDetails}
+                areDetailsVisible={areDetailsVisible}
                 collapsedIds={collapsedIds}
                 onToggle={onToggle}
+                onToggleDetails={onToggleDetails}
               />
             ))}
           </div>
@@ -449,14 +694,24 @@ function ArchiveCard({ archive, showDetails, collapsedIds, onToggle }) {
   );
 }
 
-function TreeNode({ node, showDetails, collapsedIds, onToggle }) {
+function TreeNode({
+  node,
+  showDetails,
+  areDetailsVisible,
+  collapsedIds,
+  onToggle,
+  onToggleDetails,
+}) {
   const hasChildren = Array.isArray(node.children) && node.children.length > 0;
+  const canCollapse = hasChildren || node.kind === 'file';
   const collapsed = collapsedIds.has(node.id);
+  const detailsVisible = areDetailsVisible(node.id, showDetails);
+  const bodyCollapsed = node.kind === 'file' && collapsed;
 
   return (
     <div className="tree-node">
       <div className="tree-row">
-        {hasChildren ? (
+        {canCollapse ? (
           <button type="button" className="collapse-button" onClick={() => onToggle(node.id)}>
             {collapsed ? '+' : '-'}
           </button>
@@ -471,10 +726,32 @@ function TreeNode({ node, showDetails, collapsedIds, onToggle }) {
               </span>
               <h3>{node.name}</h3>
             </div>
-            <code>{node.path}</code>
+            <div className="tree-heading-actions">
+              <div className="node-action-row">
+                <button
+                  type="button"
+                  className="inline-action-button"
+                  onClick={() => onToggleDetails(node.id, showDetails)}
+                >
+                  {detailsVisible ? 'Hide details' : 'Show details'}
+                </button>
+                {node.kind === 'file' && node.downloadUrl ? (
+                  <a
+                    className="download-button"
+                    href={node.downloadUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    download
+                  >
+                    Download
+                  </a>
+                ) : null}
+              </div>
+              <code>{node.path}</code>
+            </div>
           </div>
-          <PrimaryFieldRow fields={node.primaryFields} />
-          {showDetails ? <MetadataList fields={node.details} /> : null}
+          {!bodyCollapsed ? <PrimaryFieldRow fields={node.primaryFields} /> : null}
+          {!bodyCollapsed && detailsVisible ? <MetadataList fields={node.details} /> : null}
         </div>
       </div>
 
@@ -485,8 +762,10 @@ function TreeNode({ node, showDetails, collapsedIds, onToggle }) {
               key={child.id}
               node={child}
               showDetails={showDetails}
+              areDetailsVisible={areDetailsVisible}
               collapsedIds={collapsedIds}
               onToggle={onToggle}
+              onToggleDetails={onToggleDetails}
             />
           ))}
         </div>
@@ -527,6 +806,24 @@ function TagDictionary({ tags }) {
       ) : (
         <EmptyState message="No tag dictionary was provided." />
       )}
+    </details>
+  );
+}
+
+function CollapsibleSection({ label, title, defaultOpen = false, actions, children }) {
+  return (
+    <details className="panel collapsible-panel" open={defaultOpen}>
+      <summary className="section-summary">
+        <div>
+          <p className="section-label">{label}</p>
+          <h2>{title}</h2>
+        </div>
+        <span className="summary-indicator" />
+      </summary>
+      <div className="collapsible-content">
+        {actions ? <div className="collapsible-actions">{actions}</div> : null}
+        {children}
+      </div>
     </details>
   );
 }
@@ -639,23 +936,7 @@ function SectionControls({
 }) {
   return (
     <div className="section-controls">
-      <div className="toggle-group" aria-label="Detailed toggle">
-        <span className="toggle-label">Detailed</span>
-        <button
-          type="button"
-          className={!detailed ? 'toggle-chip active' : 'toggle-chip'}
-          onClick={() => onDetailedChange(false)}
-        >
-          Off
-        </button>
-        <button
-          type="button"
-          className={detailed ? 'toggle-chip active' : 'toggle-chip'}
-          onClick={() => onDetailedChange(true)}
-        >
-          On
-        </button>
-      </div>
+      <DetailedToggle detailed={detailed} onDetailedChange={onDetailedChange} />
       <div className="button-row">
         <button type="button" onClick={onExpandAll}>
           Uncollapse all
@@ -668,7 +949,29 @@ function SectionControls({
   );
 }
 
-function collectTreeBranchIds(tree) {
+function DetailedToggle({ detailed, onDetailedChange }) {
+  return (
+    <div className="toggle-group" aria-label="Detailed toggle">
+      <span className="toggle-label">Detailed</span>
+      <button
+        type="button"
+        className={!detailed ? 'toggle-chip active' : 'toggle-chip'}
+        onClick={() => onDetailedChange(false)}
+      >
+        Off
+      </button>
+      <button
+        type="button"
+        className={detailed ? 'toggle-chip active' : 'toggle-chip'}
+        onClick={() => onDetailedChange(true)}
+      >
+        On
+      </button>
+    </div>
+  );
+}
+
+function collectTreeNodeIds(tree) {
   const ids = [];
 
   function visit(node) {
@@ -676,8 +979,9 @@ function collectTreeBranchIds(tree) {
       return;
     }
 
+    ids.push(node.id);
+
     if (Array.isArray(node.children) && node.children.length) {
-      ids.push(node.id);
       for (const child of node.children) {
         visit(child);
       }
@@ -691,12 +995,12 @@ function collectTreeBranchIds(tree) {
   return ids;
 }
 
-function collectArchiveBranchIds(archives) {
+function collectArchiveNodeIds(archives) {
   const ids = [];
 
   for (const archive of archives || []) {
     ids.push(archive.nodeId);
-    ids.push(...collectTreeBranchIds(archive.tree));
+    ids.push(...collectTreeNodeIds(archive.tree));
   }
 
   return ids;
