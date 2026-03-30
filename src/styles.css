@@ -729,6 +729,7 @@ button:hover {
   --tree-indent-step: 1.55rem;
   --tree-control-size: 2.25rem;
   --tree-control-center: calc(var(--tree-control-size) / 2);
+  --tree-guide-overlap: 0.28rem;
   padding-left: calc(var(--tree-depth, 0) * var(--tree-indent-step));
 }
 
@@ -756,7 +757,10 @@ button:hover {
 .tree-guide-vertical,
 .tree-guide-parent,
 .tree-guide-child {
-  left: calc((var(--tree-guide-depth, 0) * var(--tree-indent-step)) + var(--tree-control-center));
+  left: calc(
+    ((var(--tree-guide-depth, 0) - var(--tree-depth, 0)) * var(--tree-indent-step)) +
+      var(--tree-control-center)
+  );
   width: 2px;
   transform: translateX(-50%);
   border-radius: 999px;
@@ -764,27 +768,30 @@ button:hover {
 }
 
 .tree-guide-vertical {
-  top: 0;
-  bottom: 0;
+  top: calc(var(--tree-guide-overlap) * -1);
+  bottom: calc(var(--tree-guide-overlap) * -1);
 }
 
 .tree-guide-parent {
-  top: 0;
-  height: var(--tree-control-center);
+  top: calc(var(--tree-guide-overlap) * -1);
+  height: calc(var(--tree-control-center) + var(--tree-guide-overlap));
 }
 
 .tree-guide-parent-continue {
-  bottom: 0;
+  bottom: calc(var(--tree-guide-overlap) * -1);
   height: auto;
 }
 
 .tree-guide-child {
   top: var(--tree-control-center);
-  bottom: 0;
+  bottom: calc(var(--tree-guide-overlap) * -1);
 }
 
 .tree-guide-elbow {
-  left: calc(((var(--tree-guide-depth, 0) - 1) * var(--tree-indent-step)) + var(--tree-control-center));
+  left: calc(
+    (((var(--tree-guide-depth, 0) - 1) - var(--tree-depth, 0)) * var(--tree-indent-step)) +
+      var(--tree-control-center)
+  );
   top: var(--tree-control-center);
   width: var(--tree-indent-step);
   border-top: 2px solid var(--tree-line-strong);
@@ -792,6 +799,7 @@ button:hover {
 
 .collapse-button,
 .collapse-spacer {
+  position: relative;
   width: var(--tree-control-size);
   height: var(--tree-control-size);
   flex: 0 0 auto;
@@ -803,6 +811,29 @@ button:hover {
   background: linear-gradient(135deg, rgba(22, 33, 47, 0.9), rgba(30, 71, 117, 0.82));
 }
 
+.collapse-button::before,
+.collapse-button::after,
+.collapse-spacer::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: var(--tree-line-strong);
+}
+
+.collapse-button.control-has-parent::before,
+.collapse-spacer.control-has-parent::before {
+  top: calc(var(--tree-guide-overlap) * -1);
+  height: calc(var(--tree-control-center) + var(--tree-guide-overlap));
+}
+
+.collapse-button.control-has-children::after {
+  top: var(--tree-control-center);
+  bottom: calc(var(--tree-guide-overlap) * -1);
+}
+
 .collapse-spacer {
   display: inline-flex;
   align-items: center;
@@ -810,6 +841,8 @@ button:hover {
 }
 
 .leaf-marker {
+  position: relative;
+  z-index: 1;
   width: 0.52rem;
   height: 0.52rem;
   border-radius: 999px;
