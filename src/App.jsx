@@ -307,12 +307,13 @@ export default function App() {
             Accepted: .json, .json.zip, .ini, .ini.zip, or any ZIP whose first supported entry is
             a downloader JSON or INI source.
           </p>
-          <div className="button-row">
-            <button type="button" onClick={() => fileInputRef.current?.click()}>
-              Choose file
-            </button>
-          </div>
+          <label className="dropzone-surface" htmlFor="database-file-input">
+            <span className="dropzone-note">Drop database files here</span>
+            <span className="dropzone-hint">or click to choose a file from disk</span>
+            <span className="dropzone-action">Choose file</span>
+          </label>
           <input
+            id="database-file-input"
             ref={fileInputRef}
             className="hidden-input"
             type="file"
@@ -514,9 +515,7 @@ export default function App() {
               )}
             </CollapsibleSection>
 
-            <section className="panel">
-              <TagDictionary tags={inspection.overview.tagDictionary} />
-            </section>
+            <TagDictionary tags={inspection.overview.tagDictionary} />
           </>
         ) : loadingMessage ? (
           <section className="panel empty-screen loading-screen">
@@ -1140,15 +1139,24 @@ function HighlightCard({ label, value, subvalue, accent }) {
 }
 
 function TagDictionary({ tags }) {
+  const [open, setOpen] = useState(true);
+
   return (
-    <details className="tag-dictionary">
-      <summary className="dictionary-summary">
-        <div>
-          <p className="section-label">Tags</p>
-          <h2>Tag dictionary</h2>
-        </div>
-        <span className="dictionary-count">{tags.length} entries</span>
-      </summary>
+    <CollapsibleSection
+      label="Tags"
+      title="Tag dictionary"
+      className="tag-dictionary"
+      open={open}
+      onToggle={setOpen}
+      summaryAside={<span className="dictionary-count">{tags.length} entries</span>}
+      actions={
+        open ? (
+          <button type="button" className="secondary-button" onClick={() => setOpen(false)}>
+            Collapse
+          </button>
+        ) : null
+      }
+    >
       {tags.length ? (
         <div className="tag-cloud">
           {tags.map((tag) => (
@@ -1161,19 +1169,36 @@ function TagDictionary({ tags }) {
       ) : (
         <EmptyState message="No tag dictionary was provided." />
       )}
-    </details>
+    </CollapsibleSection>
   );
 }
 
-function CollapsibleSection({ label, title, defaultOpen = false, actions, children }) {
+function CollapsibleSection({
+  label,
+  title,
+  defaultOpen = false,
+  actions,
+  children,
+  className = '',
+  open,
+  onToggle,
+  summaryAside = null,
+}) {
   return (
-    <details className="panel collapsible-panel" open={defaultOpen}>
+    <details
+      className={className ? `panel collapsible-panel ${className}` : 'panel collapsible-panel'}
+      open={open ?? defaultOpen}
+      onToggle={(event) => onToggle?.(event.currentTarget.open)}
+    >
       <summary className="section-summary">
         <div>
           <p className="section-label">{label}</p>
           <h2>{title}</h2>
         </div>
-        <span className="summary-indicator" />
+        <div className="section-summary-side">
+          {summaryAside}
+          <span className="summary-indicator" />
+        </div>
       </summary>
       <div className="collapsible-content">
         {actions ? <div className="collapsible-actions">{actions}</div> : null}
