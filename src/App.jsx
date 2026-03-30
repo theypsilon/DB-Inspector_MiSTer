@@ -184,6 +184,12 @@ export default function App() {
     setNodeDetailVisibility({});
   }
 
+  function clearLoadedSource() {
+    setInspection(null);
+    setIniSource(null);
+    resetRenderedState();
+  }
+
   async function handleLoadedSource(
     loadedSource,
     { origin, requestedUrl = '', syncSearchParam = true, visitedUrls = new Set() } = {},
@@ -244,13 +250,12 @@ export default function App() {
 
     setLoadingMessage(`Loading ${file.name}...`);
     setErrorMessage('');
+    clearLoadedSource();
 
     try {
       const loadedSource = await loadDatabaseSourceFile(file);
       await handleLoadedSource(loadedSource, { origin: 'upload' });
     } catch (error) {
-      setInspection(null);
-      setIniSource(null);
       setIniPickerOpen(false);
       setErrorMessage(error.message);
     } finally {
@@ -273,6 +278,7 @@ export default function App() {
 
     setLoadingMessage(`Fetching ${requestedUrl}...`);
     setErrorMessage('');
+    clearLoadedSource();
 
     try {
       const nextVisitedUrls = new Set(visitedUrls);
@@ -288,7 +294,6 @@ export default function App() {
         visitedUrls: nextVisitedUrls,
       });
     } catch (error) {
-      setInspection(null);
       setErrorMessage(error.message);
     } finally {
       setLoadingMessage('');
@@ -308,15 +313,6 @@ export default function App() {
     setIniPickerOpen(false);
     setDatabaseUrl(entry.dbUrl);
     await loadRemoteSource(entry.dbUrl);
-  }
-
-  function useSelectedCatalogUrl() {
-    if (!selectedCatalogOption) {
-      return;
-    }
-
-    setDatabaseUrl(selectedCatalogOption.dbUrl);
-    setCatalogModalOpen(false);
   }
 
   async function openSelectedCatalogDatabase() {
@@ -408,7 +404,7 @@ export default function App() {
 
       <section className="loader-grid">
         <section
-          className="panel dropzone"
+          className="panel dropzone source-card"
           onDragOver={(event) => event.preventDefault()}
           onDrop={handleDrop}
         >
@@ -436,7 +432,7 @@ export default function App() {
           />
         </section>
 
-        <section className="panel">
+        <section className="panel source-card">
           <p className="section-label">Fetch</p>
           <h2>Open a remote database</h2>
           <form className="url-form" onSubmit={loadUrl}>
@@ -460,7 +456,7 @@ export default function App() {
           </p>
         </section>
 
-        <section className="panel source-panel">
+        <section className="panel source-panel source-card">
           <p className="section-label">Picker</p>
           <h2>Use Update_All_MiSTer catalog</h2>
           <p className="helper-copy">
@@ -475,16 +471,6 @@ export default function App() {
             >
               Browse catalog
             </button>
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={() => {
-                void openSelectedCatalogDatabase();
-              }}
-              disabled={!selectedCatalogOption}
-            >
-              Open selected
-            </button>
           </div>
           <p className="catalog-count-inline">
             {catalogStatus === 'ready'
@@ -498,29 +484,9 @@ export default function App() {
             </p>
           ) : null}
           {catalogStatus === 'error' ? <p className="status error">{catalogError}</p> : null}
-          {selectedCatalogOption ? (
-            <article className="compact-selected">
-              <p className="section-label">Selected</p>
-              <div className="catalog-selected-grid compact-selected-grid">
-                <div>
-                  <span className="catalog-meta-label">db_id</span>
-                  <code>{selectedCatalogOption.dbId}</code>
-                </div>
-                <div>
-                  <span className="catalog-meta-label">Title</span>
-                  <strong>{selectedCatalogOption.title}</strong>
-                </div>
-                <div className="catalog-selected-url">
-                  <span className="catalog-meta-label">db_url</span>
-                  <a href={selectedCatalogOption.dbUrl} target="_blank" rel="noreferrer">
-                    {selectedCatalogOption.dbUrl}
-                  </a>
-                </div>
-              </div>
-            </article>
-          ) : (
-            <EmptyState message="Choose a catalog entry to prefill the URL or open it directly." />
-          )}
+          {!selectedCatalogOption ? (
+            <EmptyState message="Choose a catalog entry in the modal, then open it from there." />
+          ) : null}
         </section>
       </section>
 
@@ -555,23 +521,7 @@ export default function App() {
               Open selected
             </button>
           </div>
-          {selectedIniEntry ? (
-            <article className="compact-selected">
-              <p className="section-label">Selected</p>
-              <div className="catalog-selected-grid compact-selected-grid">
-                <div>
-                  <span className="catalog-meta-label">db_id</span>
-                  <code>{selectedIniEntry.dbId}</code>
-                </div>
-                <div className="catalog-selected-url">
-                  <span className="catalog-meta-label">db_url</span>
-                  <a href={selectedIniEntry.dbUrl} target="_blank" rel="noreferrer">
-                    {selectedIniEntry.dbUrl}
-                  </a>
-                </div>
-              </div>
-            </article>
-          ) : null}
+          {!selectedIniEntry ? <EmptyState message="No INI entry is currently selected." /> : null}
         </section>
       ) : null}
 
@@ -768,9 +718,6 @@ export default function App() {
                 onClick={() => setCatalogModalOpen(false)}
               >
                 Close
-              </button>
-              <button type="button" onClick={useSelectedCatalogUrl} disabled={!selectedCatalogOption}>
-                Use selected URL
               </button>
               <button
                 type="button"
