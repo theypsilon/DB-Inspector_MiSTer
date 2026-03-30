@@ -175,25 +175,19 @@ function decodeJsonish(bytes, sourceName) {
 }
 
 function parseRuntimeDatabaseCatalog(source) {
+  const normalizedSource = String(source).replaceAll('\r\n', '\n');
   const constants = new Map();
 
-  for (const line of source.split('\n')) {
+  for (const line of normalizedSource.split('\n')) {
     const match = line.match(/^\s*([A-Z][A-Z0-9_]*)\s*=\s*(['"])(.*?)\2\s*$/);
     if (match) {
       constants.set(match[1], match[3]);
     }
   }
 
-  const initSectionMatch = source.match(
-    /def __init__\(self\):([\s\S]*?)^\s+def all_dbs_list\(self\):/m,
-  );
-  if (!initSectionMatch) {
-    throw new Error('Could not find AllDBs.__init__ in Update_All_MiSTer databases.py.');
-  }
-
   const entries = [];
 
-  for (const line of initSectionMatch[1].split('\n')) {
+  for (const line of normalizedSource.split('\n')) {
     const match = line.match(
       /^\s*self\.(\w+)\s*=\s*Database\(db_id=(.+?),\s*db_url=(.+?),\s*title=(.+?)\)\s*$/,
     );
@@ -215,6 +209,12 @@ function parseRuntimeDatabaseCatalog(source) {
       dbUrl,
       title,
     });
+  }
+
+  if (!entries.length) {
+    throw new Error(
+      'Could not find any Database(...) entries in Update_All_MiSTer databases.py.',
+    );
   }
 
   return entries;
