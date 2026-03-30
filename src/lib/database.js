@@ -33,6 +33,16 @@ const LEGACY_ZIP_KIND_TO_ARCHIVE_EXTRACT = {
   extract_single_files: 'selective',
 };
 const SUPPORTED_REMOTE_SOURCE_SUFFIXES = ['.json', '.json.zip', '.ini', '.ini.zip'];
+const REMOTE_SOURCE_URL_ALIASES = new Map([
+  [
+    'https://www.aitorgomez.net/static/mistermain/db.json.zip',
+    'https://raw.githubusercontent.com/MiSTer-devel/Distribution_MiSTer/main/db.json.zip',
+  ],
+  [
+    'https://aitorgomez.net/static/mistermain/db.json.zip',
+    'https://raw.githubusercontent.com/MiSTer-devel/Distribution_MiSTer/main/db.json.zip',
+  ],
+]);
 const UPDATE_ALL_DATABASES_SOURCE_URL =
   'https://raw.githubusercontent.com/theypsilon/Update_All_MiSTer/master/src/update_all/databases.py';
 
@@ -50,13 +60,16 @@ export async function loadDatabaseSourceFile(file) {
 }
 
 export async function loadDatabaseSourceUrl(input) {
-  const url = normalizeSupportedSourceUrl(input);
-  const decoded = await fetchSupportedSource(url);
+  const requestedUrl = normalizeSupportedSourceUrl(input);
+  const resolvedUrl = resolveRemoteSourceUrl(requestedUrl);
+  const decoded = await fetchSupportedSource(resolvedUrl);
 
   return buildLoadedSource(decoded, {
     sourceKind: 'url',
-    sourceLabel: url,
+    sourceLabel: requestedUrl,
     sourceUrl: decoded.finalUrl,
+    requestedUrl,
+    resolvedUrl,
     containerType: decoded.containerType,
     extractedEntry: decoded.entryName,
   });
@@ -160,8 +173,12 @@ function normalizeSupportedSourceUrl(input, { baseUrl = null } = {}) {
   return parsedUrl.toString();
 }
 
+function resolveRemoteSourceUrl(url) {
+  return REMOTE_SOURCE_URL_ALIASES.get(url) ?? url;
+}
+
 async function fetchSupportedSource(url) {
-  const response = await fetch(url);
+  const response = await fetchRemoteResource(url);
   if (!response.ok) {
     throw new Error(`Request failed with ${response.status} ${response.statusText}.`);
   }
@@ -179,7 +196,7 @@ async function fetchSupportedSource(url) {
 }
 
 async function fetchJsonish(url) {
-  const response = await fetch(url);
+  const response = await fetchRemoteResource(url);
   if (!response.ok) {
     throw new Error(`Request failed with ${response.status} ${response.statusText}.`);
   }
@@ -192,6 +209,20 @@ async function fetchJsonish(url) {
     ...decoded,
     finalUrl: response.url || url,
   };
+}
+
+async function fetchRemoteResource(url) {
+  try {
+    return await fetch(url, { redirect: 'follow' });
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new Error(
+        `Browser could not fetch ${url}. The host may block cross-origin requests (CORS), redirect to a blocked resource, or be temporarily unavailable.`,
+      );
+    }
+
+    throw error;
+  }
 }
 
 function decodeSupportedSource(bytes, sourceName, { baseUrl = null } = {}) {

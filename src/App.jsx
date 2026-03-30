@@ -273,12 +273,17 @@ export default function App() {
     }
 
     try {
+      const loadedSource = await loadDatabaseSourceUrl(requestedUrl);
       const nextVisitedUrls = new Set(visitedUrls);
       if (normalizedRequestedUrl) {
         nextVisitedUrls.add(normalizedRequestedUrl);
       }
 
-      const loadedSource = await loadDatabaseSourceUrl(requestedUrl);
+      const normalizedLoadedUrl = normalizeComparableUrl(getLoadedSourceUrl(loadedSource));
+      if (normalizedLoadedUrl) {
+        nextVisitedUrls.add(normalizedLoadedUrl);
+      }
+
       await handleLoadedSource(loadedSource, {
         origin: 'url',
         requestedUrl,
@@ -1059,6 +1064,14 @@ function normalizeComparableUrl(value) {
   } catch {
     return '';
   }
+}
+
+function getLoadedSourceUrl(loadedSource) {
+  if (loadedSource.kind === 'database') {
+    return loadedSource.inspection.source.sourceUrl || loadedSource.inspection.source.sourceLabel;
+  }
+
+  return loadedSource.source.sourceUrl || loadedSource.source.sourceLabel;
 }
 
 function runAfterNextPaint(callback) {

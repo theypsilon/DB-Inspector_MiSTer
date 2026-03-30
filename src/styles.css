@@ -454,6 +454,13 @@ button:hover {
 
 .modal-selected {
   margin-top: 0;
+  cursor: text;
+  user-select: text;
+}
+
+.modal-selected * {
+  cursor: text;
+  user-select: text;
 }
 
 .modal-list {
