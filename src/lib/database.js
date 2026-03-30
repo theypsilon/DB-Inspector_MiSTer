@@ -943,6 +943,10 @@ function buildArchiveDetails({
   archiveBaseFilesUrl,
 }) {
   return [
+    ...buildHashAndSizeDetails({
+      hash: getString(archiveFile.hash),
+      size: Number(archiveFile.size),
+    }),
     { label: 'Description', value: getString(archiveRecord.description) || 'None' },
     { label: 'Format', value: getString(archiveRecord.format) || 'Unknown' },
     { label: 'Extract mode', value: getString(archiveRecord.extract) || 'Unknown' },
@@ -1034,12 +1038,14 @@ function buildFileRecord({
     name: leafName(pathInfo.displayPath, 'file'),
     badge: 'FILE',
     primaryFields: buildPrimaryFields({
-      hash: getString(fileRecord.hash),
-      size: Number(fileRecord.size),
       tags: tagEntries,
     }),
     details: [
       { label: 'Destination', value: pathInfo.displayPath, kind: 'code' },
+      ...buildHashAndSizeDetails({
+        hash: getString(fileRecord.hash),
+        size: Number(fileRecord.size),
+      }),
       ...buildDownloadDetails({
         explicitUrl,
         resolvedUrl,
@@ -1199,12 +1205,14 @@ function buildArchiveFileRecord({
     name: leafName(pathInfo.displayPath, 'file'),
     badge: 'FILE',
     primaryFields: buildPrimaryFields({
-      hash: getString(wrapped.hash),
-      size: Number(wrapped.size),
       tags: tagEntries,
     }),
     details: [
       { label: 'Destination', value: pathInfo.displayPath, kind: 'code' },
+      ...buildHashAndSizeDetails({
+        hash: getString(wrapped.hash),
+        size: Number(wrapped.size),
+      }),
       { label: 'Archive ID', value: arcId || 'Missing', kind: 'code' },
       {
         label: 'Archive path',
@@ -1233,25 +1241,31 @@ function buildArchiveFileRecord({
   };
 }
 
-function buildPrimaryFields({ hash, size, tags }) {
+function buildPrimaryFields({ tags }) {
   const fields = [];
-
-  if (hash) {
-    fields.push({ label: 'Hash', value: hash, kind: 'code' });
-  }
-
-  if (Number.isFinite(size)) {
-    fields.push({
-      label: 'Size',
-      value: `${formatBytes(size)} (${size.toLocaleString()} bytes)`,
-    });
-  }
 
   if (Array.isArray(tags) && tags.length) {
     fields.push({ label: 'Tags', value: tags, kind: 'tags' });
   }
 
   return fields;
+}
+
+function buildHashAndSizeDetails({ hash, size }) {
+  const details = [];
+
+  if (hash) {
+    details.push({ label: 'Hash', value: hash, kind: 'code' });
+  }
+
+  if (Number.isFinite(size)) {
+    details.push({
+      label: 'Size',
+      value: `${formatBytes(size)} (${size.toLocaleString()} bytes)`,
+    });
+  }
+
+  return details;
 }
 
 function buildTreeFromRecords(records, scope) {

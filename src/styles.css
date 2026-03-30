@@ -778,9 +778,7 @@ button:hover {
 
 .tree-heading-actions {
   display: flex;
-  flex-direction: column;
-  align-items: end;
-  gap: 0.55rem;
+  align-items: center;
 }
 
 .node-action-row {
@@ -790,10 +788,12 @@ button:hover {
   gap: 0.45rem;
 }
 
-.tree-heading code {
-  max-width: 48%;
-  text-align: right;
+.tree-identifier-line {
+  display: block;
+  margin: -0.1rem 0 0.8rem;
   color: var(--muted);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.92rem;
   word-break: break-word;
 }
 
@@ -1084,9 +1084,8 @@ button:hover {
     justify-content: start;
   }
 
-  .tree-heading code {
-    max-width: 100%;
-    text-align: left;
+  .tree-identifier-line {
+    margin-top: 0;
   }
 
   .catalog-count {
