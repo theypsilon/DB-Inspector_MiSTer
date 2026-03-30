@@ -24,9 +24,16 @@ export default function App() {
   const [catalogStatus, setCatalogStatus] = useState('loading');
   const [catalogError, setCatalogError] = useState('');
   const [selectedCatalogKey, setSelectedCatalogKey] = useState('');
+  const [catalogQuery, setCatalogQuery] = useState('');
 
   const filesystemNodeIds = inspection ? collectTreeNodeIds(inspection.filesystemTree) : [];
   const archiveNodeIds = inspection ? collectArchiveNodeIds(inspection.archiveViews) : [];
+  const selectedCatalogOption =
+    catalogOptions.find((item) => item.key === selectedCatalogKey) ?? null;
+  const filteredCatalogOptions = catalogOptions.filter((option) => {
+    const haystack = `${option.dbId} ${option.title} ${option.dbUrl}`.toLowerCase();
+    return haystack.includes(catalogQuery.trim().toLowerCase());
+  });
 
   useEffect(() => {
     inspectionRef.current = inspection;
@@ -299,84 +306,62 @@ export default function App() {
           </p>
         </section>
 
-        <section className="panel">
+        <section className="panel catalog-panel">
           <p className="section-label">Picker</p>
           <h2>Use Update_All_MiSTer catalog</h2>
-          <div className="url-form">
-            <label className="field-label" htmlFor="catalog-picker">
-              Database picker
-            </label>
-            <select
-              id="catalog-picker"
-              value={selectedCatalogKey}
-              onChange={(event) => {
-                const nextKey = event.target.value;
-                setSelectedCatalogKey(nextKey);
-                const option = catalogOptions.find((item) => item.key === nextKey);
-                if (option) {
-                  setDatabaseUrl(option.dbUrl);
-                }
-              }}
-              disabled={catalogStatus !== 'ready' || !catalogOptions.length}
-            >
-              <option value="">
-                {catalogStatus === 'loading'
-                  ? 'Loading picker options...'
-                  : catalogStatus === 'error'
-                    ? 'Picker unavailable'
-                    : 'Select a database'}
-              </option>
-              {catalogOptions.map((option) => (
-                <option key={option.key} value={option.key}>
-                  {option.dbId} | {option.title} | {option.dbUrl}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={() => {
-                const option = catalogOptions.find((item) => item.key === selectedCatalogKey);
-                if (option) {
-                  void loadRemoteDatabase(option.dbUrl);
-                }
-              }}
-              disabled={!selectedCatalogKey}
-            >
-              Open selected database
-            </button>
-          </div>
-          {selectedCatalogKey ? (
-            <div className="picker-preview">
-              {(() => {
-                const option = catalogOptions.find((item) => item.key === selectedCatalogKey);
-                if (!option) {
-                  return null;
-                }
-
-                return (
-                  <dl className="metadata-list compact-metadata">
-                    <div className="metadata-item">
-                      <dt>db_id</dt>
-                      <dd>
-                        <code>{option.dbId}</code>
-                      </dd>
-                    </div>
-                    <div className="metadata-item">
-                      <dt>Title</dt>
-                      <dd>{option.title}</dd>
-                    </div>
-                    <div className="metadata-item picker-preview-url">
-                      <dt>db_url</dt>
-                      <dd>
-                        <a href={option.dbUrl} target="_blank" rel="noreferrer">
-                          {option.dbUrl}
-                        </a>
-                      </dd>
-                    </div>
-                  </dl>
-                );
-              })()}
+          <div className="catalog-toolbar">
+            <div className="catalog-search">
+              <label className="field-label" htmlFor="catalog-search">
+                Search database picker
+              </label>
+              <input
+                id="catalog-search"
+                type="search"
+                placeholder="Search by db_id, title, or URL"
+                value={catalogQuery}
+                onChange={(event) => setCatalogQuery(event.target.value)}
+                disabled={catalogStatus !== 'ready'}
+              />
             </div>
+            <div className="catalog-toolbar-actions">
+              <p className="catalog-count">
+                {catalogStatus === 'ready'
+                  ? `${filteredCatalogOptions.length} of ${catalogOptions.length} entries`
+                  : 'Catalog unavailable'}
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  if (selectedCatalogOption) {
+                    void loadRemoteDatabase(selectedCatalogOption.dbUrl);
+                  }
+                }}
+                disabled={!selectedCatalogOption}
+              >
+                Open selected database
+              </button>
+            </div>
+          </div>
+          {selectedCatalogOption ? (
+            <article className="catalog-selected">
+              <p className="section-label">Selected</p>
+              <div className="catalog-selected-grid">
+                <div>
+                  <span className="catalog-meta-label">db_id</span>
+                  <code>{selectedCatalogOption.dbId}</code>
+                </div>
+                <div>
+                  <span className="catalog-meta-label">Title</span>
+                  <strong>{selectedCatalogOption.title}</strong>
+                </div>
+                <div className="catalog-selected-url">
+                  <span className="catalog-meta-label">db_url</span>
+                  <a href={selectedCatalogOption.dbUrl} target="_blank" rel="noreferrer">
+                    {selectedCatalogOption.dbUrl}
+                  </a>
+                </div>
+              </div>
+            </article>
           ) : null}
           {catalogStatus === 'loading' ? (
             <p className="helper-copy">
@@ -385,6 +370,35 @@ export default function App() {
             </p>
           ) : null}
           {catalogStatus === 'error' ? <p className="status error">{catalogError}</p> : null}
+          {catalogStatus === 'ready' ? (
+            filteredCatalogOptions.length ? (
+              <div className="catalog-list" role="listbox" aria-label="Database picker results">
+                {filteredCatalogOptions.map((option) => (
+                  <button
+                    key={option.key}
+                    type="button"
+                    className={
+                      option.key === selectedCatalogKey
+                        ? 'catalog-option catalog-option-selected'
+                        : 'catalog-option'
+                    }
+                    onClick={() => {
+                      setSelectedCatalogKey(option.key);
+                      setDatabaseUrl(option.dbUrl);
+                    }}
+                  >
+                    <div className="catalog-option-head">
+                      <code>{option.dbId}</code>
+                      <strong>{option.title}</strong>
+                    </div>
+                    <span className="catalog-option-url">{option.dbUrl}</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <EmptyState message="No catalog entries match the current search." />
+            )
+          ) : null}
         </section>
       </section>
 

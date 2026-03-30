@@ -28,6 +28,10 @@ const DISTRIBUTION_MISTER_EXCEPTIONAL_PATHS = new Set([
   'linux/lesskey',
   'linux/glow',
 ]);
+const LEGACY_ZIP_KIND_TO_ARCHIVE_EXTRACT = {
+  extract_all_contents: 'all',
+  extract_single_files: 'selective',
+};
 const UPDATE_ALL_DATABASES_SOURCE_URL =
   'https://raw.githubusercontent.com/theypsilon/Update_All_MiSTer/master/src/update_all/databases.py';
 
@@ -244,6 +248,116 @@ function looksLikeZip(bytes) {
   return bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b;
 }
 
+function deriveInspectableArchives(rawDatabase, version, issues) {
+  const explicitArchives = asRecord(rawDatabase.archives);
+
+  if (version !== 0) {
+    return explicitArchives;
+  }
+
+  const legacyZips = asRecord(rawDatabase.zips);
+  const derivedArchives = Object.fromEntries(
+    Object.entries(legacyZips)
+      .filter(([, zip]) => isPlainObject(zip))
+      .map(([zipId, zip]) => [zipId, convertLegacyZipToArchive(zipId, zip)]),
+  );
+
+  if (Object.keys(derivedArchives).length) {
+    addIssue(
+      issues,
+      'info',
+      'database',
+      `Inferred ${Object.keys(derivedArchives).length} current-style archives from legacy v0 \`zips\`.`,
+    );
+  }
+
+  return {
+    ...derivedArchives,
+    ...explicitArchives,
+  };
+}
+
+function convertLegacyZipToArchive(zipId, zip) {
+  const legacyZip = asRecord(zip);
+  const targetFolderPath = getString(legacyZip.target_folder_path);
+  const usesLegacyExternalPath = Boolean(targetFolderPath?.startsWith('|'));
+  const normalizedTargetFolder = usesLegacyExternalPath ? targetFolderPath.slice(1) : targetFolderPath;
+  const extract = LEGACY_ZIP_KIND_TO_ARCHIVE_EXTRACT[getString(legacyZip.kind)] || getString(legacyZip.kind);
+  const archive = {
+    __legacyZip: true,
+    format: getString(legacyZip.format) || 'zip',
+    extract,
+    description: getString(legacyZip.description) || zipId,
+    target_folder: normalizedTargetFolder || undefined,
+    archive_file: isPlainObject(legacyZip.contents_file) ? { ...legacyZip.contents_file } : {},
+    base_files_url: getString(legacyZip.base_files_url) || undefined,
+    path: getString(legacyZip.path) || (usesLegacyExternalPath ? 'pext' : undefined),
+  };
+
+  if (isPlainObject(legacyZip.internal_summary)) {
+    archive.summary_inline = convertLegacyZipSummary({
+      zipId,
+      summary: legacyZip.internal_summary,
+      archivePathKind: archive.path,
+      extractMode: archive.extract,
+    });
+  } else if (isPlainObject(legacyZip.summary_file)) {
+    archive.summary_file = { ...legacyZip.summary_file };
+  }
+
+  return archive;
+}
+
+function convertLegacyZipSummary({ zipId, summary, archivePathKind, extractMode }) {
+  const summaryRecord = isPlainObject(summary) ? summary : {};
+  const files = asRecord(summaryRecord.files);
+  const folders = asRecord(summaryRecord.folders);
+  const shouldForcePext = extractMode === 'all' && archivePathKind === 'pext';
+  const shouldRemovePext = extractMode === 'all' && archivePathKind !== 'pext';
+
+  return {
+    ...summaryRecord,
+    files: Object.fromEntries(
+      Object.entries(files).map(([path, file]) => {
+        const entry = isPlainObject(file) ? { ...file } : {};
+        if (entry.zip_id != null && entry.arc_id == null) {
+          entry.arc_id = entry.zip_id;
+        }
+        if (entry.zip_path != null && entry.arc_at == null) {
+          entry.arc_at = entry.zip_path;
+        }
+        delete entry.zip_id;
+        delete entry.zip_path;
+
+        if (shouldForcePext) {
+          entry.path = 'pext';
+        } else if (shouldRemovePext && entry.path === 'pext') {
+          delete entry.path;
+        }
+
+        return [path, entry];
+      }),
+    ),
+    folders: Object.fromEntries(
+      Object.entries(folders).map(([path, folder]) => {
+        const entry = isPlainObject(folder) ? { ...folder } : {};
+        if (entry.zip_id != null && entry.arc_id == null) {
+          entry.arc_id = entry.zip_id;
+        }
+        delete entry.zip_id;
+
+        if (shouldForcePext) {
+          entry.path = 'pext';
+        } else if (shouldRemovePext && entry.path === 'pext') {
+          delete entry.path;
+        }
+
+        return [path, entry];
+      }),
+    ),
+  };
+}
+
 async function inspectDatabase(rawDatabase, source) {
   if (!isPlainObject(rawDatabase)) {
     throw new Error('The loaded file does not contain a JSON object.');
@@ -256,7 +370,7 @@ async function inspectDatabase(rawDatabase, source) {
   const timestamp = Number(rawDatabase.timestamp);
   const files = asRecord(rawDatabase.files);
   const folders = asRecord(rawDatabase.folders);
-  const archives = asRecord(rawDatabase.archives);
+  const archives = deriveInspectableArchives(rawDatabase, version, issues);
   const dbBaseFilesUrl = getString(rawDatabase.base_files_url);
   const tagDictionary =
     asRecord(rawDatabase.tag_dictionary) ?? asRecord(rawDatabase.tags_dictionary) ?? {};
@@ -444,8 +558,21 @@ async function buildArchiveView({
         loadedSummaryFile = resolvedSummaryUrl;
         try {
           const decoded = await fetchJsonish(resolvedSummaryUrl);
-          summary = decoded.json;
-          summarySource = decoded.containerType === 'zip' ? 'summary_file (.json.zip)' : 'summary_file (.json)';
+          summary = archiveRecord.__legacyZip
+            ? convertLegacyZipSummary({
+                zipId: archiveId,
+                summary: decoded.json,
+                archivePathKind: getString(archiveRecord.path),
+                extractMode: getString(archiveRecord.extract),
+              })
+            : decoded.json;
+          summarySource = archiveRecord.__legacyZip
+            ? decoded.containerType === 'zip'
+              ? 'legacy summary_file (.json.zip)'
+              : 'legacy summary_file (.json)'
+            : decoded.containerType === 'zip'
+              ? 'summary_file (.json.zip)'
+              : 'summary_file (.json)';
         } catch (error) {
           addIssue(
             localIssues,
@@ -458,7 +585,7 @@ async function buildArchiveView({
     }
   } else if (isPlainObject(archiveRecord.summary_inline)) {
     summary = archiveRecord.summary_inline;
-    summarySource = 'summary_inline';
+    summarySource = archiveRecord.__legacyZip ? 'legacy internal_summary' : 'summary_inline';
   } else {
     addIssue(
       localIssues,
@@ -474,6 +601,7 @@ async function buildArchiveView({
 
   const summaryFiles = asRecord(summary?.files);
   const summaryFolders = asRecord(summary?.folders);
+  const summaryBaseFilesUrl = getString(summary?.base_files_url);
 
   const summaryRecords = [
     ...Object.entries(summaryFolders).map(([path, folder]) =>
@@ -498,7 +626,7 @@ async function buildArchiveView({
         tagLookup,
         issues,
         localIssues,
-        archiveBaseFilesUrl,
+        archiveBaseFilesUrl: archiveBaseFilesUrl || summaryBaseFilesUrl,
         databaseBaseFilesUrl,
       }),
     ),
