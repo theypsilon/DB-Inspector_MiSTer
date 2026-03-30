@@ -15,7 +15,7 @@
   </defs>
 
   <path
-    d="M4 12v40c0 6.3 12.5 11.4 28 11.4S60 58.3 60 52V12"
+    d="M4 12v37c0 6.1 12.5 11 28 11s28-4.9 28-11V12"
     fill="url(#dbBody)"
     stroke="#f8f3e7"
     stroke-opacity="0.34"
@@ -33,7 +33,7 @@
   />
   <ellipse
     cx="32"
-    cy="29"
+    cy="27.5"
     rx="28"
     ry="10.1"
     fill="none"
@@ -43,7 +43,7 @@
   />
   <ellipse
     cx="32"
-    cy="46"
+    cy="43"
     rx="28"
     ry="10.1"
     fill="none"
@@ -53,9 +53,9 @@
   />
   <ellipse
     cx="32"
-    cy="60"
+    cy="55.5"
     rx="28"
-    ry="8.4"
+    ry="7.2"
     fill="#0a526c"
     stroke="#f8f3e7"
     stroke-opacity="0.24"
