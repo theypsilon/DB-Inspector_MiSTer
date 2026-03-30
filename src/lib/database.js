@@ -1,7 +1,33 @@
 import { strFromU8, unzipSync } from 'fflate';
 
-const RESERVED_SYSTEM_FOLDERS = new Set(['linux', 'saves']);
-const RESERVED_SYSTEM_FILES = new Set(['MiSTer', 'menu.rbf', 'MiSTer.ini']);
+const DISTRIBUTION_MISTER_DB_ID = 'distribution_mister';
+const NO_DISTRIBUTION_MISTER_INVALID_PATHS = new Set([
+  'mister',
+  'menu.rbf',
+  'scripts/update.sh',
+]);
+const INVALID_PATHS = new Set([
+  'mister.ini',
+  'mister_alt.ini',
+  'mister_alt_1.ini',
+  'mister_alt_2.ini',
+  'mister_alt_3.ini',
+  'mister.new',
+  'downloader.ini',
+]);
+const INVALID_ROOT_FOLDERS = new Set(['linux', 'screenshots', 'savestates', 'downloader']);
+const EXCEPTIONAL_PATHS = new Set([
+  'linux',
+  'linux/gamecontrollerdb',
+  'linux/gamecontrollerdb/gamecontrollerdb.txt',
+  'linux/gamecontrollerdb/gamecontrollerdb_user.txt',
+  'yc.txt',
+]);
+const DISTRIBUTION_MISTER_EXCEPTIONAL_PATHS = new Set([
+  'linux/pdfviewer',
+  'linux/lesskey',
+  'linux/glow',
+]);
 
 export async function inspectDatabaseFile(file) {
   const bytes = new Uint8Array(await file.arrayBuffer());
@@ -146,6 +172,7 @@ async function inspectDatabase(rawDatabase, source) {
   const issues = [];
   const rawVersion = rawDatabase.v;
   const version = Number.isInteger(rawVersion) ? rawVersion : 0;
+  const dbId = getString(rawDatabase.db_id) || '';
   const timestamp = Number(rawDatabase.timestamp);
   const files = asRecord(rawDatabase.files);
   const folders = asRecord(rawDatabase.folders);
@@ -200,6 +227,8 @@ async function inspectDatabase(rawDatabase, source) {
         scope: 'database',
         context: 'folders',
         path,
+        dbVersion: version,
+        dbId,
         folder,
         tagLookup,
         issues,
@@ -210,6 +239,8 @@ async function inspectDatabase(rawDatabase, source) {
         scope: 'database',
         context: 'files',
         path,
+        dbVersion: version,
+        dbId,
         file,
         tagLookup,
         issues,
@@ -225,6 +256,8 @@ async function inspectDatabase(rawDatabase, source) {
       buildArchiveView({
         archiveId,
         archive,
+        dbVersion: version,
+        dbId,
         databaseBaseFilesUrl: dbBaseFilesUrl,
         sourceUrl: source.sourceUrl,
         tagLookup,
@@ -267,6 +300,8 @@ async function inspectDatabase(rawDatabase, source) {
 async function buildArchiveView({
   archiveId,
   archive,
+  dbVersion,
+  dbId,
   databaseBaseFilesUrl,
   sourceUrl,
   tagLookup,
@@ -277,13 +312,14 @@ async function buildArchiveView({
   const archiveBaseFilesUrl = getString(archiveRecord.base_files_url);
   const archiveFile = isPlainObject(archiveRecord.archive_file) ? archiveRecord.archive_file : {};
   const archivePath = getString(archiveRecord.target_folder);
+  const archivePathInfo = normalizeDestinationPathForDisplay(archivePath, dbVersion);
 
   if (!archiveId) {
     addIssue(issues, 'error', 'archive', 'An archive key is empty.');
     addIssue(localIssues, 'error', 'archive', 'Archive key is empty.');
   }
 
-  if (archiveRecord.extract === 'all' && !archivePath) {
+  if (archiveRecord.extract === 'all' && !archivePathInfo.displayPath) {
     addIssue(
       issues,
       'error',
@@ -293,10 +329,11 @@ async function buildArchiveView({
     addIssue(localIssues, 'error', archiveId || 'archive', '`target_folder` is required.');
   }
 
-  if (archivePath) {
+  if (archivePathInfo.displayPath) {
     validateDestinationPath(
-      archivePath,
+      archivePathInfo.displayPath,
       'folder',
+      dbId,
       'archives.target_folder',
       localIssues,
       archiveId || 'archive',
@@ -363,6 +400,8 @@ async function buildArchiveView({
       buildArchiveFolderRecord({
         archiveId,
         path,
+        dbVersion,
+        dbId,
         folder,
         tagLookup,
         issues,
@@ -373,6 +412,8 @@ async function buildArchiveView({
       buildArchiveFileRecord({
         archiveId,
         path,
+        dbVersion,
+        dbId,
         file,
         tagLookup,
         issues,
@@ -393,12 +434,13 @@ async function buildArchiveView({
     primaryFields: buildPrimaryFields({
       hash: getString(archiveFile.hash),
       size: Number(archiveFile.size),
-      system: detectSystem(archivePath) || detectSystemFromSummary(summaryRecords),
+      system: detectSystem(archivePathInfo.displayPath) || detectSystemFromSummary(summaryRecords),
       tags: [],
     }),
     details: buildArchiveDetails({
       archiveRecord,
-      archivePath,
+      archivePath: archivePathInfo.displayPath,
+      archiveUsesLegacyExternalPath: archivePathInfo.usesLegacyExternalPath,
       archiveFile,
       summarySource,
       loadedSummaryFile,
@@ -413,6 +455,7 @@ async function buildArchiveView({
 function buildArchiveDetails({
   archiveRecord,
   archivePath,
+  archiveUsesLegacyExternalPath,
   archiveFile,
   summarySource,
   loadedSummaryFile,
@@ -426,23 +469,15 @@ function buildArchiveDetails({
     { label: 'Extract mode', value: getString(archiveRecord.extract) || 'Unknown' },
     { label: 'Target folder', value: archivePath || 'None', kind: 'code' },
     { label: 'Archive URL', value: getString(archiveFile.url) || 'Missing', kind: 'url' },
-    {
-      label: 'Archive hash',
-      value: getString(archiveFile.hash) || 'Missing',
-      kind: 'code',
-    },
-    {
-      label: 'Archive size',
-      value: Number.isFinite(Number(archiveFile.size))
-        ? `${formatBytes(Number(archiveFile.size))} (${Number(archiveFile.size).toLocaleString()} bytes)`
-        : 'Unknown',
-    },
     { label: 'Summary source', value: summarySource },
     { label: 'Loaded summary URL', value: loadedSummaryFile || 'Not loaded', kind: 'url' },
     { label: 'Archive base_files_url', value: archiveBaseFilesUrl || 'None', kind: 'url' },
     {
       label: 'External path',
-      value: getString(archiveRecord.path) === 'pext' ? 'Yes (pext)' : 'No',
+      value:
+        getString(archiveRecord.path) === 'pext' || archiveUsesLegacyExternalPath
+          ? 'Yes (pext)'
+          : 'No',
     },
     {
       label: 'Summary counts',
@@ -451,44 +486,57 @@ function buildArchiveDetails({
   ];
 }
 
-function buildFolderRecord({ scope, context, path, folder, tagLookup, issues }) {
+function buildFolderRecord({ scope, context, path, dbVersion, dbId, folder, tagLookup, issues }) {
   const folderRecord = isPlainObject(folder) ? folder : {};
-  validateDestinationPath(path, 'folder', context, issues, path);
+  const pathInfo = normalizeDestinationPathForDisplay(path, dbVersion);
+  validateDestinationPath(pathInfo.displayPath, 'folder', dbId, context, issues, path);
 
-  const tags = resolveTags(folderRecord.tags, tagLookup);
+  const tagEntries = buildTagEntries(folderRecord.tags, tagLookup);
 
   return {
     id: `${scope}:folder:${path}`,
     kind: 'folder',
-    path,
-    name: leafName(path, 'folder'),
+    path: pathInfo.displayPath,
+    name: leafName(pathInfo.displayPath, 'folder'),
     badge: 'DIR',
     primaryFields: buildPrimaryFields({
       hash: null,
       size: null,
-      system: detectSystem(path),
-      tags,
+      system: detectSystem(pathInfo.displayPath),
+      tags: tagEntries,
     }),
     details: [
-      { label: 'Destination', value: path, kind: 'code' },
-      { label: 'System', value: detectSystem(path) || 'Unknown' },
-      { label: 'Tags', value: tags.length ? tags : ['None'] },
-      { label: 'Raw tags', value: formatRawTags(folderRecord.tags) },
+      { label: 'Destination', value: pathInfo.displayPath, kind: 'code' },
       {
         label: 'External path',
-        value: getString(folderRecord.path) === 'pext' ? 'Yes (pext)' : 'No',
+        value:
+          getString(folderRecord.path) === 'pext' || pathInfo.usesLegacyExternalPath
+            ? 'Yes (pext)'
+            : 'No',
       },
     ],
   };
 }
 
-function buildFileRecord({ scope, context, path, file, tagLookup, issues, baseFilesUrl }) {
+function buildFileRecord({
+  scope,
+  context,
+  path,
+  dbVersion,
+  dbId,
+  file,
+  tagLookup,
+  issues,
+  baseFilesUrl,
+}) {
   const fileRecord = isPlainObject(file) ? file : {};
-  validateDestinationPath(path, 'file', context, issues, path);
+  const pathInfo = normalizeDestinationPathForDisplay(path, dbVersion);
+  validateDestinationPath(pathInfo.displayPath, 'file', dbId, context, issues, path);
 
+  const explicitUrl = getString(fileRecord.url);
   const resolvedUrl =
-    getString(fileRecord.url) || resolveBasePathUrl(baseFilesUrl, path) || null;
-  const tags = resolveTags(fileRecord.tags, tagLookup);
+    explicitUrl || resolveBasePathUrl(baseFilesUrl, pathInfo.displayPath) || null;
+  const tagEntries = buildTagEntries(fileRecord.tags, tagLookup);
 
   if (!resolvedUrl) {
     addIssue(
@@ -502,34 +550,30 @@ function buildFileRecord({ scope, context, path, file, tagLookup, issues, baseFi
   return {
     id: `${scope}:file:${path}`,
     kind: 'file',
-    path,
-    name: leafName(path, 'file'),
+    path: pathInfo.displayPath,
+    name: leafName(pathInfo.displayPath, 'file'),
     badge: 'FILE',
     primaryFields: buildPrimaryFields({
       hash: getString(fileRecord.hash),
       size: Number(fileRecord.size),
-      system: detectSystem(path),
-      tags,
+      system: detectSystem(pathInfo.displayPath),
+      tags: tagEntries,
     }),
     details: [
-      { label: 'Destination', value: path, kind: 'code' },
-      { label: 'System', value: detectSystem(path) || 'Unknown' },
-      { label: 'Resolved URL', value: resolvedUrl || 'None', kind: 'url' },
-      { label: 'Explicit URL', value: getString(fileRecord.url) || 'None', kind: 'url' },
-      { label: 'Hash', value: getString(fileRecord.hash) || 'Missing', kind: 'code' },
-      {
-        label: 'Size',
-        value: Number.isFinite(Number(fileRecord.size))
-          ? `${formatBytes(Number(fileRecord.size))} (${Number(fileRecord.size).toLocaleString()} bytes)`
-          : 'Unknown',
-      },
-      { label: 'Tags', value: tags.length ? tags : ['None'] },
-      { label: 'Raw tags', value: formatRawTags(fileRecord.tags) },
+      { label: 'Destination', value: pathInfo.displayPath, kind: 'code' },
+      ...buildDownloadDetails({
+        explicitUrl,
+        resolvedUrl,
+        missingLabel: 'None',
+      }),
       { label: 'Overwrite', value: fileRecord.overwrite === false ? 'No' : 'Yes' },
       { label: 'Reboot', value: fileRecord.reboot === true ? 'Yes' : 'No' },
       {
         label: 'External path',
-        value: getString(fileRecord.path) === 'pext' ? 'Yes (pext)' : 'No',
+        value:
+          getString(fileRecord.path) === 'pext' || pathInfo.usesLegacyExternalPath
+            ? 'Yes (pext)'
+            : 'No',
       },
       {
         label: 'Tangle',
@@ -541,9 +585,26 @@ function buildFileRecord({ scope, context, path, file, tagLookup, issues, baseFi
   };
 }
 
-function buildArchiveFolderRecord({ archiveId, path, folder, tagLookup, issues, localIssues }) {
+function buildArchiveFolderRecord({
+  archiveId,
+  path,
+  dbVersion,
+  dbId,
+  folder,
+  tagLookup,
+  issues,
+  localIssues,
+}) {
   const folderRecord = isPlainObject(folder) ? folder : {};
-  validateDestinationPath(path, 'folder', 'archives.summary_inline.folders', issues, path);
+  const pathInfo = normalizeDestinationPathForDisplay(path, dbVersion);
+  validateDestinationPath(
+    pathInfo.displayPath,
+    'folder',
+    dbId,
+    'archives.summary_inline.folders',
+    issues,
+    path,
+  );
 
   const arcId = getString(folderRecord.arc_id);
   if (arcId && arcId !== archiveId) {
@@ -561,29 +622,29 @@ function buildArchiveFolderRecord({ archiveId, path, folder, tagLookup, issues, 
     );
   }
 
-  const tags = resolveTags(folderRecord.tags, tagLookup);
+  const tagEntries = buildTagEntries(folderRecord.tags, tagLookup);
 
   return {
     id: `archive:${archiveId}:folder:${path}`,
     kind: 'folder',
-    path,
-    name: leafName(path, 'folder'),
+    path: pathInfo.displayPath,
+    name: leafName(pathInfo.displayPath, 'folder'),
     badge: 'DIR',
     primaryFields: buildPrimaryFields({
       hash: null,
       size: null,
-      system: detectSystem(path),
-      tags,
+      system: detectSystem(pathInfo.displayPath),
+      tags: tagEntries,
     }),
     details: [
-      { label: 'Destination', value: path, kind: 'code' },
-      { label: 'System', value: detectSystem(path) || 'Unknown' },
+      { label: 'Destination', value: pathInfo.displayPath, kind: 'code' },
       { label: 'Archive ID', value: arcId || 'Missing', kind: 'code' },
-      { label: 'Tags', value: tags.length ? tags : ['None'] },
-      { label: 'Raw tags', value: formatRawTags(folderRecord.tags) },
       {
         label: 'External path',
-        value: getString(folderRecord.path) === 'pext' ? 'Yes (pext)' : 'No',
+        value:
+          getString(folderRecord.path) === 'pext' || pathInfo.usesLegacyExternalPath
+            ? 'Yes (pext)'
+            : 'No',
       },
     ],
   };
@@ -592,6 +653,8 @@ function buildArchiveFolderRecord({ archiveId, path, folder, tagLookup, issues, 
 function buildArchiveFileRecord({
   archiveId,
   path,
+  dbVersion,
+  dbId,
   file,
   tagLookup,
   issues,
@@ -600,7 +663,15 @@ function buildArchiveFileRecord({
   databaseBaseFilesUrl,
 }) {
   const wrapped = isPlainObject(file) ? file : {};
-  validateDestinationPath(path, 'file', 'archives.summary_inline.files', issues, path);
+  const pathInfo = normalizeDestinationPathForDisplay(path, dbVersion);
+  validateDestinationPath(
+    pathInfo.displayPath,
+    'file',
+    dbId,
+    'archives.summary_inline.files',
+    issues,
+    path,
+  );
 
   const arcId = getString(wrapped.arc_id);
   const arcAt = getString(wrapped.arc_at);
@@ -631,46 +702,43 @@ function buildArchiveFileRecord({
     );
   }
 
-  const tags = resolveTags(wrapped.tags, tagLookup);
+  const explicitUrl = getString(wrapped.url);
+  const tagEntries = buildTagEntries(wrapped.tags, tagLookup);
   const resolvedUrl =
-    getString(wrapped.url) ||
-    resolveBasePathUrl(archiveBaseFilesUrl, path) ||
-    resolveBasePathUrl(databaseBaseFilesUrl, path) ||
+    explicitUrl ||
+    resolveBasePathUrl(archiveBaseFilesUrl, pathInfo.displayPath) ||
+    resolveBasePathUrl(databaseBaseFilesUrl, pathInfo.displayPath) ||
     null;
 
   return {
     id: `archive:${archiveId}:file:${path}`,
     kind: 'file',
-    path,
-    name: leafName(path, 'file'),
+    path: pathInfo.displayPath,
+    name: leafName(pathInfo.displayPath, 'file'),
     badge: 'FILE',
     primaryFields: buildPrimaryFields({
       hash: getString(wrapped.hash),
       size: Number(wrapped.size),
-      system: detectSystem(path),
-      tags,
+      system: detectSystem(pathInfo.displayPath),
+      tags: tagEntries,
     }),
     details: [
-      { label: 'Destination', value: path, kind: 'code' },
-      { label: 'System', value: detectSystem(path) || 'Unknown' },
+      { label: 'Destination', value: pathInfo.displayPath, kind: 'code' },
       { label: 'Archive ID', value: arcId || 'Missing', kind: 'code' },
       { label: 'Archive path', value: arcAt || 'Missing', kind: 'code' },
-      { label: 'Resolved URL', value: resolvedUrl || 'Archive-only', kind: 'url' },
-      { label: 'Explicit URL', value: getString(wrapped.url) || 'None', kind: 'url' },
-      { label: 'Hash', value: getString(wrapped.hash) || 'Missing', kind: 'code' },
-      {
-        label: 'Size',
-        value: Number.isFinite(Number(wrapped.size))
-          ? `${formatBytes(Number(wrapped.size))} (${Number(wrapped.size).toLocaleString()} bytes)`
-          : 'Unknown',
-      },
-      { label: 'Tags', value: tags.length ? tags : ['None'] },
-      { label: 'Raw tags', value: formatRawTags(wrapped.tags) },
+      ...buildDownloadDetails({
+        explicitUrl,
+        resolvedUrl,
+        missingLabel: 'Archive-only',
+      }),
       { label: 'Overwrite', value: wrapped.overwrite === false ? 'No' : 'Yes' },
       { label: 'Reboot', value: wrapped.reboot === true ? 'Yes' : 'No' },
       {
         label: 'External path',
-        value: getString(wrapped.path) === 'pext' ? 'Yes (pext)' : 'No',
+        value:
+          getString(wrapped.path) === 'pext' || pathInfo.usesLegacyExternalPath
+            ? 'Yes (pext)'
+            : 'No',
       },
       {
         label: 'Tangle',
@@ -699,7 +767,7 @@ function buildPrimaryFields({ hash, size, system, tags }) {
   }
 
   if (Array.isArray(tags) && tags.length) {
-    fields.push({ label: 'Tags', value: tags });
+    fields.push({ label: 'Tags', value: tags, kind: 'tags' });
   }
 
   return fields;
@@ -758,7 +826,6 @@ function insertRecord(root, record, scope) {
         details: [
           { label: 'Destination', value: `${branchPath}/`, kind: 'code' },
           { label: 'Role', value: 'Implicit parent folder' },
-          { label: 'System', value: detectSystem(branchPath) || 'Unknown' },
         ],
         childrenMap: new Map(),
       };
@@ -802,7 +869,8 @@ function finalizeBranch(branch) {
 }
 
 function buildTagLookup(dictionary) {
-  const lookup = new Map();
+  const byIndex = new Map();
+  const byName = new Map();
 
   for (const [name, index] of Object.entries(dictionary || {})) {
     const numericIndex = Number(index);
@@ -810,34 +878,41 @@ function buildTagLookup(dictionary) {
       continue;
     }
 
-    const bucket = lookup.get(numericIndex) || [];
+    const bucket = byIndex.get(numericIndex) || [];
     bucket.push(name);
-    lookup.set(numericIndex, bucket);
+    byIndex.set(numericIndex, bucket);
+    byName.set(normalizeTagName(name), numericIndex);
   }
 
-  return lookup;
+  return {
+    byIndex,
+    byName,
+  };
 }
 
-function resolveTags(rawTags, tagLookup) {
+function buildTagEntries(rawTags, tagLookup) {
   if (!Array.isArray(rawTags)) {
     return [];
   }
 
-  return rawTags.map((tag) => {
+  return rawTags.map((tag, index) => {
     if (typeof tag === 'number') {
-      return (tagLookup.get(tag) || [`#${tag}`]).join(' / ');
+      return {
+        id: `tag:${index}:${tag}`,
+        label: (tagLookup.byIndex.get(tag) || [`#${tag}`]).join(' / '),
+        rawLabel: String(tag),
+      };
     }
 
-    return String(tag);
+    const label = String(tag);
+    const dictionaryIndex = tagLookup.byName.get(normalizeTagName(label));
+
+    return {
+      id: `tag:${index}:${label}`,
+      label,
+      rawLabel: dictionaryIndex == null ? null : String(dictionaryIndex),
+    };
   });
-}
-
-function formatRawTags(rawTags) {
-  if (!Array.isArray(rawTags) || !rawTags.length) {
-    return ['None'];
-  }
-
-  return rawTags.map((tag) => String(tag));
 }
 
 function resolveBasePathUrl(baseUrl, path) {
@@ -864,6 +939,44 @@ function ensureTrailingSlash(value) {
   return value.endsWith('/') ? value : `${value}/`;
 }
 
+function normalizeTagName(value) {
+  return String(value).toLowerCase().replaceAll(/[_-]/g, '');
+}
+
+function buildDownloadDetails({ explicitUrl, resolvedUrl, missingLabel }) {
+  const fields = [
+    {
+      label: 'Download URL',
+      value: resolvedUrl || missingLabel,
+      kind: resolvedUrl ? 'url' : undefined,
+    },
+  ];
+
+  if (explicitUrl) {
+    fields.push({ label: 'URL source', value: 'Explicit `url` field' });
+  } else if (resolvedUrl) {
+    fields.push({ label: 'URL source', value: 'Derived from `base_files_url`' });
+  }
+
+  return fields;
+}
+
+function normalizeDestinationPathForDisplay(path, dbVersion) {
+  const rawPath = typeof path === 'string' ? path : '';
+
+  if (dbVersion === 0 && rawPath.startsWith('|')) {
+    return {
+      displayPath: rawPath.slice(1),
+      usesLegacyExternalPath: true,
+    };
+  }
+
+  return {
+    displayPath: rawPath,
+    usesLegacyExternalPath: false,
+  };
+}
+
 function addIssue(list, level, context, message) {
   list.push({
     id: `${level}:${context}:${list.length}`,
@@ -873,8 +986,8 @@ function addIssue(list, level, context, message) {
   });
 }
 
-function validateDestinationPath(path, kind, context, issues, itemLabel) {
-  const normalized = normalizePath(path, kind);
+function validateDestinationPath(path, kind, dbId, context, issues, itemLabel) {
+  const normalized = normalizeDestinationPath(path, kind, dbId);
   if (!normalized.ok) {
     addIssue(
       issues,
@@ -889,7 +1002,7 @@ function validateDestinationPath(path, kind, context, issues, itemLabel) {
 }
 
 function validateArchiveMemberPath(path, issues, context) {
-  const normalized = normalizePath(path, 'file-or-folder');
+  const normalized = normalizeRelativePath(path, 'file-or-folder');
   if (!normalized.ok) {
     addIssue(
       issues,
@@ -902,12 +1015,62 @@ function validateArchiveMemberPath(path, issues, context) {
   return normalized.ok ? normalized.value : null;
 }
 
-function normalizePath(path, kind) {
+function normalizeDestinationPath(path, kind, dbId) {
+  if (typeof path !== 'string') {
+    return { ok: false, reason: 'path should be a string' };
+  }
+
+  if (path === '' || path.startsWith('/') || path.startsWith('.') || path.startsWith('\\')) {
+    return { ok: false, reason: 'path should be valid' };
+  }
+
+  if (kind === 'file' && path.endsWith('/')) {
+    return { ok: false, reason: 'file path must not end with /' };
+  }
+
+  const trimmed = trimTrailingSlash(path);
+  const lowerPath = trimmed.toLowerCase();
+  const parts = lowerPath.split('/');
+
+  if (EXCEPTIONAL_PATHS.has(lowerPath)) {
+    return { ok: true, value: trimmed };
+  }
+
+  if (
+    dbId === DISTRIBUTION_MISTER_DB_ID &&
+    DISTRIBUTION_MISTER_EXCEPTIONAL_PATHS.has(lowerPath)
+  ) {
+    return { ok: true, value: trimmed };
+  }
+
+  if (INVALID_PATHS.has(lowerPath)) {
+    return { ok: false, reason: 'path should not be illegal' };
+  }
+
+  if (
+    dbId !== DISTRIBUTION_MISTER_DB_ID &&
+    NO_DISTRIBUTION_MISTER_INVALID_PATHS.has(lowerPath)
+  ) {
+    return { ok: false, reason: 'path is only valid for distribution_mister' };
+  }
+
+  if (parts.length === 1 && lowerPath.startsWith('downloader_') && lowerPath.endsWith('.ini')) {
+    return { ok: false, reason: 'path should not be illegal' };
+  }
+
+  if (!parts.length || parts.includes('..') || INVALID_ROOT_FOLDERS.has(parts[0])) {
+    return { ok: false, reason: "path can't contain root folders" };
+  }
+
+  return { ok: true, value: trimmed };
+}
+
+function normalizeRelativePath(path, kind) {
   if (typeof path !== 'string' || path.length === 0) {
     return { ok: false, reason: 'path must not be empty' };
   }
 
-  if (path.startsWith('/')) {
+  if (path.startsWith('/') || path.startsWith('\\') || path.startsWith('.')) {
     return { ok: false, reason: 'path must be relative' };
   }
 
@@ -927,14 +1090,6 @@ function normalizePath(path, kind) {
 
   if (segments.includes('..')) {
     return { ok: false, reason: 'path must not contain .. segments' };
-  }
-
-  if (RESERVED_SYSTEM_FOLDERS.has(segments[0])) {
-    return { ok: false, reason: 'reserved system folder' };
-  }
-
-  if (RESERVED_SYSTEM_FILES.has(trimmed)) {
-    return { ok: false, reason: 'reserved system file' };
   }
 
   return { ok: true, value: trimmed };

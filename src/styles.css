@@ -241,6 +241,44 @@ button:hover {
   gap: 1rem;
 }
 
+.section-controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: end;
+  gap: 0.75rem 1rem;
+  align-items: center;
+}
+
+.toggle-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem;
+  border-radius: 999px;
+  background: rgba(22, 33, 47, 0.08);
+}
+
+.toggle-label {
+  padding: 0 0.55rem 0 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.toggle-chip {
+  padding: 0.5rem 0.9rem;
+  color: var(--ink);
+  background: transparent;
+  box-shadow: none;
+}
+
+.toggle-chip.active {
+  color: #f9f8f3;
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+}
+
 .compact-heading {
   margin-bottom: 0.9rem;
 }
@@ -291,21 +329,46 @@ button:hover {
 }
 
 .tag-dictionary {
-  margin-top: 1rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.42);
 }
 
 .tag-cloud {
   display: flex;
   flex-wrap: wrap;
   gap: 0.7rem;
+  margin-top: 1rem;
 }
 
 .dictionary-pill,
 .mini-chip,
+.tag-chip,
 .node-badge,
 .issue-level {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.82rem;
+}
+
+.dictionary-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  list-style: none;
+  cursor: pointer;
+}
+
+.dictionary-summary::-webkit-details-marker {
+  display: none;
+}
+
+.dictionary-count {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.45rem 0.7rem;
+  border-radius: 999px;
+  background: rgba(22, 33, 47, 0.08);
+  color: var(--muted);
   font-family: 'IBM Plex Mono', monospace;
   font-size: 0.82rem;
 }
@@ -412,7 +475,7 @@ button:hover {
   display: flex;
   flex-wrap: wrap;
   gap: 0.7rem;
-  margin-bottom: 1rem;
+  margin-bottom: 0.7rem;
 }
 
 .primary-pill,
@@ -469,10 +532,47 @@ button:hover {
   gap: 0.45rem;
 }
 
+.tag-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
 .mini-chip {
   display: inline-flex;
   padding: 0.35rem 0.55rem;
   border-radius: 999px;
+}
+
+.tag-chip {
+  position: relative;
+  display: inline-flex;
+  padding: 0.35rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(15, 111, 145, 0.08);
+}
+
+.tag-chip[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 0.45rem);
+  transform: translateX(-50%) translateY(0.15rem);
+  padding: 0.45rem 0.6rem;
+  border-radius: 10px;
+  background: rgba(22, 33, 47, 0.96);
+  color: #fff;
+  white-space: nowrap;
+  font-size: 0.76rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease, transform 120ms ease;
+  box-shadow: 0 10px 24px rgba(22, 33, 47, 0.24);
+}
+
+.tag-chip[data-tooltip]:hover::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }
 
 .tree-children {
@@ -553,6 +653,11 @@ button:hover {
   .tree-heading {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .section-controls,
+  .dictionary-summary {
+    justify-content: start;
   }
 
   .tree-heading code {

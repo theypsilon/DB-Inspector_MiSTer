@@ -1,18 +1,38 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   inspectDatabaseFile,
   inspectDatabaseUrl,
 } from './lib/database.js';
 
+const DATABASE_URL_PARAM = 'database-url';
+
 export default function App() {
   const fileInputRef = useRef(null);
-  const [databaseUrl, setDatabaseUrl] = useState('');
+  const autoLoadHandledRef = useRef(false);
+  const [databaseUrl, setDatabaseUrl] = useState(() => readDatabaseUrlSearchParam());
   const [loadingMessage, setLoadingMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [inspection, setInspection] = useState(null);
   const [collapsedIds, setCollapsedIds] = useState(() => new Set());
+  const [filesystemDetailed, setFilesystemDetailed] = useState(false);
+  const [archivesDetailed, setArchivesDetailed] = useState(false);
 
-  const branchIds = inspection ? collectBranchIds(inspection) : [];
+  const filesystemBranchIds = inspection ? collectTreeBranchIds(inspection.filesystemTree) : [];
+  const archiveBranchIds = inspection ? collectArchiveBranchIds(inspection.archiveViews) : [];
+
+  useEffect(() => {
+    if (autoLoadHandledRef.current) {
+      return;
+    }
+
+    autoLoadHandledRef.current = true;
+    const sharedDatabaseUrl = readDatabaseUrlSearchParam();
+    if (!sharedDatabaseUrl) {
+      return;
+    }
+
+    void loadRemoteDatabase(sharedDatabaseUrl, { syncSearchParam: false });
+  }, []);
 
   async function loadFile(file) {
     if (!file) {
@@ -26,6 +46,35 @@ export default function App() {
       const nextInspection = await inspectDatabaseFile(file);
       setInspection(nextInspection);
       setCollapsedIds(new Set());
+      setDatabaseUrl('');
+      writeDatabaseUrlSearchParam('');
+    } catch (error) {
+      setInspection(null);
+      setErrorMessage(error.message);
+    } finally {
+      setLoadingMessage('');
+    }
+  }
+
+  async function loadRemoteDatabase(input, { syncSearchParam = true } = {}) {
+    const requestedUrl = String(input).trim();
+    if (!requestedUrl) {
+      setErrorMessage('Enter a database URL first.');
+      return;
+    }
+
+    setLoadingMessage(`Fetching ${requestedUrl}...`);
+    setErrorMessage('');
+
+    try {
+      const nextInspection = await inspectDatabaseUrl(requestedUrl);
+      const sharedUrl = nextInspection.source.sourceLabel;
+      setInspection(nextInspection);
+      setCollapsedIds(new Set());
+      setDatabaseUrl(sharedUrl);
+      if (syncSearchParam) {
+        writeDatabaseUrlSearchParam(sharedUrl);
+      }
     } catch (error) {
       setInspection(null);
       setErrorMessage(error.message);
@@ -36,24 +85,7 @@ export default function App() {
 
   async function loadUrl(event) {
     event.preventDefault();
-    if (!databaseUrl.trim()) {
-      setErrorMessage('Enter a database URL first.');
-      return;
-    }
-
-    setLoadingMessage(`Fetching ${databaseUrl}...`);
-    setErrorMessage('');
-
-    try {
-      const nextInspection = await inspectDatabaseUrl(databaseUrl);
-      setInspection(nextInspection);
-      setCollapsedIds(new Set());
-    } catch (error) {
-      setInspection(null);
-      setErrorMessage(error.message);
-    } finally {
-      setLoadingMessage('');
-    }
+    await loadRemoteDatabase(databaseUrl);
   }
 
   function handleDrop(event) {
@@ -74,12 +106,18 @@ export default function App() {
     });
   }
 
-  function expandAll() {
-    setCollapsedIds(new Set());
-  }
-
-  function collapseAll() {
-    setCollapsedIds(new Set(branchIds));
+  function setSectionCollapsed(nodeIds, collapsed) {
+    setCollapsedIds((current) => {
+      const next = new Set(current);
+      for (const nodeId of nodeIds) {
+        if (collapsed) {
+          next.add(nodeId);
+        } else {
+          next.delete(nodeId);
+        }
+      }
+      return next;
+    });
   }
 
   return (
@@ -148,7 +186,8 @@ export default function App() {
           </form>
           <p className="helper-copy">
             The URL must end in <code>.json</code> or <code>.json.zip</code>. Archive summary
-            files are fetched automatically when present.
+            files are fetched automatically when present, and successful fetches update the page
+            URL so you can share the inspector state directly.
           </p>
         </section>
       </section>
@@ -229,25 +268,6 @@ export default function App() {
                 ]}
               />
             </div>
-
-            <TagDictionary tags={inspection.overview.tagDictionary} />
-          </section>
-
-          <section className="panel">
-            <div className="section-heading">
-              <div>
-                <p className="section-label">Controls</p>
-                <h2>Tree visibility</h2>
-              </div>
-              <div className="button-row">
-                <button type="button" onClick={expandAll}>
-                  Expand all
-                </button>
-                <button type="button" className="secondary-button" onClick={collapseAll}>
-                  Collapse all
-                </button>
-              </div>
-            </div>
           </section>
 
           <section className="panel">
@@ -256,6 +276,12 @@ export default function App() {
                 <p className="section-label">Filesystem</p>
                 <h2>Files and folders</h2>
               </div>
+              <SectionControls
+                detailed={filesystemDetailed}
+                onDetailedChange={setFilesystemDetailed}
+                onExpandAll={() => setSectionCollapsed(filesystemBranchIds, false)}
+                onCollapseAll={() => setSectionCollapsed(filesystemBranchIds, true)}
+              />
             </div>
             {inspection.filesystemTree.children.length ? (
               <div className="tree-root">
@@ -263,6 +289,7 @@ export default function App() {
                   <TreeNode
                     key={node.id}
                     node={node}
+                    showDetails={filesystemDetailed}
                     collapsedIds={collapsedIds}
                     onToggle={toggleNode}
                   />
@@ -279,6 +306,12 @@ export default function App() {
                 <p className="section-label">Archives</p>
                 <h2>Archive summaries</h2>
               </div>
+              <SectionControls
+                detailed={archivesDetailed}
+                onDetailedChange={setArchivesDetailed}
+                onExpandAll={() => setSectionCollapsed(archiveBranchIds, false)}
+                onCollapseAll={() => setSectionCollapsed(archiveBranchIds, true)}
+              />
             </div>
             {inspection.archiveViews.length ? (
               <div className="archive-list">
@@ -286,6 +319,7 @@ export default function App() {
                   <ArchiveCard
                     key={archive.nodeId}
                     archive={archive}
+                    showDetails={archivesDetailed}
                     collapsedIds={collapsedIds}
                     onToggle={toggleNode}
                   />
@@ -317,6 +351,10 @@ export default function App() {
               <EmptyState message="No schema or path issues were detected by the browser-side inspector." />
             )}
           </section>
+
+          <section className="panel">
+            <TagDictionary tags={inspection.overview.tagDictionary} />
+          </section>
         </>
       ) : (
         <section className="panel empty-screen">
@@ -332,7 +370,31 @@ export default function App() {
   );
 }
 
-function ArchiveCard({ archive, collapsedIds, onToggle }) {
+function readDatabaseUrlSearchParam() {
+  if (typeof window === 'undefined') {
+    return '';
+  }
+
+  const searchParams = new URLSearchParams(window.location.search);
+  return searchParams.get(DATABASE_URL_PARAM) ?? '';
+}
+
+function writeDatabaseUrlSearchParam(value) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const currentUrl = new URL(window.location.href);
+  if (value) {
+    currentUrl.searchParams.set(DATABASE_URL_PARAM, value);
+  } else {
+    currentUrl.searchParams.delete(DATABASE_URL_PARAM);
+  }
+
+  window.history.replaceState({}, '', currentUrl);
+}
+
+function ArchiveCard({ archive, showDetails, collapsedIds, onToggle }) {
   const collapsed = collapsedIds.has(archive.nodeId);
 
   return (
@@ -350,7 +412,7 @@ function ArchiveCard({ archive, collapsedIds, onToggle }) {
             <code>{archive.id}</code>
           </div>
           <PrimaryFieldRow fields={archive.primaryFields} />
-          <MetadataList fields={archive.details} />
+          {showDetails ? <MetadataList fields={archive.details} /> : null}
           {archive.issues.length ? (
             <ul className="inline-issues">
               {archive.issues.map((issue) => (
@@ -371,6 +433,7 @@ function ArchiveCard({ archive, collapsedIds, onToggle }) {
               <TreeNode
                 key={node.id}
                 node={node}
+                showDetails={showDetails}
                 collapsedIds={collapsedIds}
                 onToggle={onToggle}
               />
@@ -386,7 +449,7 @@ function ArchiveCard({ archive, collapsedIds, onToggle }) {
   );
 }
 
-function TreeNode({ node, collapsedIds, onToggle }) {
+function TreeNode({ node, showDetails, collapsedIds, onToggle }) {
   const hasChildren = Array.isArray(node.children) && node.children.length > 0;
   const collapsed = collapsedIds.has(node.id);
 
@@ -411,7 +474,7 @@ function TreeNode({ node, collapsedIds, onToggle }) {
             <code>{node.path}</code>
           </div>
           <PrimaryFieldRow fields={node.primaryFields} />
-          <MetadataList fields={node.details} />
+          {showDetails ? <MetadataList fields={node.details} /> : null}
         </div>
       </div>
 
@@ -421,6 +484,7 @@ function TreeNode({ node, collapsedIds, onToggle }) {
             <TreeNode
               key={child.id}
               node={child}
+              showDetails={showDetails}
               collapsedIds={collapsedIds}
               onToggle={onToggle}
             />
@@ -443,13 +507,14 @@ function HighlightCard({ label, value, subvalue, accent }) {
 
 function TagDictionary({ tags }) {
   return (
-    <section className="tag-dictionary">
-      <div className="section-heading compact-heading">
+    <details className="tag-dictionary">
+      <summary className="dictionary-summary">
         <div>
           <p className="section-label">Tags</p>
           <h2>Tag dictionary</h2>
         </div>
-      </div>
+        <span className="dictionary-count">{tags.length} entries</span>
+      </summary>
       {tags.length ? (
         <div className="tag-cloud">
           {tags.map((tag) => (
@@ -462,7 +527,7 @@ function TagDictionary({ tags }) {
       ) : (
         <EmptyState message="No tag dictionary was provided." />
       )}
-    </section>
+    </details>
   );
 }
 
@@ -493,6 +558,10 @@ function PrimaryFieldRow({ fields }) {
 }
 
 function MetadataList({ fields }) {
+  if (!fields.length) {
+    return null;
+  }
+
   return (
     <dl className="metadata-list">
       {fields.map((field, index) => (
@@ -509,6 +578,16 @@ function MetadataList({ fields }) {
 
 function FieldValue({ field }) {
   const value = field.value;
+
+  if (field.kind === 'tags' && Array.isArray(value)) {
+    return (
+      <div className="tag-chip-list">
+        {value.map((tag) => (
+          <TagChip key={tag.id} tag={tag} />
+        ))}
+      </div>
+    );
+  }
 
   if (Array.isArray(value)) {
     return (
@@ -537,11 +616,59 @@ function FieldValue({ field }) {
   return <span>{value}</span>;
 }
 
+function TagChip({ tag }) {
+  return (
+    <span
+      className="tag-chip"
+      data-tooltip={tag.rawLabel ? `Raw tag: ${tag.rawLabel}` : undefined}
+    >
+      {tag.label}
+    </span>
+  );
+}
+
 function EmptyState({ message }) {
   return <p className="empty-state">{message}</p>;
 }
 
-function collectBranchIds(inspection) {
+function SectionControls({
+  detailed,
+  onDetailedChange,
+  onExpandAll,
+  onCollapseAll,
+}) {
+  return (
+    <div className="section-controls">
+      <div className="toggle-group" aria-label="Detailed toggle">
+        <span className="toggle-label">Detailed</span>
+        <button
+          type="button"
+          className={!detailed ? 'toggle-chip active' : 'toggle-chip'}
+          onClick={() => onDetailedChange(false)}
+        >
+          Off
+        </button>
+        <button
+          type="button"
+          className={detailed ? 'toggle-chip active' : 'toggle-chip'}
+          onClick={() => onDetailedChange(true)}
+        >
+          On
+        </button>
+      </div>
+      <div className="button-row">
+        <button type="button" onClick={onExpandAll}>
+          Uncollapse all
+        </button>
+        <button type="button" className="secondary-button" onClick={onCollapseAll}>
+          Collapse all
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function collectTreeBranchIds(tree) {
   const ids = [];
 
   function visit(node) {
@@ -557,10 +684,19 @@ function collectBranchIds(inspection) {
     }
   }
 
-  visit(inspection.filesystemTree);
-  for (const archive of inspection.archiveViews) {
+  for (const child of tree?.children || []) {
+    visit(child);
+  }
+
+  return ids;
+}
+
+function collectArchiveBranchIds(archives) {
+  const ids = [];
+
+  for (const archive of archives || []) {
     ids.push(archive.nodeId);
-    visit(archive.tree);
+    ids.push(...collectTreeBranchIds(archive.tree));
   }
 
   return ids;
