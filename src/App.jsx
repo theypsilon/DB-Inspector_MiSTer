@@ -2311,10 +2311,10 @@ function SectionControls({
       <DetailedToggle detailed={detailed} onDetailedChange={onDetailedChange} />
       <div className="button-row">
         <button type="button" onClick={onExpandAll}>
-          Uncollapse all
+          Open all
         </button>
         <button type="button" className="secondary-button" onClick={onCollapseAll}>
-          Collapse all
+          Close all
         </button>
       </div>
     </div>
