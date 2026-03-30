@@ -1,51 +1,28 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="MiSTer downloader database inspector favicon">
-  <defs>
-    <clipPath id="db-shape">
-      <path d="M4 12v37c0 6.1 12.5 11 28 11s28-4.9 28-11V12" />
-      <ellipse cx="32" cy="12" rx="28" ry="11.4" />
-      <ellipse cx="32" cy="55.5" rx="28" ry="7.2" />
-    </clipPath>
-    <clipPath id="green-band">
-      <rect x="0" y="22" width="64" height="19" />
-    </clipPath>
-    <clipPath id="red-band">
-      <rect x="0" y="41" width="64" height="23" />
-    </clipPath>
-  </defs>
+  <path
+    d="M4 43H60V55.5Q32 62.7 4 55.5Z"
+    fill="#ea4335"
+  />
+  <ellipse
+    cx="32"
+    cy="55.5"
+    rx="28"
+    ry="7.2"
+    fill="#ea4335"
+  />
 
-  <g clip-path="url(#db-shape)">
-    <rect x="0" y="0" width="64" height="22" fill="#4285f4" />
-    <rect x="0" y="22" width="64" height="19" fill="#34a853" />
-    <rect x="0" y="41" width="64" height="23" fill="#ea4335" />
-  </g>
+  <path
+    d="M4 27.5H60V43Q32 53.1 4 43Z"
+    fill="#34a853"
+  />
 
-  <g clip-path="url(#db-shape)">
-    <g clip-path="url(#green-band)">
-      <ellipse
-        cx="32"
-        cy="27.5"
-        rx="28"
-        ry="10.1"
-        fill="none"
-        stroke="#34a853"
-        stroke-width="2.3"
-      />
-    </g>
-    <g clip-path="url(#red-band)">
-      <ellipse
-        cx="32"
-        cy="43"
-        rx="28"
-        ry="10.1"
-        fill="none"
-        stroke="#ea4335"
-        stroke-width="2.1"
-      />
-    </g>
-  </g>
-
+  <path
+    d="M4 12Q32 22.1 60 12V27.5Q32 37.6 4 27.5Z"
+    fill="#4285f4"
+  />
   <path
     d="M38 0v23h14L32 64 12 23h14V0z"
     fill="#fff"
+    transform="translate(6.4 5.76) scale(0.8)"
   />
 </svg>
