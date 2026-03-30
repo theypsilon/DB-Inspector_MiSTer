@@ -32,14 +32,15 @@ const LEGACY_ZIP_KIND_TO_ARCHIVE_EXTRACT = {
   extract_all_contents: 'all',
   extract_single_files: 'selective',
 };
+const SUPPORTED_REMOTE_SOURCE_SUFFIXES = ['.json', '.json.zip', '.ini', '.ini.zip'];
 const UPDATE_ALL_DATABASES_SOURCE_URL =
   'https://raw.githubusercontent.com/theypsilon/Update_All_MiSTer/master/src/update_all/databases.py';
 
-export async function inspectDatabaseFile(file) {
+export async function loadDatabaseSourceFile(file) {
   const bytes = new Uint8Array(await file.arrayBuffer());
-  const decoded = decodeJsonish(bytes, file.name);
+  const decoded = decodeSupportedSource(bytes, file.name);
 
-  return inspectDatabase(decoded.json, {
+  return buildLoadedSource(decoded, {
     sourceKind: 'upload',
     sourceLabel: file.name,
     sourceUrl: null,
@@ -48,17 +49,35 @@ export async function inspectDatabaseFile(file) {
   });
 }
 
-export async function inspectDatabaseUrl(input) {
-  const url = normalizeDatabaseUrl(input);
-  const decoded = await fetchJsonish(url);
+export async function loadDatabaseSourceUrl(input) {
+  const url = normalizeSupportedSourceUrl(input);
+  const decoded = await fetchSupportedSource(url);
 
-  return inspectDatabase(decoded.json, {
+  return buildLoadedSource(decoded, {
     sourceKind: 'url',
     sourceLabel: url,
     sourceUrl: decoded.finalUrl,
     containerType: decoded.containerType,
     extractedEntry: decoded.entryName,
   });
+}
+
+export async function inspectDatabaseFile(file) {
+  const loadedSource = await loadDatabaseSourceFile(file);
+  if (loadedSource.kind !== 'database') {
+    throw new Error('The uploaded source is an INI list, not a database JSON.');
+  }
+
+  return loadedSource.inspection;
+}
+
+export async function inspectDatabaseUrl(input) {
+  const loadedSource = await loadDatabaseSourceUrl(input);
+  if (loadedSource.kind !== 'database') {
+    throw new Error('The requested URL points to an INI list, not a database JSON.');
+  }
+
+  return loadedSource.inspection;
 }
 
 export async function loadRuntimeDatabaseCatalog() {
@@ -106,20 +125,57 @@ export function formatTimestamp(value) {
   }).format(date);
 }
 
-function normalizeDatabaseUrl(input) {
+async function buildLoadedSource(decoded, source) {
+  if (decoded.documentType === 'json') {
+    return {
+      kind: 'database',
+      inspection: await inspectDatabase(decoded.json, source),
+    };
+  }
+
+  return {
+    kind: 'ini',
+    source,
+    entries: decoded.entries,
+  };
+}
+
+function normalizeSupportedSourceUrl(input, { baseUrl = null } = {}) {
   let parsedUrl;
   try {
-    parsedUrl = new URL(String(input).trim());
+    parsedUrl = baseUrl ? new URL(String(input).trim(), baseUrl) : new URL(String(input).trim());
   } catch {
-    throw new Error('Enter an absolute URL that ends in .json or .json.zip.');
+    if (baseUrl) {
+      throw new Error('URL should be absolute or resolvable relative to its source.');
+    }
+
+    throw new Error('Enter an absolute URL that ends in .json, .json.zip, .ini, or .ini.zip.');
   }
 
   const path = parsedUrl.pathname.toLowerCase();
-  if (!path.endsWith('.json') && !path.endsWith('.json.zip')) {
-    throw new Error('Database URLs must end in .json or .json.zip.');
+  if (!SUPPORTED_REMOTE_SOURCE_SUFFIXES.some((suffix) => path.endsWith(suffix))) {
+    throw new Error('URLs must end in .json, .json.zip, .ini, or .ini.zip.');
   }
 
   return parsedUrl.toString();
+}
+
+async function fetchSupportedSource(url) {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Request failed with ${response.status} ${response.statusText}.`);
+  }
+
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  const fallbackName = response.url.split('/').pop() || url;
+  const decoded = decodeSupportedSource(bytes, fallbackName, {
+    baseUrl: response.url || url,
+  });
+
+  return {
+    ...decoded,
+    finalUrl: response.url || url,
+  };
 }
 
 async function fetchJsonish(url) {
@@ -136,6 +192,41 @@ async function fetchJsonish(url) {
     ...decoded,
     finalUrl: response.url || url,
   };
+}
+
+function decodeSupportedSource(bytes, sourceName, { baseUrl = null } = {}) {
+  const lowerName = String(sourceName || '').toLowerCase();
+  if (lowerName.endsWith('.zip') || looksLikeZip(bytes)) {
+    let archive;
+    try {
+      archive = unzipSync(bytes);
+    } catch (error) {
+      throw new Error(`Could not unzip ${sourceName}: ${error.message}`);
+    }
+
+    const entries = Object.entries(archive).filter(([name]) => !name.endsWith('/'));
+    if (!entries.length) {
+      throw new Error(`ZIP archive ${sourceName} does not contain any files.`);
+    }
+
+    const supportedEntries = entries.filter(([name]) => isSupportedSourceEntry(name));
+    if (!supportedEntries.length) {
+      throw new Error(`ZIP archive ${sourceName} does not contain any .json or .ini files.`);
+    }
+
+    const selectedEntry = pickSupportedSourceEntry(supportedEntries, lowerName);
+    return parseSupportedSourceText(strFromU8(selectedEntry[1]), selectedEntry[0], {
+      containerType: 'zip',
+      entryName: selectedEntry[0],
+      baseUrl,
+    });
+  }
+
+  return parseSupportedSourceText(strFromU8(bytes), sourceName, {
+    containerType: lowerName.endsWith('.ini') ? 'ini' : 'json',
+    entryName: null,
+    baseUrl,
+  });
 }
 
 function decodeJsonish(bytes, sourceName) {
@@ -175,6 +266,171 @@ function decodeJsonish(bytes, sourceName) {
     };
   } catch (error) {
     throw new Error(`Could not parse JSON inside ${sourceName}: ${error.message}`);
+  }
+}
+
+function parseSupportedSourceText(text, sourceName, { containerType, entryName, baseUrl }) {
+  const lowerName = String(sourceName || '').toLowerCase();
+  const inferredJsonContainerType = entryName ? containerType : 'json';
+  const inferredIniContainerType = entryName ? containerType : 'ini';
+
+  function parseJson() {
+    try {
+      return {
+        documentType: 'json',
+        json: JSON.parse(text),
+        containerType: inferredJsonContainerType,
+        entryName,
+      };
+    } catch (error) {
+      throw new Error(`Could not parse JSON inside ${sourceName}: ${error.message}`);
+    }
+  }
+
+  function parseIni() {
+    try {
+      return {
+        documentType: 'ini',
+        entries: parseDatabaseListIni(text, sourceName, { baseUrl }),
+        containerType: inferredIniContainerType,
+        entryName,
+      };
+    } catch (error) {
+      throw new Error(`Could not parse INI inside ${sourceName}: ${error.message}`);
+    }
+  }
+
+  if (lowerName.endsWith('.json')) {
+    return parseJson();
+  }
+
+  if (lowerName.endsWith('.ini')) {
+    return parseIni();
+  }
+
+  try {
+    return parseJson();
+  } catch (jsonError) {
+    try {
+      return parseIni();
+    } catch (iniError) {
+      throw new Error(`${jsonError.message} ${iniError.message}`);
+    }
+  }
+}
+
+function isSupportedSourceEntry(name) {
+  const lowerName = String(name || '').toLowerCase();
+  return lowerName.endsWith('.json') || lowerName.endsWith('.ini');
+}
+
+function pickSupportedSourceEntry(entries, archiveName) {
+  const preferredExtension = archiveName.endsWith('.ini.zip')
+    ? '.ini'
+    : archiveName.endsWith('.json.zip')
+      ? '.json'
+      : null;
+
+  if (preferredExtension) {
+    const preferredEntry = entries.find(([name]) =>
+      name.toLowerCase().endsWith(preferredExtension),
+    );
+    if (preferredEntry) {
+      return preferredEntry;
+    }
+  }
+
+  return (
+    entries.find(([name]) => name.toLowerCase().endsWith('.json')) ||
+    entries.find(([name]) => name.toLowerCase().endsWith('.ini')) ||
+    entries[0]
+  );
+}
+
+function parseDatabaseListIni(source, sourceName, { baseUrl = null } = {}) {
+  const lines = String(source).replaceAll('\r\n', '\n').split('\n');
+  const entries = [];
+  let currentEntry = null;
+
+  function finalizeEntry() {
+    if (!currentEntry) {
+      return;
+    }
+
+    if (!currentEntry.dbId) {
+      throw new Error(`Line ${currentEntry.line} has an empty section name.`);
+    }
+
+    if (!currentEntry.dbUrl) {
+      throw new Error(`Section [${currentEntry.dbId}] is missing db_url.`);
+    }
+
+    entries.push({
+      key: `${entries.length}:${currentEntry.dbId}`,
+      dbId: currentEntry.dbId,
+      dbUrl: normalizeReferencedDatabaseUrl(currentEntry.dbUrl, {
+        baseUrl,
+        dbId: currentEntry.dbId,
+      }),
+    });
+  }
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const rawLine = lines[index];
+    const trimmedLine = rawLine.trim();
+
+    if (!trimmedLine || trimmedLine.startsWith(';') || trimmedLine.startsWith('#')) {
+      continue;
+    }
+
+    const sectionMatch = trimmedLine.match(/^\[(.+)\]$/);
+    if (sectionMatch) {
+      finalizeEntry();
+      currentEntry = {
+        dbId: sectionMatch[1].trim(),
+        dbUrl: '',
+        line: index + 1,
+      };
+      continue;
+    }
+
+    const separatorIndex = rawLine.indexOf('=');
+    if (separatorIndex === -1) {
+      throw new Error(
+        `Line ${index + 1} must be either a [db_id] section or a key=value entry in ${sourceName}.`,
+      );
+    }
+
+    if (!currentEntry) {
+      throw new Error(`Line ${index + 1} appears before any [db_id] section in ${sourceName}.`);
+    }
+
+    const key = rawLine.slice(0, separatorIndex).trim().toLowerCase();
+    const value = rawLine.slice(separatorIndex + 1).trim();
+
+    if (key === 'db_url') {
+      currentEntry.dbUrl = value;
+    }
+  }
+
+  finalizeEntry();
+
+  if (!entries.length) {
+    throw new Error('No [db_id] sections with db_url entries were found.');
+  }
+
+  return entries;
+}
+
+function normalizeReferencedDatabaseUrl(input, { baseUrl = null, dbId = '' } = {}) {
+  try {
+    return normalizeSupportedSourceUrl(input, { baseUrl });
+  } catch (error) {
+    if (dbId) {
+      throw new Error(`Section [${dbId}] has an invalid db_url. ${error.message}`);
+    }
+
+    throw error;
   }
 }
 
@@ -319,15 +575,7 @@ function convertLegacyZipSummary({ zipId, summary, archivePathKind, extractMode 
     ...summaryRecord,
     files: Object.fromEntries(
       Object.entries(files).map(([path, file]) => {
-        const entry = isPlainObject(file) ? { ...file } : {};
-        if (entry.zip_id != null && entry.arc_id == null) {
-          entry.arc_id = entry.zip_id;
-        }
-        if (entry.zip_path != null && entry.arc_at == null) {
-          entry.arc_at = entry.zip_path;
-        }
-        delete entry.zip_id;
-        delete entry.zip_path;
+        const entry = reverseLegacyZipFileSummaryFields(file);
 
         if (shouldForcePext) {
           entry.path = 'pext';
@@ -340,11 +588,7 @@ function convertLegacyZipSummary({ zipId, summary, archivePathKind, extractMode 
     ),
     folders: Object.fromEntries(
       Object.entries(folders).map(([path, folder]) => {
-        const entry = isPlainObject(folder) ? { ...folder } : {};
-        if (entry.zip_id != null && entry.arc_id == null) {
-          entry.arc_id = entry.zip_id;
-        }
-        delete entry.zip_id;
+        const entry = reverseLegacyZipFolderSummaryFields(folder);
 
         if (shouldForcePext) {
           entry.path = 'pext';
@@ -356,6 +600,33 @@ function convertLegacyZipSummary({ zipId, summary, archivePathKind, extractMode 
       }),
     ),
   };
+}
+
+function reverseLegacyZipFileSummaryFields(file) {
+  const entry = isPlainObject(file) ? { ...file } : {};
+
+  if (Object.hasOwn(entry, 'zip_id')) {
+    entry.arc_id = entry.zip_id;
+    delete entry.zip_id;
+  }
+
+  if (Object.hasOwn(entry, 'zip_path')) {
+    entry.arc_at = entry.zip_path;
+    delete entry.zip_path;
+  }
+
+  return entry;
+}
+
+function reverseLegacyZipFolderSummaryFields(folder) {
+  const entry = isPlainObject(folder) ? { ...folder } : {};
+
+  if (Object.hasOwn(entry, 'zip_id')) {
+    entry.arc_id = entry.zip_id;
+    delete entry.zip_id;
+  }
+
+  return entry;
 }
 
 async function inspectDatabase(rawDatabase, source) {

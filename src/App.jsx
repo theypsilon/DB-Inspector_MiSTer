@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  inspectDatabaseFile,
-  inspectDatabaseUrl,
+  loadDatabaseSourceFile,
+  loadDatabaseSourceUrl,
   loadRuntimeDatabaseCatalog,
 } from './lib/database.js';
 
@@ -11,10 +11,12 @@ export default function App() {
   const fileInputRef = useRef(null);
   const autoLoadHandledRef = useRef(false);
   const inspectionRef = useRef(null);
+  const iniSourceRef = useRef(null);
   const [databaseUrl, setDatabaseUrl] = useState(() => readDatabaseUrlSearchParam());
   const [loadingMessage, setLoadingMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [inspection, setInspection] = useState(null);
+  const [iniSource, setIniSource] = useState(null);
   const [collapsedIds, setCollapsedIds] = useState(() => new Set());
   const [databaseDetailed, setDatabaseDetailed] = useState(false);
   const [filesystemDetailed, setFilesystemDetailed] = useState(false);
@@ -25,6 +27,10 @@ export default function App() {
   const [catalogError, setCatalogError] = useState('');
   const [selectedCatalogKey, setSelectedCatalogKey] = useState('');
   const [catalogQuery, setCatalogQuery] = useState('');
+  const [catalogModalOpen, setCatalogModalOpen] = useState(false);
+  const [selectedIniEntryKey, setSelectedIniEntryKey] = useState('');
+  const [iniQuery, setIniQuery] = useState('');
+  const [iniPickerOpen, setIniPickerOpen] = useState(false);
 
   const filesystemNodeIds = inspection ? collectTreeNodeIds(inspection.filesystemTree) : [];
   const archiveNodeIds = inspection ? collectArchiveNodeIds(inspection.archiveViews) : [];
@@ -34,10 +40,20 @@ export default function App() {
     const haystack = `${option.dbId} ${option.title} ${option.dbUrl}`.toLowerCase();
     return haystack.includes(catalogQuery.trim().toLowerCase());
   });
+  const selectedIniEntry =
+    iniSource?.entries.find((entry) => entry.key === selectedIniEntryKey) ?? iniSource?.entries[0] ?? null;
+  const filteredIniEntries = (iniSource?.entries ?? []).filter((entry) => {
+    const haystack = `${entry.dbId} ${entry.dbUrl}`.toLowerCase();
+    return haystack.includes(iniQuery.trim().toLowerCase());
+  });
 
   useEffect(() => {
     inspectionRef.current = inspection;
   }, [inspection]);
+
+  useEffect(() => {
+    iniSourceRef.current = iniSource;
+  }, [iniSource]);
 
   useEffect(() => {
     if (autoLoadHandledRef.current) {
@@ -50,7 +66,7 @@ export default function App() {
       return;
     }
 
-    void loadRemoteDatabase(sharedDatabaseUrl, { syncSearchParam: false });
+    void loadRemoteSource(sharedDatabaseUrl, { syncSearchParam: false });
   }, []);
 
   useEffect(() => {
@@ -60,13 +76,18 @@ export default function App() {
       setErrorMessage('');
 
       if (sharedDatabaseUrl) {
-        void loadRemoteDatabase(sharedDatabaseUrl, { syncSearchParam: false });
+        void loadRemoteSource(sharedDatabaseUrl, { syncSearchParam: false });
         return;
+      }
+
+      if (iniSourceRef.current?.source?.sourceKind === 'url') {
+        setIniSource(null);
       }
 
       if (inspectionRef.current?.source?.sourceKind === 'url') {
         setInspection(null);
         setCollapsedIds(new Set());
+        setNodeDetailVisibility({});
       }
     }
 
@@ -75,6 +96,41 @@ export default function App() {
       window.removeEventListener('popstate', handlePopState);
     };
   }, []);
+
+  useEffect(() => {
+    if (!iniSource?.entries.length) {
+      setSelectedIniEntryKey('');
+      setIniQuery('');
+      setIniPickerOpen(false);
+      return;
+    }
+
+    setSelectedIniEntryKey(iniSource.entries[0].key);
+    setIniQuery('');
+    setIniPickerOpen(true);
+  }, [iniSource]);
+
+  useEffect(() => {
+    if (!catalogModalOpen && !iniPickerOpen) {
+      return undefined;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') {
+        setCatalogModalOpen(false);
+        setIniPickerOpen(false);
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [catalogModalOpen, iniPickerOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -123,6 +179,64 @@ export default function App() {
     setSelectedCatalogKey(matchedOption?.key ?? '');
   }, [catalogOptions, databaseUrl]);
 
+  function resetRenderedState() {
+    setCollapsedIds(new Set());
+    setNodeDetailVisibility({});
+  }
+
+  async function handleLoadedSource(
+    loadedSource,
+    { origin, requestedUrl = '', syncSearchParam = true, visitedUrls = new Set() } = {},
+  ) {
+    if (loadedSource.kind === 'database') {
+      setInspection(loadedSource.inspection);
+      setIniSource(null);
+      setIniPickerOpen(false);
+      setCatalogModalOpen(false);
+      resetRenderedState();
+
+      if (origin === 'upload') {
+        setDatabaseUrl('');
+        writeDatabaseUrlSearchParam('', { pushHistory: true });
+      } else {
+        const sharedUrl = loadedSource.inspection.source.sourceLabel;
+        setDatabaseUrl(sharedUrl);
+        if (syncSearchParam) {
+          writeDatabaseUrlSearchParam(sharedUrl, { pushHistory: true });
+        }
+      }
+
+      return;
+    }
+
+    if (loadedSource.entries.length === 1) {
+      const [entry] = loadedSource.entries;
+      setIniSource(null);
+      setIniPickerOpen(false);
+      setDatabaseUrl(entry.dbUrl);
+      await loadRemoteSource(entry.dbUrl, {
+        syncSearchParam: origin === 'url' ? syncSearchParam : true,
+        visitedUrls,
+      });
+      return;
+    }
+
+    setInspection(null);
+    setIniSource(loadedSource);
+    resetRenderedState();
+
+    if (origin === 'upload') {
+      setDatabaseUrl('');
+      writeDatabaseUrlSearchParam('', { pushHistory: true });
+      return;
+    }
+
+    setDatabaseUrl(requestedUrl);
+    if (syncSearchParam) {
+      writeDatabaseUrlSearchParam(requestedUrl, { pushHistory: true });
+    }
+  }
+
   async function loadFile(file) {
     if (!file) {
       return;
@@ -132,24 +246,28 @@ export default function App() {
     setErrorMessage('');
 
     try {
-      const nextInspection = await inspectDatabaseFile(file);
-      setInspection(nextInspection);
-      setCollapsedIds(new Set());
-      setNodeDetailVisibility({});
-      setDatabaseUrl('');
-      writeDatabaseUrlSearchParam('', { pushHistory: true });
+      const loadedSource = await loadDatabaseSourceFile(file);
+      await handleLoadedSource(loadedSource, { origin: 'upload' });
     } catch (error) {
       setInspection(null);
+      setIniSource(null);
+      setIniPickerOpen(false);
       setErrorMessage(error.message);
     } finally {
       setLoadingMessage('');
     }
   }
 
-  async function loadRemoteDatabase(input, { syncSearchParam = true } = {}) {
+  async function loadRemoteSource(input, { syncSearchParam = true, visitedUrls = new Set() } = {}) {
     const requestedUrl = String(input).trim();
     if (!requestedUrl) {
-      setErrorMessage('Enter a database URL first.');
+      setErrorMessage('Enter a URL first.');
+      return;
+    }
+
+    const normalizedRequestedUrl = normalizeComparableUrl(requestedUrl);
+    if (normalizedRequestedUrl && visitedUrls.has(normalizedRequestedUrl)) {
+      setErrorMessage(`Detected a loop while following db_url references from ${requestedUrl}.`);
       return;
     }
 
@@ -157,15 +275,18 @@ export default function App() {
     setErrorMessage('');
 
     try {
-      const nextInspection = await inspectDatabaseUrl(requestedUrl);
-      const sharedUrl = nextInspection.source.sourceLabel;
-      setInspection(nextInspection);
-      setCollapsedIds(new Set());
-      setNodeDetailVisibility({});
-      setDatabaseUrl(sharedUrl);
-      if (syncSearchParam) {
-        writeDatabaseUrlSearchParam(sharedUrl, { pushHistory: true });
+      const nextVisitedUrls = new Set(visitedUrls);
+      if (normalizedRequestedUrl) {
+        nextVisitedUrls.add(normalizedRequestedUrl);
       }
+
+      const loadedSource = await loadDatabaseSourceUrl(requestedUrl);
+      await handleLoadedSource(loadedSource, {
+        origin: 'url',
+        requestedUrl,
+        syncSearchParam,
+        visitedUrls: nextVisitedUrls,
+      });
     } catch (error) {
       setInspection(null);
       setErrorMessage(error.message);
@@ -176,7 +297,35 @@ export default function App() {
 
   async function loadUrl(event) {
     event.preventDefault();
-    await loadRemoteDatabase(databaseUrl);
+    await loadRemoteSource(databaseUrl);
+  }
+
+  async function loadIniEntry(entry) {
+    if (!entry?.dbUrl) {
+      return;
+    }
+
+    setIniPickerOpen(false);
+    setDatabaseUrl(entry.dbUrl);
+    await loadRemoteSource(entry.dbUrl);
+  }
+
+  function useSelectedCatalogUrl() {
+    if (!selectedCatalogOption) {
+      return;
+    }
+
+    setDatabaseUrl(selectedCatalogOption.dbUrl);
+    setCatalogModalOpen(false);
+  }
+
+  async function openSelectedCatalogDatabase() {
+    if (!selectedCatalogOption) {
+      return;
+    }
+
+    setCatalogModalOpen(false);
+    await loadRemoteSource(selectedCatalogOption.dbUrl);
   }
 
   function handleDrop(event) {
@@ -243,8 +392,9 @@ export default function App() {
           <h1>Custom Database Inspector</h1>
           <p className="hero-copy">
             Load a custom downloader database from disk or fetch it from a URL. The app inspects
-            the database JSON, resolves indexed tags through the tag dictionary, follows remote
-            archive summaries, and renders the filesystem and archive trees in the browser.
+            downloader JSON databases, understands downloader INI lists that point to databases,
+            resolves indexed tags through the tag dictionary, follows remote archive summaries,
+            and renders the filesystem and archive trees in the browser.
           </p>
         </div>
         <div className="hero-note">
@@ -264,7 +414,10 @@ export default function App() {
         >
           <p className="section-label">Upload</p>
           <h2>Drag a database here</h2>
-          <p>Accepted: .json, .json.zip, or any ZIP whose first JSON entry is the database.</p>
+          <p>
+            Accepted: .json, .json.zip, .ini, .ini.zip, or any ZIP whose first supported entry is
+            a downloader JSON or INI source.
+          </p>
           <div className="button-row">
             <button type="button" onClick={() => fileInputRef.current?.click()}>
               Choose file
@@ -274,7 +427,7 @@ export default function App() {
             ref={fileInputRef}
             className="hidden-input"
             type="file"
-            accept=".json,.zip,.json.zip,application/json,application/zip"
+            accept=".json,.json.zip,.ini,.ini.zip,.zip,application/json,application/zip,text/plain"
             onChange={(event) => {
               const file = event.target.files?.[0];
               event.target.value = '';
@@ -288,64 +441,67 @@ export default function App() {
           <h2>Open a remote database</h2>
           <form className="url-form" onSubmit={loadUrl}>
             <label className="field-label" htmlFor="database-url">
-              Database URL
+              URL
             </label>
             <input
               id="database-url"
               type="url"
-              placeholder="https://example.com/custom-db.json.zip"
+              placeholder="https://example.com/custom-db.ini.zip"
               value={databaseUrl}
               onChange={(event) => setDatabaseUrl(event.target.value)}
             />
             <button type="submit">Fetch database</button>
           </form>
           <p className="helper-copy">
-            The URL must end in <code>.json</code> or <code>.json.zip</code>. Archive summary
-            files are fetched automatically when present, and successful fetches update the page
-            URL so you can share the inspector state directly.
+            The URL must end in <code>.json</code>, <code>.json.zip</code>, <code>.ini</code>, or
+            <code>.ini.zip</code>. INI sources with multiple entries open a chooser first.
+            Archive summary files are fetched automatically when present, and successful remote
+            fetches update the page URL so you can share the inspector state directly.
           </p>
         </section>
 
-        <section className="panel catalog-panel">
+        <section className="panel source-panel">
           <p className="section-label">Picker</p>
           <h2>Use Update_All_MiSTer catalog</h2>
-          <div className="catalog-toolbar">
-            <div className="catalog-search">
-              <label className="field-label" htmlFor="catalog-search">
-                Search database picker
-              </label>
-              <input
-                id="catalog-search"
-                type="search"
-                placeholder="Search by db_id, title, or URL"
-                value={catalogQuery}
-                onChange={(event) => setCatalogQuery(event.target.value)}
-                disabled={catalogStatus !== 'ready'}
-              />
-            </div>
-            <div className="catalog-toolbar-actions">
-              <p className="catalog-count">
-                {catalogStatus === 'ready'
-                  ? `${filteredCatalogOptions.length} of ${catalogOptions.length} entries`
-                  : 'Catalog unavailable'}
-              </p>
-              <button
-                type="button"
-                onClick={() => {
-                  if (selectedCatalogOption) {
-                    void loadRemoteDatabase(selectedCatalogOption.dbUrl);
-                  }
-                }}
-                disabled={!selectedCatalogOption}
-              >
-                Open selected database
-              </button>
-            </div>
+          <p className="helper-copy">
+            Browse the runtime-loaded `Update_All_MiSTer` catalog in a modal instead of keeping the
+            full picker expanded in the page layout.
+          </p>
+          <div className="button-row">
+            <button
+              type="button"
+              onClick={() => setCatalogModalOpen(true)}
+              disabled={catalogStatus !== 'ready'}
+            >
+              Browse catalog
+            </button>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => {
+                void openSelectedCatalogDatabase();
+              }}
+              disabled={!selectedCatalogOption}
+            >
+              Open selected
+            </button>
           </div>
+          <p className="catalog-count-inline">
+            {catalogStatus === 'ready'
+              ? `${catalogOptions.length} entries available`
+              : 'Catalog unavailable'}
+          </p>
+          {catalogStatus === 'loading' ? (
+            <p className="helper-copy">
+              Reading the current `Update_All_MiSTer/src/update_all/databases.py` catalog at
+              runtime.
+            </p>
+          ) : null}
+          {catalogStatus === 'error' ? <p className="status error">{catalogError}</p> : null}
           {selectedCatalogOption ? (
-            <article className="catalog-selected">
+            <article className="compact-selected">
               <p className="section-label">Selected</p>
-              <div className="catalog-selected-grid">
+              <div className="catalog-selected-grid compact-selected-grid">
                 <div>
                   <span className="catalog-meta-label">db_id</span>
                   <code>{selectedCatalogOption.dbId}</code>
@@ -362,43 +518,9 @@ export default function App() {
                 </div>
               </div>
             </article>
-          ) : null}
-          {catalogStatus === 'loading' ? (
-            <p className="helper-copy">
-              Reading the current `Update_All_MiSTer/src/update_all/databases.py` catalog at
-              runtime.
-            </p>
-          ) : null}
-          {catalogStatus === 'error' ? <p className="status error">{catalogError}</p> : null}
-          {catalogStatus === 'ready' ? (
-            filteredCatalogOptions.length ? (
-              <div className="catalog-list" role="listbox" aria-label="Database picker results">
-                {filteredCatalogOptions.map((option) => (
-                  <button
-                    key={option.key}
-                    type="button"
-                    className={
-                      option.key === selectedCatalogKey
-                        ? 'catalog-option catalog-option-selected'
-                        : 'catalog-option'
-                    }
-                    onClick={() => {
-                      setSelectedCatalogKey(option.key);
-                      setDatabaseUrl(option.dbUrl);
-                    }}
-                  >
-                    <div className="catalog-option-head">
-                      <code>{option.dbId}</code>
-                      <strong>{option.title}</strong>
-                    </div>
-                    <span className="catalog-option-url">{option.dbUrl}</span>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <EmptyState message="No catalog entries match the current search." />
-            )
-          ) : null}
+          ) : (
+            <EmptyState message="Choose a catalog entry to prefill the URL or open it directly." />
+          )}
         </section>
       </section>
 
@@ -408,6 +530,50 @@ export default function App() {
           {errorMessage ? <p className="status error">{errorMessage}</p> : null}
         </section>
       )}
+
+      {iniSource ? (
+        <section className="panel source-panel">
+          <p className="section-label">INI</p>
+          <h2>Choose a database from this list</h2>
+          <p className="helper-copy">
+            {iniSource.source.sourceLabel} was parsed as {describeSourceContainer(iniSource.source)}
+            {' and contains '}
+            {iniSource.entries.length} {iniSource.entries.length === 1 ? 'entry' : 'entries'}.
+          </p>
+          <div className="button-row">
+            <button type="button" onClick={() => setIniPickerOpen(true)}>
+              Browse entries
+            </button>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => {
+                void loadIniEntry(selectedIniEntry);
+              }}
+              disabled={!selectedIniEntry}
+            >
+              Open selected
+            </button>
+          </div>
+          {selectedIniEntry ? (
+            <article className="compact-selected">
+              <p className="section-label">Selected</p>
+              <div className="catalog-selected-grid compact-selected-grid">
+                <div>
+                  <span className="catalog-meta-label">db_id</span>
+                  <code>{selectedIniEntry.dbId}</code>
+                </div>
+                <div className="catalog-selected-url">
+                  <span className="catalog-meta-label">db_url</span>
+                  <a href={selectedIniEntry.dbUrl} target="_blank" rel="noreferrer">
+                    {selectedIniEntry.dbUrl}
+                  </a>
+                </div>
+              </div>
+            </article>
+          ) : null}
+        </section>
+      ) : null}
 
       {inspection ? (
         <>
@@ -578,16 +744,209 @@ export default function App() {
             <TagDictionary tags={inspection.overview.tagDictionary} />
           </section>
         </>
-      ) : (
+      ) : !iniSource ? (
         <section className="panel empty-screen">
           <p className="section-label">Ready</p>
           <h2>No database loaded yet</h2>
           <p>
-            Upload a local file or fetch a remote one to inspect the database metadata, path tree,
-            archive contents, and resolved tags.
+            Upload a local JSON or INI source, or fetch a remote one to inspect the database
+            metadata, path tree, archive contents, and resolved tags.
           </p>
         </section>
-      )}
+      ) : null}
+
+      {catalogModalOpen ? (
+        <ModalFrame
+          label="Picker"
+          title="Browse Update_All_MiSTer catalog"
+          onClose={() => setCatalogModalOpen(false)}
+          footer={
+            <>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setCatalogModalOpen(false)}
+              >
+                Close
+              </button>
+              <button type="button" onClick={useSelectedCatalogUrl} disabled={!selectedCatalogOption}>
+                Use selected URL
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void openSelectedCatalogDatabase();
+                }}
+                disabled={!selectedCatalogOption}
+              >
+                Open selected database
+              </button>
+            </>
+          }
+        >
+          <div className="modal-toolbar">
+            <div className="catalog-search">
+              <label className="field-label" htmlFor="catalog-modal-search">
+                Search database picker
+              </label>
+              <input
+                id="catalog-modal-search"
+                type="search"
+                placeholder="Search by db_id, title, or URL"
+                value={catalogQuery}
+                onChange={(event) => setCatalogQuery(event.target.value)}
+                disabled={catalogStatus !== 'ready'}
+              />
+            </div>
+            <p className="catalog-count">
+              {catalogStatus === 'ready'
+                ? `${filteredCatalogOptions.length} of ${catalogOptions.length} entries`
+                : 'Catalog unavailable'}
+            </p>
+          </div>
+          {selectedCatalogOption ? (
+            <article className="compact-selected modal-selected">
+              <p className="section-label">Selected</p>
+              <div className="catalog-selected-grid compact-selected-grid">
+                <div>
+                  <span className="catalog-meta-label">db_id</span>
+                  <code>{selectedCatalogOption.dbId}</code>
+                </div>
+                <div>
+                  <span className="catalog-meta-label">Title</span>
+                  <strong>{selectedCatalogOption.title}</strong>
+                </div>
+                <div className="catalog-selected-url">
+                  <span className="catalog-meta-label">db_url</span>
+                  <a href={selectedCatalogOption.dbUrl} target="_blank" rel="noreferrer">
+                    {selectedCatalogOption.dbUrl}
+                  </a>
+                </div>
+              </div>
+            </article>
+          ) : null}
+          {catalogStatus === 'loading' ? (
+            <p className="helper-copy">
+              Reading the current `Update_All_MiSTer/src/update_all/databases.py` catalog at
+              runtime.
+            </p>
+          ) : null}
+          {catalogStatus === 'error' ? <p className="status error">{catalogError}</p> : null}
+          {catalogStatus === 'ready' ? (
+            filteredCatalogOptions.length ? (
+              <div className="catalog-list modal-list" role="listbox" aria-label="Database picker results">
+                {filteredCatalogOptions.map((option) => (
+                  <button
+                    key={option.key}
+                    type="button"
+                    className={
+                      option.key === selectedCatalogKey
+                        ? 'catalog-option catalog-option-selected'
+                        : 'catalog-option'
+                    }
+                    onClick={() => setSelectedCatalogKey(option.key)}
+                  >
+                    <div className="catalog-option-head">
+                      <code>{option.dbId}</code>
+                      <strong>{option.title}</strong>
+                    </div>
+                    <span className="catalog-option-url">{option.dbUrl}</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <EmptyState message="No catalog entries match the current search." />
+            )
+          ) : null}
+        </ModalFrame>
+      ) : null}
+
+      {iniPickerOpen && iniSource ? (
+        <ModalFrame
+          label="INI"
+          title="Choose a database from this INI"
+          onClose={() => setIniPickerOpen(false)}
+          footer={
+            <>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setIniPickerOpen(false)}
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void loadIniEntry(selectedIniEntry);
+                }}
+                disabled={!selectedIniEntry}
+              >
+                Open selected database
+              </button>
+            </>
+          }
+        >
+          <div className="modal-toolbar">
+            <div className="catalog-search">
+              <label className="field-label" htmlFor="ini-modal-search">
+                Search INI entries
+              </label>
+              <input
+                id="ini-modal-search"
+                type="search"
+                placeholder="Search by db_id or URL"
+                value={iniQuery}
+                onChange={(event) => setIniQuery(event.target.value)}
+              />
+            </div>
+            <p className="catalog-count">
+              {filteredIniEntries.length} of {iniSource.entries.length} entries
+            </p>
+          </div>
+          {selectedIniEntry ? (
+            <article className="compact-selected modal-selected">
+              <p className="section-label">Selected</p>
+              <div className="catalog-selected-grid compact-selected-grid">
+                <div>
+                  <span className="catalog-meta-label">db_id</span>
+                  <code>{selectedIniEntry.dbId}</code>
+                </div>
+                <div className="catalog-selected-url">
+                  <span className="catalog-meta-label">db_url</span>
+                  <a href={selectedIniEntry.dbUrl} target="_blank" rel="noreferrer">
+                    {selectedIniEntry.dbUrl}
+                  </a>
+                </div>
+              </div>
+            </article>
+          ) : null}
+          {filteredIniEntries.length ? (
+            <div className="catalog-list modal-list" role="listbox" aria-label="INI database entries">
+              {filteredIniEntries.map((entry) => (
+                <button
+                  key={entry.key}
+                  type="button"
+                  className={
+                    entry.key === selectedIniEntry?.key
+                      ? 'catalog-option catalog-option-selected'
+                      : 'catalog-option'
+                  }
+                  onClick={() => setSelectedIniEntryKey(entry.key)}
+                >
+                  <div className="catalog-option-head">
+                    <code>{entry.dbId}</code>
+                    <strong>Referenced database</strong>
+                  </div>
+                  <span className="catalog-option-url">{entry.dbUrl}</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <EmptyState message="No INI entries match the current search." />
+          )}
+        </ModalFrame>
+      ) : null}
     </main>
   );
 }
@@ -630,6 +989,46 @@ function normalizeComparableUrl(value) {
   } catch {
     return '';
   }
+}
+
+function describeSourceContainer(source) {
+  if (source?.containerType === 'zip') {
+    return `ZIP archive -> ${source.extractedEntry}`;
+  }
+
+  if (source?.containerType === 'ini') {
+    return 'plain INI';
+  }
+
+  return 'plain JSON';
+}
+
+function ModalFrame({ label, title, onClose, footer, children }) {
+  return (
+    <div
+      className="modal-overlay"
+      role="presentation"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <section className="modal-panel" role="dialog" aria-modal="true" aria-label={title}>
+        <div className="modal-header">
+          <div>
+            <p className="section-label">{label}</p>
+            <h2>{title}</h2>
+          </div>
+          <button type="button" className="modal-close-button" onClick={onClose}>
+            Close
+          </button>
+        </div>
+        <div className="modal-body">{children}</div>
+        {footer ? <div className="modal-footer">{footer}</div> : null}
+      </section>
+    </div>
+  );
 }
 
 function ArchiveCard({
