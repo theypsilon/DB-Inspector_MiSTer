@@ -18,6 +18,7 @@ import {
 } from './lib/database.js';
 
 const DATABASE_URL_PARAM = 'database-url';
+const FILTER_INPUT_DEBOUNCE_MS = 600;
 const TREE_LIST_GAP_PX = 13;
 const TREE_OVERSCAN_PX = 900;
 
@@ -34,6 +35,7 @@ export default function App() {
   const [errorMessage, setErrorMessage] = useState('');
   const [inspection, setInspection] = useState(null);
   const [filterInput, setFilterInput] = useState('');
+  const [debouncedFilterInput, setDebouncedFilterInput] = useState('');
   const [iniSource, setIniSource] = useState(null);
   const [databaseDetailed, setDatabaseDetailed] = useState(false);
   const [runtimeCatalogOptions, setRuntimeCatalogOptions] = useState([]);
@@ -54,18 +56,35 @@ export default function App() {
     ? `${inspection.source.sourceLabel}:${inspection.overview.dbId}:${inspection.overview.timestamp}`
     : 'empty';
   const displayedInspection = useMemo(
-    () => (inspection ? applyInspectionFilter(inspection, filterInput) : null),
-    [inspection, filterInput],
+    () => (inspection ? applyInspectionFilter(inspection, debouncedFilterInput) : null),
+    [inspection, debouncedFilterInput],
   );
-  const inspectionKey = `${inspectionKeyBase}:${String(filterInput).trim().toLowerCase()}`;
+  const filterPending = filterInput !== debouncedFilterInput;
+  const inspectionKey = `${inspectionKeyBase}:${String(debouncedFilterInput).trim().toLowerCase()}`;
 
   useEffect(() => {
     inspectionRef.current = inspection;
   }, [inspection]);
 
   useEffect(() => {
-    setFilterInput(inspection?.overview.defaultFilter || '');
+    const defaultFilter = inspection?.overview.defaultFilter || '';
+    setFilterInput(defaultFilter);
+    setDebouncedFilterInput(defaultFilter);
   }, [inspectionKeyBase]);
+
+  useEffect(() => {
+    if (filterInput === debouncedFilterInput) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedFilterInput(filterInput);
+    }, FILTER_INPUT_DEBOUNCE_MS);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [debouncedFilterInput, filterInput]);
 
   useEffect(() => {
     iniSourceRef.current = iniSource;
@@ -706,7 +725,9 @@ export default function App() {
                 </p>
               ) : null}
               <p className="catalog-count-inline">
-                {buildFilterSummaryCopy(displayedInspection.activeFilter)}
+                {filterPending
+                  ? 'Updating preview...'
+                  : buildFilterSummaryCopy(displayedInspection.activeFilter)}
               </p>
             </section>
 
