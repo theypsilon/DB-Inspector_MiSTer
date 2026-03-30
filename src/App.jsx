@@ -680,16 +680,14 @@ export default function App() {
             </section>
 
             <section className="panel filter-panel">
-              <p className="section-label">Preview</p>
-              <h2>Downloader selection</h2>
+              <p className="section-label">FILTER</p>
+              <h2>Filter files and folders.</h2>
               <div className="filter-toolbar">
                 <div className="catalog-search">
-                  <label className="field-label" htmlFor="inspection-filter">
-                    FILTER
-                  </label>
                   <input
                     id="inspection-filter"
                     type="search"
+                    aria-label="FILTER"
                     placeholder="console !cheats"
                     value={filterInput}
                     onChange={(event) => setFilterInput(event.target.value)}
@@ -706,7 +704,7 @@ export default function App() {
                 ) : null}
               </div>
               <p className="helper-copy">
-                Match Downloader behavior with terms like <code>console</code>, <code>arcade</code>,
+                Filter Downloader databases with terms like <code>console</code>, <code>arcade</code>,
                 or <code>!cheats</code>. Positive terms keep matching tagged items, negative terms
                 remove them, untagged items remain visible, and <code>essential</code> stays
                 included unless you exclude it.{' '}
@@ -1083,7 +1081,7 @@ const FilesystemSection = memo(function FilesystemSection({ tree, emptyMessage }
 
   return (
     <TreeSection
-      label="Filesystem"
+      label="Content"
       title="Files and folders"
       listClassName="tree-root"
       emptyMessage={emptyMessage}
