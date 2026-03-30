@@ -554,7 +554,9 @@ export default function App() {
               )}
             </CollapsibleSection>
 
-            <TagDictionary tags={inspection.overview.tagDictionary} />
+            {inspection.overview.tagDictionary.length ? (
+              <TagDictionary tags={inspection.overview.tagDictionary} />
+            ) : null}
           </>
         ) : loadingMessage ? (
           <section className="panel empty-screen loading-screen">
