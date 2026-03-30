@@ -25,6 +25,8 @@ export default function App() {
   const autoLoadHandledRef = useRef(false);
   const inspectionRef = useRef(null);
   const iniSourceRef = useRef(null);
+  const dropzoneDragDepthRef = useRef(0);
+  const dropzoneDropPulseTimeoutRef = useRef(0);
   const [databaseUrl, setDatabaseUrl] = useState(() => readDatabaseUrlSearchParam());
   const [loadingMessage, setLoadingMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
@@ -36,6 +38,8 @@ export default function App() {
   const [catalogError, setCatalogError] = useState('');
   const [catalogModalOpen, setCatalogModalOpen] = useState(false);
   const [iniPickerOpen, setIniPickerOpen] = useState(false);
+  const [dropzoneActive, setDropzoneActive] = useState(false);
+  const [dropzoneDropPulse, setDropzoneDropPulse] = useState(false);
   const inspectionKey = inspection
     ? `${inspection.source.sourceLabel}:${inspection.overview.dbId}:${inspection.overview.timestamp}`
     : 'empty';
@@ -118,6 +122,15 @@ export default function App() {
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [catalogModalOpen, iniPickerOpen]);
+
+  useEffect(
+    () => () => {
+      if (dropzoneDropPulseTimeoutRef.current) {
+        window.clearTimeout(dropzoneDropPulseTimeoutRef.current);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -310,8 +323,68 @@ export default function App() {
     startRemoteDatabaseLoad(entry.dbUrl);
   }
 
+  function triggerDropzoneDropPulse() {
+    setDropzoneDropPulse(false);
+
+    window.requestAnimationFrame(() => {
+      setDropzoneDropPulse(true);
+    });
+
+    if (dropzoneDropPulseTimeoutRef.current) {
+      window.clearTimeout(dropzoneDropPulseTimeoutRef.current);
+    }
+
+    dropzoneDropPulseTimeoutRef.current = window.setTimeout(() => {
+      setDropzoneDropPulse(false);
+      dropzoneDropPulseTimeoutRef.current = 0;
+    }, 560);
+  }
+
+  function handleDropzoneDragEnter(event) {
+    if (!isFileDragEvent(event)) {
+      return;
+    }
+
+    event.preventDefault();
+    dropzoneDragDepthRef.current += 1;
+    setDropzoneActive(true);
+  }
+
+  function handleDropzoneDragOver(event) {
+    if (!isFileDragEvent(event)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+
+    if (!dropzoneActive) {
+      setDropzoneActive(true);
+    }
+  }
+
+  function handleDropzoneDragLeave(event) {
+    if (!isFileDragEvent(event)) {
+      return;
+    }
+
+    event.preventDefault();
+    dropzoneDragDepthRef.current = Math.max(0, dropzoneDragDepthRef.current - 1);
+
+    if (dropzoneDragDepthRef.current === 0) {
+      setDropzoneActive(false);
+    }
+  }
+
   function handleDrop(event) {
     event.preventDefault();
+    dropzoneDragDepthRef.current = 0;
+    setDropzoneActive(false);
+
+    if (isFileDragEvent(event)) {
+      triggerDropzoneDropPulse();
+    }
+
     const file = event.dataTransfer.files?.[0];
     void loadFile(file);
   }
@@ -338,8 +411,18 @@ export default function App() {
 
       <section className="loader-grid">
         <section
-          className="panel dropzone source-card"
-          onDragOver={(event) => event.preventDefault()}
+          className={[
+            'panel',
+            'dropzone',
+            'source-card',
+            dropzoneActive ? 'dropzone-active' : '',
+            dropzoneDropPulse ? 'dropzone-drop-feedback' : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
+          onDragEnter={handleDropzoneDragEnter}
+          onDragOver={handleDropzoneDragOver}
+          onDragLeave={handleDropzoneDragLeave}
           onDrop={handleDrop}
         >
           <p className="section-label">Upload</p>
@@ -1063,6 +1146,11 @@ function getLoadedSourceUrl(loadedSource) {
   }
 
   return loadedSource.source.sourceUrl || loadedSource.source.sourceLabel;
+}
+
+function isFileDragEvent(event) {
+  const types = Array.from(event.dataTransfer?.types ?? []);
+  return types.includes('Files');
 }
 
 function runAfterNextPaint(callback) {
