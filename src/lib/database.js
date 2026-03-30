@@ -380,6 +380,7 @@ function parseDatabaseListIni(source, sourceName, { baseUrl = null } = {}) {
   const lines = String(source).replaceAll('\r\n', '\n').split('\n');
   const entries = [];
   let currentEntry = null;
+  let ignoredSectionActive = false;
 
   function finalizeEntry() {
     if (!currentEntry) {
@@ -415,11 +416,15 @@ function parseDatabaseListIni(source, sourceName, { baseUrl = null } = {}) {
     const sectionMatch = trimmedLine.match(/^\[(.+)\]$/);
     if (sectionMatch) {
       finalizeEntry();
-      currentEntry = {
-        dbId: sectionMatch[1].trim(),
-        dbUrl: '',
-        line: index + 1,
-      };
+      const sectionName = sectionMatch[1].trim();
+      ignoredSectionActive = isIgnoredDatabaseListSection(sectionName);
+      currentEntry = ignoredSectionActive
+        ? null
+        : {
+            dbId: sectionName,
+            dbUrl: '',
+            line: index + 1,
+          };
       continue;
     }
 
@@ -431,6 +436,10 @@ function parseDatabaseListIni(source, sourceName, { baseUrl = null } = {}) {
     }
 
     if (!currentEntry) {
+      if (ignoredSectionActive) {
+        continue;
+      }
+
       throw new Error(`Line ${index + 1} appears before any section header in ${sourceName}.`);
     }
 
@@ -449,6 +458,10 @@ function parseDatabaseListIni(source, sourceName, { baseUrl = null } = {}) {
   }
 
   return entries;
+}
+
+function isIgnoredDatabaseListSection(sectionName) {
+  return String(sectionName).trim().toLowerCase() === 'mister';
 }
 
 function normalizeReferencedDatabaseUrl(input, { baseUrl = null, dbId = '' } = {}) {
