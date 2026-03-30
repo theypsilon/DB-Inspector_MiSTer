@@ -1172,6 +1172,14 @@ const TreeEntryRow = memo(function TreeEntryRow({
     onToggleDetails(row.id);
   };
 
+  const handleToggleRowCollapsed = () => {
+    if (isFile && !collapsed && detailsVisible) {
+      onToggleDetails(row.id);
+    }
+
+    onToggleCollapsed(row.id);
+  };
+
   return (
     <Container
       ref={rowRef}
@@ -1183,7 +1191,7 @@ const TreeEntryRow = memo(function TreeEntryRow({
           <button
             type="button"
             className="collapse-button"
-            onClick={() => onToggleCollapsed(row.id)}
+            onClick={handleToggleRowCollapsed}
           >
             {collapsed ? '+' : '-'}
           </button>
