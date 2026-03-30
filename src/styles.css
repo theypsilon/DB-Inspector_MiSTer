@@ -1006,11 +1006,10 @@ button:hover {
 .tree-identifier-inline {
   display: inline-flex;
   align-items: baseline;
-  flex: 0 1 clamp(9rem, 24vw, 18rem);
+  flex: 1 1 auto;
   flex-wrap: nowrap;
   gap: 0.35rem;
   min-width: 0;
-  max-width: clamp(9rem, 24vw, 18rem);
   overflow: hidden;
   color: var(--muted);
   font-size: 0.82rem;
