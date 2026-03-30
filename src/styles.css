@@ -15,6 +15,8 @@
   --success: #3d8751;
   --warning: #9d6f00;
   --danger: #a0362d;
+  --tree-line: rgba(30, 71, 117, 0.26);
+  --tree-line-strong: rgba(30, 71, 117, 0.5);
   --shadow: 0 22px 60px rgba(22, 33, 47, 0.14);
   --radius-lg: 28px;
   --radius-md: 18px;
@@ -724,23 +726,56 @@ button:hover {
 
 .tree-entry {
   position: relative;
-  padding-left: calc(var(--tree-depth, 0) * 1.55rem);
+  --tree-indent-step: 1.55rem;
+  --tree-connector-offset: 0.75rem;
+  padding-left: calc(var(--tree-depth, 0) * var(--tree-indent-step));
 }
 
 .tree-entry-indented::before {
   content: '';
   position: absolute;
-  left: calc((var(--tree-depth, 0) * 1.55rem) - 0.75rem);
-  top: 0.5rem;
-  bottom: 0.5rem;
-  border-left: 1px dashed rgba(22, 33, 47, 0.18);
+  left: calc((var(--tree-depth, 0) * var(--tree-indent-step)) - var(--tree-connector-offset));
+  top: -0.25rem;
+  bottom: -0.25rem;
+  width: 2px;
+  border-radius: 999px;
+  background: linear-gradient(
+    180deg,
+    transparent 0,
+    var(--tree-line) 0.4rem,
+    var(--tree-line-strong) 38%,
+    var(--tree-line) calc(100% - 0.4rem),
+    transparent 100%
+  );
 }
 
 .tree-row {
+  position: relative;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: 0.9rem;
   align-items: start;
+}
+
+.tree-entry-indented .tree-row::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--tree-connector-offset) * -1);
+  top: 1.08rem;
+  width: 1.05rem;
+  border-top: 2px solid var(--tree-line-strong);
+}
+
+.tree-entry-indented .tree-row::after {
+  content: '';
+  position: absolute;
+  left: calc((var(--tree-connector-offset) * -1) - 0.14rem);
+  top: 0.89rem;
+  width: 0.38rem;
+  height: 0.38rem;
+  border-radius: 999px;
+  background: var(--tree-line-strong);
+  box-shadow: 0 0 0 4px rgba(255, 250, 240, 0.92);
 }
 
 .collapse-button,
@@ -1142,10 +1177,17 @@ button:hover {
   }
 
   .tree-entry {
-    padding-left: calc(var(--tree-depth, 0) * 1rem);
+    --tree-indent-step: 1rem;
+    --tree-connector-offset: 0.55rem;
+    padding-left: calc(var(--tree-depth, 0) * var(--tree-indent-step));
   }
 
   .tree-entry-indented::before {
-    left: calc((var(--tree-depth, 0) * 1rem) - 0.55rem);
+    left: calc((var(--tree-depth, 0) * var(--tree-indent-step)) - var(--tree-connector-offset));
+  }
+
+  .tree-entry-indented .tree-row::before {
+    left: calc(var(--tree-connector-offset) * -1);
+    width: 0.8rem;
   }
 }
