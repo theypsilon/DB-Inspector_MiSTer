@@ -8,9 +8,9 @@
   </defs>
 
   <g clip-path="url(#db-shape)">
-    <rect x="0" y="0" width="64" height="22" fill="#2563eb" />
-    <rect x="0" y="22" width="64" height="19" fill="#16a34a" />
-    <rect x="0" y="41" width="64" height="23" fill="#d92d20" />
+    <rect x="0" y="0" width="64" height="22" fill="#4285f4" />
+    <rect x="0" y="22" width="64" height="19" fill="#34a853" />
+    <rect x="0" y="41" width="64" height="23" fill="#ea4335" />
   </g>
 
   <ellipse
@@ -19,7 +19,7 @@
     rx="28"
     ry="10.1"
     fill="none"
-    stroke="#16a34a"
+    stroke="#34a853"
     stroke-width="2.3"
   />
   <ellipse
@@ -28,7 +28,7 @@
     rx="28"
     ry="10.1"
     fill="none"
-    stroke="#d92d20"
+    stroke="#ea4335"
     stroke-width="2.1"
   />
 
