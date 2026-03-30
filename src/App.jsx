@@ -679,9 +679,12 @@ export default function App() {
               </div>
             </section>
 
-            <section className="panel filter-panel">
-              <p className="section-label">FILTER</p>
-              <h2>Filter files and folders.</h2>
+            <CollapsibleSection
+              label="FILTER"
+              title="Introduce terms to filter"
+              defaultOpen
+              className="filter-panel"
+            >
               <div className="filter-toolbar">
                 <div className="catalog-search">
                   <input
@@ -727,7 +730,7 @@ export default function App() {
                   ? 'Updating preview...'
                   : buildFilterSummaryCopy(displayedInspection.activeFilter)}
               </p>
-            </section>
+            </CollapsibleSection>
 
             <FilesystemSection
               key={`filesystem:${inspectionKey}`}
@@ -1095,8 +1098,8 @@ const ArchiveSummariesSection = memo(function ArchiveSummariesSection({ archiveV
 
   return (
     <TreeSection
-      label="Archives"
-      title="Archive summaries"
+      label="Content"
+      title="Archives"
       listClassName="archive-list"
       emptyMessage={emptyMessage}
       index={index}

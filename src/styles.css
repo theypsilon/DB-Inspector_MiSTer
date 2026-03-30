@@ -29,10 +29,13 @@
 
 html {
   min-height: 100%;
+  background-color: #ede6d4;
   background:
     radial-gradient(circle at top left, rgba(221, 109, 61, 0.22), transparent 28%),
     radial-gradient(circle at top right, rgba(15, 111, 145, 0.2), transparent 22%),
     linear-gradient(180deg, #fbf4e5 0%, #f1ead9 48%, #ede6d4 100%);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
 }
 
 body {
