@@ -826,13 +826,16 @@ export default function App() {
             >
               <div className="filter-toolbar">
                 <div className="catalog-search">
-                  <input
+                  <textarea
                     id="inspection-filter"
-                    type="search"
+                    className="filter-input"
                     aria-label="FILTER"
                     placeholder="console !cheats"
                     value={filterInput}
                     onChange={(event) => setFilterInput(event.target.value)}
+                    rows={1}
+                    wrap="off"
+                    spellCheck={false}
                   />
                 </div>
                 {filterInput ? (

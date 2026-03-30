@@ -63,6 +63,7 @@ a {
 
 button,
 input,
+textarea,
 select {
   font: inherit;
 }
@@ -294,6 +295,23 @@ select {
   border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.72);
   color: var(--ink);
+}
+
+.filter-input {
+  width: 100%;
+  min-height: 3.15rem;
+  max-height: 3.15rem;
+  padding: 0.95rem 1rem;
+  border: 1px solid rgba(22, 33, 47, 0.18);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--ink);
+  line-height: 1.25;
+  resize: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: pre;
+  scrollbar-width: thin;
 }
 
 button {
