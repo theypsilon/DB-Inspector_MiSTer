@@ -996,20 +996,21 @@ button:hover {
 }
 
 .tree-title-row h3 {
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
+  text-overflow: clip;
   white-space: nowrap;
 }
 
 .tree-identifier-inline {
   display: inline-flex;
   align-items: baseline;
-  flex: 1 1 auto;
+  flex: 0 1 clamp(9rem, 24vw, 18rem);
   flex-wrap: nowrap;
   gap: 0.35rem;
   min-width: 0;
+  max-width: clamp(9rem, 24vw, 18rem);
   overflow: hidden;
   color: var(--muted);
   font-size: 0.82rem;
@@ -1025,6 +1026,7 @@ button:hover {
 
 .tree-identifier-inline code {
   display: block;
+  flex: 1 1 auto;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;

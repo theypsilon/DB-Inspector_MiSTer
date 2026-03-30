@@ -1,63 +1,63 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="MiSTer downloader database inspector favicon">
   <defs>
-    <linearGradient id="dbTop" x1="10" y1="20" x2="46" y2="36" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#b4e5f0" />
-      <stop offset="1" stop-color="#49afca" />
+    <linearGradient id="dbTop" x1="7" y1="17" x2="57" y2="36" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#b9e8f1" />
+      <stop offset="1" stop-color="#48afca" />
     </linearGradient>
-    <linearGradient id="dbBody" x1="12" y1="26" x2="46" y2="58" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#1384a7" />
+    <linearGradient id="dbBody" x1="9" y1="24" x2="55" y2="61" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1386aa" />
       <stop offset="1" stop-color="#0d617f" />
     </linearGradient>
-    <linearGradient id="arrow" x1="26" y1="6" x2="42" y2="28" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#eb8451" />
-      <stop offset="1" stop-color="#c65128" />
+    <linearGradient id="arrow" x1="20" y1="6" x2="44" y2="39" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ef9160" />
+      <stop offset="1" stop-color="#c75028" />
     </linearGradient>
   </defs>
 
   <path
-    d="M11 26v20c0 4.4 8.1 8 18 8s18-3.6 18-8V26"
+    d="M8 23v25c0 5.1 10.8 9.2 24 9.2S56 53.1 56 48V23"
     fill="url(#dbBody)"
     stroke="#f8f3e7"
     stroke-opacity="0.34"
-    stroke-width="1.5"
+    stroke-width="1.6"
   />
   <ellipse
-    cx="29"
-    cy="26"
-    rx="18"
-    ry="8.3"
+    cx="32"
+    cy="23"
+    rx="24"
+    ry="9.2"
     fill="url(#dbTop)"
     stroke="#f8f3e7"
-    stroke-opacity="0.6"
-    stroke-width="1.5"
+    stroke-opacity="0.62"
+    stroke-width="1.6"
   />
   <ellipse
-    cx="29"
-    cy="36.5"
-    rx="18"
-    ry="7.5"
+    cx="32"
+    cy="35.5"
+    rx="24"
+    ry="8.2"
     fill="none"
     stroke="#f8f3e7"
-    stroke-opacity="0.3"
-    stroke-width="2"
+    stroke-opacity="0.28"
+    stroke-width="2.1"
   />
   <ellipse
-    cx="29"
-    cy="47"
-    rx="18"
-    ry="7.5"
+    cx="32"
+    cy="48"
+    rx="24"
+    ry="8.2"
     fill="#0a526c"
     stroke="#f8f3e7"
-    stroke-opacity="0.24"
+    stroke-opacity="0.22"
     stroke-width="1.5"
   />
 
   <path
-    d="M33 8v16h7L29 36 18 24h7V8z"
+    d="M36 6v21h10L32 42 18 27h10V6z"
     fill="url(#arrow)"
     stroke="#fff8eb"
-    stroke-opacity="0.42"
-    stroke-width="1.1"
+    stroke-opacity="0.46"
+    stroke-width="1.2"
     stroke-linejoin="round"
   />
 </svg>
