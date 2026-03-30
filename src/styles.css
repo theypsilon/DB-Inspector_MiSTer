@@ -266,6 +266,18 @@ code {
   gap: 0.8rem;
 }
 
+.filter-panel {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.filter-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.9rem;
+  align-items: end;
+}
+
 .field-label {
   font-weight: 700;
 }
@@ -1229,6 +1241,7 @@ button:hover {
   .hero,
   .loader-grid,
   .catalog-toolbar,
+  .filter-toolbar,
   .modal-toolbar,
   .catalog-selected-grid,
   .overview-grid,

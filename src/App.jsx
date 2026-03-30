@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { flushSync } from 'react-dom';
 import {
+  applyInspectionFilter,
   loadDatabaseSourceFile,
   loadDatabaseSourceUrl,
   loadRuntimeDatabaseCatalog,
@@ -32,6 +33,7 @@ export default function App() {
   const [loadingMessage, setLoadingMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [inspection, setInspection] = useState(null);
+  const [filterInput, setFilterInput] = useState('');
   const [iniSource, setIniSource] = useState(null);
   const [databaseDetailed, setDatabaseDetailed] = useState(false);
   const [runtimeCatalogOptions, setRuntimeCatalogOptions] = useState([]);
@@ -48,13 +50,22 @@ export default function App() {
   );
   const catalogReady = catalogOptions.length > 0;
   const catalogDisplayStatus = catalogReady ? 'ready' : catalogStatus;
-  const inspectionKey = inspection
+  const inspectionKeyBase = inspection
     ? `${inspection.source.sourceLabel}:${inspection.overview.dbId}:${inspection.overview.timestamp}`
     : 'empty';
+  const displayedInspection = useMemo(
+    () => (inspection ? applyInspectionFilter(inspection, filterInput) : null),
+    [inspection, filterInput],
+  );
+  const inspectionKey = `${inspectionKeyBase}:${String(filterInput).trim().toLowerCase()}`;
 
   useEffect(() => {
     inspectionRef.current = inspection;
   }, [inspection]);
+
+  useEffect(() => {
+    setFilterInput(inspection?.overview.defaultFilter || '');
+  }, [inspectionKeyBase]);
 
   useEffect(() => {
     iniSourceRef.current = iniSource;
@@ -568,25 +579,25 @@ export default function App() {
           </section>
         ) : null}
 
-        {inspection ? (
+        {displayedInspection ? (
           <>
             <section className="panel overview-panel">
               <div className="overview-header">
                 <div>
                   <p className="section-label">Database</p>
-                  <h2>{inspection.overview.dbId}</h2>
+                  <h2>{displayedInspection.overview.dbId}</h2>
                 </div>
                 <div className="overview-side">
                   <div className="highlight-row">
                     <HighlightCard
                       label="Version"
-                      value={`v${inspection.overview.version}`}
+                      value={`v${displayedInspection.overview.version}`}
                       accent="version"
                     />
                     <HighlightCard
                       label="Timestamp"
-                      value={inspection.overview.timestampLabel}
-                      subvalue={`Epoch ${inspection.overview.timestamp}`}
+                      value={displayedInspection.overview.timestampLabel}
+                      subvalue={`Epoch ${displayedInspection.overview.timestamp}`}
                       accent="timestamp"
                     />
                   </div>
@@ -603,12 +614,12 @@ export default function App() {
                 <MetadataCard
                   title="Source"
                   fields={[
-                    { label: 'Loaded from', value: inspection.source.sourceLabel, kind: 'url' },
+                    { label: 'Loaded from', value: displayedInspection.source.sourceLabel, kind: 'url' },
                     {
                       label: 'Container',
                       value:
-                        inspection.source.containerType === 'zip'
-                          ? `ZIP file (${inspection.source.extractedEntry})`
+                        displayedInspection.source.containerType === 'zip'
+                          ? `ZIP file (${displayedInspection.source.extractedEntry})`
                           : 'JSON file',
                     },
                   ]}
@@ -616,11 +627,11 @@ export default function App() {
                 <MetadataCard
                   title="Counts"
                   fields={[
-                    { label: 'Files', value: inspection.overview.counts.files.toLocaleString() },
-                    { label: 'Folders', value: inspection.overview.counts.folders.toLocaleString() },
+                    { label: 'Files', value: displayedInspection.overview.counts.files.toLocaleString() },
+                    { label: 'Folders', value: displayedInspection.overview.counts.folders.toLocaleString() },
                     {
                       label: 'Archives',
-                      value: inspection.overview.counts.archives.toLocaleString(),
+                      value: displayedInspection.overview.counts.archives.toLocaleString(),
                     },
                   ]}
                 />
@@ -630,17 +641,17 @@ export default function App() {
                     fields={[
                       {
                         label: 'base_files_url',
-                        value: inspection.overview.baseFilesUrl || 'None',
+                        value: displayedInspection.overview.baseFilesUrl || 'None',
                         kind: 'url',
                       },
                       {
                         label: 'Default filter',
-                        value: inspection.overview.defaultFilter || 'None',
+                        value: displayedInspection.overview.defaultFilter || 'None',
                       },
                       {
                         label: 'Imported db_files',
-                        value: inspection.overview.importedDatabases.length
-                          ? inspection.overview.importedDatabases
+                        value: displayedInspection.overview.importedDatabases.length
+                          ? displayedInspection.overview.importedDatabases
                           : ['None'],
                       },
                     ]}
@@ -649,12 +660,67 @@ export default function App() {
               </div>
             </section>
 
-            <FilesystemSection key={`filesystem:${inspectionKey}`} tree={inspection.filesystemTree} />
+            <section className="panel filter-panel">
+              <p className="section-label">Filter</p>
+              <h2>Filter visible content</h2>
+              <div className="filter-toolbar">
+                <div className="catalog-search">
+                  <label className="field-label" htmlFor="inspection-filter">
+                    FILTER
+                  </label>
+                  <input
+                    id="inspection-filter"
+                    type="search"
+                    placeholder="console !cheats"
+                    value={filterInput}
+                    onChange={(event) => setFilterInput(event.target.value)}
+                  />
+                </div>
+                {filterInput ? (
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => setFilterInput('')}
+                  >
+                    Clear filter
+                  </button>
+                ) : null}
+              </div>
+              <p className="helper-copy">
+                Use Downloader filter terms like <code>console</code>, <code>arcade</code>, or{' '}
+                <code>!cheats</code>. Positive terms keep matching tagged items, negative terms
+                remove them, untagged items remain visible, and <code>essential</code> stays
+                included unless you exclude it.
+              </p>
+              {displayedInspection.overview.defaultFilter ? (
+                <p className="helper-copy">
+                  This database defaults to <code>{displayedInspection.overview.defaultFilter}</code>.
+                </p>
+              ) : null}
+              <p className="catalog-count-inline">
+                {buildFilterSummaryCopy(displayedInspection.activeFilter)}
+              </p>
+            </section>
 
-            {inspection.archiveViews.length ? (
+            <FilesystemSection
+              key={`filesystem:${inspectionKey}`}
+              tree={displayedInspection.filesystemTree}
+              emptyMessage={
+                displayedInspection.activeFilter.isFiltering
+                  ? 'No files or folders match the current filter.'
+                  : 'No top-level files or folders were found.'
+              }
+            />
+
+            {inspection?.archiveViews.length || displayedInspection.activeFilter.isFiltering ? (
               <ArchiveSummariesSection
                 key={`archives:${inspectionKey}`}
-                archiveViews={inspection.archiveViews}
+                archiveViews={displayedInspection.archiveViews}
+                emptyMessage={
+                  displayedInspection.activeFilter.isFiltering
+                    ? 'No archive summary entries match the current filter.'
+                    : 'This database does not define any archives.'
+                }
               />
             ) : null}
 
@@ -663,9 +729,9 @@ export default function App() {
               title="Issues and warnings"
               defaultOpen
             >
-              {inspection.issues.length ? (
+              {displayedInspection.issues.length ? (
                 <ul className="issue-list">
-                  {inspection.issues.map((issue) => (
+                  {displayedInspection.issues.map((issue) => (
                     <li key={issue.id} className={`issue issue-${issue.level}`}>
                       <span className="issue-level">{issue.level}</span>
                       <strong>{issue.context}</strong>
@@ -678,8 +744,8 @@ export default function App() {
               )}
             </CollapsibleSection>
 
-            {inspection.overview.tagDictionary.length ? (
-              <TagDictionary tags={inspection.overview.tagDictionary} />
+            {displayedInspection.overview.tagDictionary.length ? (
+              <TagDictionary tags={displayedInspection.overview.tagDictionary} />
             ) : null}
           </>
         ) : loadingMessage ? (
@@ -983,7 +1049,7 @@ const IniPickerModal = memo(function IniPickerModal({ iniSource, onClose, onOpen
   );
 });
 
-const FilesystemSection = memo(function FilesystemSection({ tree }) {
+const FilesystemSection = memo(function FilesystemSection({ tree, emptyMessage }) {
   const index = useMemo(() => buildFlatNodeIndex(tree.children), [tree]);
 
   return (
@@ -991,13 +1057,13 @@ const FilesystemSection = memo(function FilesystemSection({ tree }) {
       label="Filesystem"
       title="Files and folders"
       listClassName="tree-root"
-      emptyMessage="No top-level files or folders were found."
+      emptyMessage={emptyMessage}
       index={index}
     />
   );
 });
 
-const ArchiveSummariesSection = memo(function ArchiveSummariesSection({ archiveViews }) {
+const ArchiveSummariesSection = memo(function ArchiveSummariesSection({ archiveViews, emptyMessage }) {
   const index = useMemo(() => buildFlatArchiveIndex(archiveViews), [archiveViews]);
 
   return (
@@ -1005,7 +1071,7 @@ const ArchiveSummariesSection = memo(function ArchiveSummariesSection({ archiveV
       label="Archives"
       title="Archive summaries"
       listClassName="archive-list"
-      emptyMessage="This database does not define any archives."
+      emptyMessage={emptyMessage}
       index={index}
     />
   );
@@ -1180,6 +1246,23 @@ function normalizeComparableUrl(value) {
   } catch {
     return '';
   }
+}
+
+function buildFilterSummaryCopy(activeFilter) {
+  if (!activeFilter) {
+    return 'Showing the full database.';
+  }
+
+  if (activeFilter.hasError) {
+    return 'The current filter is invalid, so the full database is shown.';
+  }
+
+  const { files, folders, archives } = activeFilter.resultCounts;
+  if (!activeFilter.isFiltering) {
+    return `Showing the full database: ${files} files, ${folders} folders, ${archives} archives.`;
+  }
+
+  return `Showing ${files} files, ${folders} folders, and ${archives} archives for this filter.`;
 }
 
 function getLoadedSourceUrl(loadedSource) {

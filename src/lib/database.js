@@ -103,6 +103,67 @@ export async function loadRuntimeDatabaseCatalog() {
   return parseRuntimeDatabaseCatalog(source);
 }
 
+export function applyInspectionFilter(inspection, rawFilterInput) {
+  if (!inspection) {
+    return null;
+  }
+
+  const filterState = parseDownloaderFilter(rawFilterInput);
+  const issues = [...inspection.issues];
+
+  for (const issue of filterState.issues) {
+    addIssue(issues, issue.level, issue.context, issue.message);
+  }
+
+  const unfilteredCounts = {
+    files: countRecordsByKind(inspection.filesystemRecords, 'file'),
+    folders: countRecordsByKind(inspection.filesystemRecords, 'folder'),
+    archives: inspection.archiveViews.length,
+  };
+
+  if (!filterState.isFiltering) {
+    return {
+      ...inspection,
+      issues,
+      activeFilter: buildInspectionFilterSummary(filterState, unfilteredCounts),
+    };
+  }
+
+  const filesystemRecords = inspection.filesystemRecords.filter((record) =>
+    recordMatchesDownloaderFilter(record, filterState),
+  );
+  const archiveViews = inspection.archiveViews
+    .map((archive) => {
+      const sourceSummaryRecords = Array.isArray(archive.summaryRecords) ? archive.summaryRecords : [];
+      const summaryRecords = sourceSummaryRecords.filter((record) =>
+        recordMatchesDownloaderFilter(record, filterState),
+      );
+
+      return {
+        ...archive,
+        summaryRecords,
+        tree: buildTreeFromRecords(summaryRecords, archive.nodeId),
+        keepWhenEmpty: sourceSummaryRecords.length === 0,
+      };
+    })
+    .filter((archive) => archive.summaryRecords.length > 0 || archive.keepWhenEmpty)
+    .map(({ keepWhenEmpty, ...archive }) => archive);
+
+  const resultCounts = {
+    files: countRecordsByKind(filesystemRecords, 'file'),
+    folders: countRecordsByKind(filesystemRecords, 'folder'),
+    archives: archiveViews.length,
+  };
+
+  return {
+    ...inspection,
+    issues,
+    filesystemTree: buildTreeFromRecords(filesystemRecords, 'database'),
+    archiveViews,
+    activeFilter: buildInspectionFilterSummary(filterState, resultCounts),
+  };
+}
+
 export function formatBytes(value) {
   if (!Number.isFinite(value)) {
     return 'Unknown size';
@@ -782,6 +843,7 @@ async function inspectDatabase(rawDatabase, source) {
   return {
     source,
     issues,
+    filesystemRecords,
     overview: {
       dbId: getString(rawDatabase.db_id) || '(missing)',
       version,
@@ -967,6 +1029,7 @@ async function buildArchiveView({
       summaryFolders,
       archiveBaseFilesUrl,
     }),
+    summaryRecords,
     tree: buildTreeFromRecords(summaryRecords, `archive:${archiveId || 'empty'}`),
   };
 }
@@ -1020,6 +1083,7 @@ function buildFolderRecord({ scope, context, path, dbVersion, dbId, folder, tagL
     id: `${scope}:folder:${path}`,
     kind: 'folder',
     downloadUrl: null,
+    filterTags: buildFilterTagNames(folderRecord.tags, tagLookup),
     path: pathInfo.displayPath,
     name: leafName(pathInfo.displayPath, 'folder'),
     badge: 'DIR',
@@ -1073,6 +1137,7 @@ function buildFileRecord({
     id: `${scope}:file:${path}`,
     kind: 'file',
     downloadUrl: resolvedUrl,
+    filterTags: buildFilterTagNames(fileRecord.tags, tagLookup),
     path: pathInfo.displayPath,
     name: leafName(pathInfo.displayPath, 'file'),
     badge: 'FILE',
@@ -1151,6 +1216,7 @@ function buildArchiveFolderRecord({
     id: `archive:${archiveId}:folder:${path}`,
     kind: 'folder',
     downloadUrl: null,
+    filterTags: buildFilterTagNames(folderRecord.tags, tagLookup),
     path: pathInfo.displayPath,
     name: leafName(pathInfo.displayPath, 'folder'),
     badge: 'DIR',
@@ -1238,6 +1304,7 @@ function buildArchiveFileRecord({
     id: `archive:${archiveId}:file:${path}`,
     kind: 'file',
     downloadUrl: resolvedUrl,
+    filterTags: buildFilterTagNames(wrapped.tags, tagLookup),
     path: pathInfo.displayPath,
     name: leafName(pathInfo.displayPath, 'file'),
     badge: 'FILE',
@@ -1449,6 +1516,22 @@ function buildTagEntries(rawTags, tagLookup) {
   });
 }
 
+function buildFilterTagNames(rawTags, tagLookup) {
+  if (!Array.isArray(rawTags)) {
+    return [];
+  }
+
+  const tags = rawTags.flatMap((tag) => {
+    if (typeof tag === 'number') {
+      return (tagLookup.byIndex.get(tag) || []).map((name) => normalizeTagName(name));
+    }
+
+    return normalizeTagName(tag);
+  });
+
+  return [...new Set(tags.filter(Boolean))];
+}
+
 function resolveBasePathUrl(baseUrl, path) {
   if (!baseUrl) {
     return null;
@@ -1475,6 +1558,187 @@ function ensureTrailingSlash(value) {
 
 function normalizeTagName(value) {
   return String(value).toLowerCase().replaceAll(/[_-]/g, '');
+}
+
+function parseDownloaderFilter(rawFilterInput) {
+  const input = String(rawFilterInput || '').trim();
+  if (!input) {
+    return {
+      rawInput: '',
+      appliedInput: '',
+      positiveTerms: new Set(),
+      negativeTerms: new Set(),
+      hasWarnings: false,
+      hasError: false,
+      isActive: false,
+      isFiltering: false,
+      issues: [],
+    };
+  }
+
+  const issues = [];
+  const rawTokens = input.split(/\s+/).filter(Boolean);
+  const supportedTokens = [];
+  const inheritedTokens = [];
+
+  for (const token of rawTokens) {
+    if (isInheritedFilterToken(token)) {
+      inheritedTokens.push(token);
+      continue;
+    }
+
+    supportedTokens.push(token);
+  }
+
+  if (inheritedTokens.length) {
+    issues.push({
+      level: 'warning',
+      context: 'filter',
+      message:
+        `Inherited filter terms ${inheritedTokens.join(', ')} are not supported in this inspector and were ignored.`,
+    });
+  }
+
+  const positiveTerms = new Set();
+  const negativeTerms = new Set();
+
+  for (const token of supportedTokens) {
+    if (!isValidDownloaderFilterToken(token)) {
+      issues.push({
+        level: 'error',
+        context: 'filter',
+        message:
+          `The filter term ${token} is not valid. Downloader would reject it, so the full view is shown instead.`,
+      });
+      return buildFailedFilterState(input, supportedTokens, positiveTerms, negativeTerms, issues);
+    }
+
+    const isNegative = token.startsWith('!');
+    const normalizedTerm = normalizeTagName(token.slice(isNegative ? 1 : 0));
+    if (!normalizedTerm || normalizedTerm === 'none') {
+      issues.push({
+        level: 'error',
+        context: 'filter',
+        message:
+          `The filter term ${token} is not supported by Downloader, so the full view is shown instead.`,
+      });
+      return buildFailedFilterState(input, supportedTokens, positiveTerms, negativeTerms, issues);
+    }
+
+    if (isNegative) {
+      negativeTerms.add(normalizedTerm);
+    } else {
+      positiveTerms.add(normalizedTerm);
+    }
+  }
+
+  if (negativeTerms.has('all') && positiveTerms.size) {
+    issues.push({
+      level: 'error',
+      context: 'filter',
+      message:
+        'The filter term `!all` cannot be combined with positive terms. Downloader would reject it, so the full view is shown instead.',
+    });
+    return buildFailedFilterState(input, supportedTokens, positiveTerms, negativeTerms, issues);
+  }
+
+  const isActive = positiveTerms.size > 0 || negativeTerms.size > 0;
+  return {
+    rawInput: input,
+    appliedInput: supportedTokens.join(' '),
+    positiveTerms,
+    negativeTerms,
+    hasWarnings: issues.some((issue) => issue.level === 'warning'),
+    hasError: false,
+    isActive,
+    isFiltering: isActive,
+    issues,
+  };
+}
+
+function buildFailedFilterState(rawInput, supportedTokens, positiveTerms, negativeTerms, issues) {
+  return {
+    rawInput,
+    appliedInput: supportedTokens.join(' '),
+    positiveTerms: new Set(positiveTerms),
+    negativeTerms: new Set(negativeTerms),
+    hasWarnings: issues.some((issue) => issue.level === 'warning'),
+    hasError: true,
+    isActive: false,
+    isFiltering: false,
+    issues,
+  };
+}
+
+function isInheritedFilterToken(token) {
+  return /^\[[^\]]+\]$/u.test(String(token).trim());
+}
+
+function isValidDownloaderFilterToken(token) {
+  return /^!?[a-z0-9][a-z0-9_-]*$/iu.test(String(token).trim());
+}
+
+function recordMatchesDownloaderFilter(record, filterState) {
+  const filterTags = new Set(Array.isArray(record?.filterTags) ? record.filterTags : []);
+  const matchesNegativeTags = intersectsSet(filterTags, filterState.negativeTerms);
+  const includesAll = filterState.positiveTerms.has('all');
+  const excludesAll = filterState.negativeTerms.has('all');
+  const isUntagged = filterTags.size === 0;
+  const isEssential = filterTags.has('essential');
+  const includesByDefault = isUntagged ? !excludesAll : isEssential && !filterState.negativeTerms.has('essential');
+
+  let included = includesByDefault;
+  if (!included && filterState.positiveTerms.size) {
+    included = includesAll || intersectsSet(filterTags, filterState.positiveTerms);
+  } else if (!included && !filterState.positiveTerms.size) {
+    included = true;
+  }
+
+  if (!included) {
+    return false;
+  }
+
+  if (matchesNegativeTags) {
+    return false;
+  }
+
+  if (excludesAll && !isEssential) {
+    return false;
+  }
+
+  return true;
+}
+
+function intersectsSet(left, right) {
+  if (!left.size || !right.size) {
+    return false;
+  }
+
+  for (const value of left) {
+    if (right.has(value)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function countRecordsByKind(records, kind) {
+  return records.filter((record) => record.kind === kind).length;
+}
+
+function buildInspectionFilterSummary(filterState, resultCounts) {
+  return {
+    rawInput: filterState.rawInput,
+    appliedInput: filterState.appliedInput,
+    positiveTerms: [...filterState.positiveTerms],
+    negativeTerms: [...filterState.negativeTerms],
+    isActive: filterState.isActive,
+    isFiltering: filterState.isFiltering,
+    hasWarnings: filterState.hasWarnings,
+    hasError: filterState.hasError,
+    resultCounts,
+  };
 }
 
 function buildDownloadDetails({ explicitUrl, resolvedUrl, missingLabel }) {
