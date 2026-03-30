@@ -1,4 +1,5 @@
 import { memo, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import {
   loadDatabaseSourceFile,
   loadDatabaseSourceUrl,
@@ -144,6 +145,32 @@ export default function App() {
     setIniSource(null);
   }
 
+  function openRemoteDatabaseFromModal(url, { closeCatalog = false, closeIni = false } = {}) {
+    const requestedUrl = String(url).trim();
+    if (!requestedUrl) {
+      return;
+    }
+
+    flushSync(() => {
+      if (closeCatalog) {
+        setCatalogModalOpen(false);
+      }
+
+      if (closeIni) {
+        setIniPickerOpen(false);
+      }
+
+      setDatabaseUrl(requestedUrl);
+      setLoadingMessage(`Fetching ${requestedUrl}...`);
+      setErrorMessage('');
+      clearLoadedSource();
+    });
+
+    window.setTimeout(() => {
+      void loadRemoteSource(requestedUrl, { skipPrepare: true });
+    }, 0);
+  }
+
   async function handleLoadedSource(
     loadedSource,
     { origin, requestedUrl = '', syncSearchParam = true, visitedUrls = new Set() } = {},
@@ -215,22 +242,33 @@ export default function App() {
     }
   }
 
-  async function loadRemoteSource(input, { syncSearchParam = true, visitedUrls = new Set() } = {}) {
+  async function loadRemoteSource(
+    input,
+    { syncSearchParam = true, visitedUrls = new Set(), skipPrepare = false } = {},
+  ) {
     const requestedUrl = String(input).trim();
     if (!requestedUrl) {
+      if (skipPrepare) {
+        setLoadingMessage('');
+      }
       setErrorMessage('Enter a URL first.');
       return;
     }
 
     const normalizedRequestedUrl = normalizeComparableUrl(requestedUrl);
     if (normalizedRequestedUrl && visitedUrls.has(normalizedRequestedUrl)) {
+      if (skipPrepare) {
+        setLoadingMessage('');
+      }
       setErrorMessage(`Detected a loop while following db_url references from ${requestedUrl}.`);
       return;
     }
 
-    setLoadingMessage(`Fetching ${requestedUrl}...`);
-    setErrorMessage('');
-    clearLoadedSource();
+    if (!skipPrepare) {
+      setLoadingMessage(`Fetching ${requestedUrl}...`);
+      setErrorMessage('');
+      clearLoadedSource();
+    }
 
     try {
       const nextVisitedUrls = new Set(visitedUrls);
@@ -257,14 +295,12 @@ export default function App() {
     await loadRemoteSource(databaseUrl);
   }
 
-  async function loadIniEntry(entry) {
+  function loadIniEntry(entry) {
     if (!entry?.dbUrl) {
       return;
     }
 
-    setIniPickerOpen(false);
-    setDatabaseUrl(entry.dbUrl);
-    await loadRemoteSource(entry.dbUrl);
+    openRemoteDatabaseFromModal(entry.dbUrl, { closeIni: true });
   }
 
   function handleDrop(event) {
@@ -544,8 +580,7 @@ export default function App() {
           initialDatabaseUrl={databaseUrl}
           onClose={() => setCatalogModalOpen(false)}
           onOpenDatabase={(url) => {
-            setCatalogModalOpen(false);
-            void loadRemoteSource(url);
+            openRemoteDatabaseFromModal(url, { closeCatalog: true });
           }}
         />
       ) : null}
