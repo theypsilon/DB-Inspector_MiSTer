@@ -36,10 +36,16 @@ test.beforeEach(async ({ page }) => {
     }
 
     const dbId = pathname === '/other.json' ? 'other_db' : 'distribution_mister';
+    const defaultFilter =
+      pathname === '/primary.json'
+        ? 'catalog-default'
+        : pathname === '/alternate.json'
+          ? 'alternate-default'
+          : '';
     await route.fulfill({
       status: 200,
       contentType: 'application/json; charset=utf-8',
-      body: JSON.stringify(buildDatabase(dbId)),
+      body: JSON.stringify(buildDatabase(dbId, { defaultFilter })),
     });
   });
 });
@@ -82,11 +88,35 @@ test('loading an alternate URL that redirects to a catalog entry preserves its t
   await expect(page.locator('.catalog-option').filter({ hasText: 'Alternate Distribution' })).toHaveCount(1);
 });
 
-function buildDatabase(dbId) {
+test('catalog selections keep the active filter until the user clears it', async ({ page }) => {
+  await page.goto('/');
+
+  await page.getByLabel('URL').fill('https://example.com/other.json');
+  await page.getByRole('button', { name: 'Fetch database' }).click();
+
+  const filterInput = page.getByLabel('FILTER');
+  await filterInput.fill('manual !keep');
+  await expect(filterInput).toHaveValue('manual !keep');
+
+  await page.getByRole('button', { name: 'Browse catalog' }).click();
+  await page.locator('.catalog-option').filter({ hasText: 'Primary Distribution' }).click();
+  await page.getByRole('button', { name: 'Open selected database' }).click();
+
+  await expect(page.getByRole('heading', { name: 'distribution_mister' })).toBeVisible();
+  await expect(filterInput).toHaveValue('manual !keep');
+  await expect.poll(() => page.url()).toContain(`filter=${encodeURIComponent('manual !keep')}`);
+});
+
+function buildDatabase(dbId, { defaultFilter = '' } = {}) {
   return {
     db_id: dbId,
     v: 1,
     timestamp: 1710000000,
+    default_options: defaultFilter
+      ? {
+          filter: defaultFilter,
+        }
+      : undefined,
     files: {},
     folders: {},
     archives: {},

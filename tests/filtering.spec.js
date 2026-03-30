@@ -115,6 +115,89 @@ test('missing FILTER param uses the database default, while explicit empty FILTE
   await expect.poll(() => page.url()).toContain('filter=');
 });
 
+test('manual FILTER survives direct URL fetches until it is cleared', async ({ page }) => {
+  const remoteUrl = 'https://example.com/filter-preserve-remote.json';
+
+  await page.route(remoteUrl, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(buildFilterDatabase({ defaultFilter: 'catalog-default' })),
+    });
+  });
+
+  await page.goto('/');
+
+  await page.locator('#database-file-input').setInputFiles({
+    name: 'filter-smoke.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(buildFilterDatabase()), 'utf8'),
+  });
+
+  const filterInput = page.getByLabel('FILTER');
+  await filterInput.fill('manual !keep');
+  await expect(filterInput).toHaveValue('manual !keep');
+
+  await page.getByLabel('URL').fill(remoteUrl);
+  await page.getByRole('button', { name: 'Fetch database' }).click();
+
+  await expect(page.getByRole('heading', { name: 'filter_smoke' })).toBeVisible();
+  await expect(filterInput).toHaveValue('manual !keep');
+  await expect.poll(() => page.url()).toContain(`filter=${encodeURIComponent('manual !keep')}`);
+});
+
+test('manual FILTER survives uploaded databases and uploaded single-entry INI lists', async ({
+  page,
+}) => {
+  const iniRemoteUrl = 'https://example.com/filter-preserve-ini.json';
+
+  await page.route(iniRemoteUrl, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(buildFilterDatabase({ defaultFilter: 'ini-default' })),
+    });
+  });
+
+  await page.goto('/');
+
+  await page.locator('#database-file-input').setInputFiles({
+    name: 'filter-smoke.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(buildFilterDatabase()), 'utf8'),
+  });
+
+  const filterInput = page.getByLabel('FILTER');
+  await filterInput.fill('manual !keep');
+  await expect(filterInput).toHaveValue('manual !keep');
+
+  await page.locator('#database-file-input').setInputFiles({
+    name: 'next-filter-smoke.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(buildFilterDatabase({ defaultFilter: 'upload-default' })), 'utf8'),
+  });
+
+  await expect(page.getByRole('heading', { name: 'filter_smoke' })).toBeVisible();
+  await expect(filterInput).toHaveValue('manual !keep');
+
+  await page.locator('#database-file-input').setInputFiles({
+    name: 'downloader.ini',
+    mimeType: 'text/plain',
+    buffer: Buffer.from(
+      `[MiSTer]
+filter=ini-list-default
+
+[Preserved]
+db_url=${iniRemoteUrl}
+`,
+      'utf8',
+    ),
+  });
+
+  await expect(page.getByRole('heading', { name: 'filter_smoke' })).toBeVisible();
+  await expect(filterInput).toHaveValue('manual !keep');
+});
+
 function buildFilterDatabase({ defaultFilter = '' } = {}) {
   return {
     db_id: 'filter_smoke',

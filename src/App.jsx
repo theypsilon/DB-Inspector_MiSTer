@@ -50,6 +50,7 @@ export default function App() {
   const dropzoneDropPulseTimeoutRef = useRef(0);
   const filterSearchParamReadyRef = useRef(false);
   const expectedFilterSearchParamValueRef = useRef('');
+  const pendingPreservedFilterRef = useRef(null);
   const [databaseUrl, setDatabaseUrl] = useState(() => readDatabaseUrlSearchParam());
   const [loadingMessage, setLoadingMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
@@ -98,10 +99,15 @@ export default function App() {
   useEffect(() => {
     filterSearchParamReadyRef.current = false;
 
+    const preservedFilter = pendingPreservedFilterRef.current;
+    pendingPreservedFilterRef.current = null;
     const sharedFilter = readFilterSearchParam();
-    const nextFilter = sharedFilter.isPresent
-      ? sharedFilter.value
-      : sourceDefaultFilter || inspection?.overview.defaultFilter || '';
+    const nextFilter =
+      preservedFilter !== null
+        ? preservedFilter
+        : sharedFilter.isPresent
+          ? sharedFilter.value
+          : sourceDefaultFilter || inspection?.overview.defaultFilter || '';
     expectedFilterSearchParamValueRef.current = nextFilter;
     setFilterInput(nextFilter);
     setDebouncedFilterInput(nextFilter);
@@ -283,14 +289,22 @@ export default function App() {
     setSourceDefaultFilter('');
   }
 
+  function queueCurrentFilterForPreservedLoad(preserveCurrentFilter) {
+    const activeFilterInput = String(filterInput).trim() ? filterInput : null;
+    pendingPreservedFilterRef.current =
+      preserveCurrentFilter && activeFilterInput !== null ? activeFilterInput : null;
+  }
+
   function startRemoteDatabaseLoad(
     url,
-    { registerInCatalog = false, sourceDefaultFilter = '' } = {},
+    { registerInCatalog = false, sourceDefaultFilter = '', preserveCurrentFilter = false } = {},
   ) {
     const requestedUrl = String(url).trim();
     if (!requestedUrl) {
       return;
     }
+
+    queueCurrentFilterForPreservedLoad(preserveCurrentFilter);
 
     setDatabaseUrl(requestedUrl);
     setLoadingMessage(`Fetching ${requestedUrl}...`);
@@ -302,6 +316,7 @@ export default function App() {
         skipPrepare: true,
         registerInCatalog,
         sourceDefaultFilter,
+        preserveCurrentFilter,
       });
     }, 0);
   }
@@ -315,6 +330,7 @@ export default function App() {
       visitedUrls = new Set(),
       registerInCatalog = true,
       sourceDefaultFilter: nextSourceDefaultFilter = '',
+      preserveCurrentFilter = false,
     } = {},
   ) {
     if (registerInCatalog) {
@@ -335,12 +351,18 @@ export default function App() {
 
       if (origin === 'upload') {
         setDatabaseUrl('');
-        writeDatabaseUrlSearchParam('', { pushHistory: true, preserveFilter: false });
+        writeDatabaseUrlSearchParam('', {
+          pushHistory: true,
+          preserveFilter: preserveCurrentFilter,
+        });
       } else {
         const sharedUrl = loadedSource.inspection.source.sourceLabel;
         setDatabaseUrl(sharedUrl);
         if (syncSearchParam) {
-          writeDatabaseUrlSearchParam(sharedUrl, { pushHistory: true, preserveFilter: false });
+          writeDatabaseUrlSearchParam(sharedUrl, {
+            pushHistory: true,
+            preserveFilter: preserveCurrentFilter,
+          });
         }
       }
 
@@ -357,6 +379,7 @@ export default function App() {
         visitedUrls,
         registerInCatalog: false,
         sourceDefaultFilter: loadedSource.defaultFilter || '',
+        preserveCurrentFilter,
       });
       return;
     }
@@ -367,13 +390,19 @@ export default function App() {
 
     if (origin === 'upload') {
       setDatabaseUrl('');
-      writeDatabaseUrlSearchParam('', { pushHistory: true, preserveFilter: false });
+      writeDatabaseUrlSearchParam('', {
+        pushHistory: true,
+        preserveFilter: preserveCurrentFilter,
+      });
       return;
     }
 
     setDatabaseUrl(requestedUrl);
     if (syncSearchParam) {
-      writeDatabaseUrlSearchParam(requestedUrl, { pushHistory: true, preserveFilter: false });
+      writeDatabaseUrlSearchParam(requestedUrl, {
+        pushHistory: true,
+        preserveFilter: preserveCurrentFilter,
+      });
     }
   }
 
@@ -382,6 +411,7 @@ export default function App() {
       return;
     }
 
+    queueCurrentFilterForPreservedLoad(true);
     setLoadingMessage(`Loading ${file.name}...`);
     setErrorMessage('');
     clearLoadedSource();
@@ -394,7 +424,11 @@ export default function App() {
         loadedSource.inspection.source.sourceUrl = objectUrl;
       }
 
-      await handleLoadedSource(loadedSource, { origin: 'upload', registerInCatalog: true });
+      await handleLoadedSource(loadedSource, {
+        origin: 'upload',
+        registerInCatalog: true,
+        preserveCurrentFilter: true,
+      });
     } catch (error) {
       setIniPickerOpen(false);
       setErrorMessage(error.message);
@@ -411,6 +445,7 @@ export default function App() {
       skipPrepare = false,
       registerInCatalog = true,
       sourceDefaultFilter = '',
+      preserveCurrentFilter = false,
     } = {},
   ) {
     const requestedUrl = String(input).trim();
@@ -456,6 +491,7 @@ export default function App() {
         visitedUrls: nextVisitedUrls,
         registerInCatalog,
         sourceDefaultFilter,
+        preserveCurrentFilter,
       });
     } catch (error) {
       setErrorMessage(error.message);
@@ -466,7 +502,8 @@ export default function App() {
 
   async function loadUrl(event) {
     event.preventDefault();
-    await loadRemoteSource(databaseUrl);
+    queueCurrentFilterForPreservedLoad(true);
+    await loadRemoteSource(databaseUrl, { preserveCurrentFilter: true });
   }
 
   function loadIniEntry(entry) {
@@ -477,6 +514,7 @@ export default function App() {
     startRemoteDatabaseLoad(entry.dbUrl, {
       registerInCatalog: false,
       sourceDefaultFilter: iniSource?.defaultFilter || '',
+      preserveCurrentFilter: true,
     });
   }
 
@@ -935,7 +973,10 @@ export default function App() {
           initialDatabaseUrl={databaseUrl}
           onClose={() => setCatalogModalOpen(false)}
           onOpenDatabase={(url) => {
-            startRemoteDatabaseLoad(url, { registerInCatalog: false });
+            startRemoteDatabaseLoad(url, {
+              registerInCatalog: false,
+              preserveCurrentFilter: true,
+            });
           }}
         />
       ) : null}

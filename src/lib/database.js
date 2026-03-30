@@ -153,6 +153,7 @@ export function applyInspectionFilter(inspection, rawFilterInput) {
   return {
     ...inspection,
     issues,
+    filesystemRecords,
     filesystemTree: buildTreeFromRecords(filesystemRecords, 'database'),
     archiveViews,
     activeFilter: buildInspectionFilterSummary(filterState, resultCounts),
