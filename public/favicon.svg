@@ -1,48 +1,69 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="MiSTer custom database inspector favicon">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="MiSTer downloader database inspector favicon">
   <defs>
-    <linearGradient id="bg" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#1f4d79" />
-      <stop offset="0.6" stop-color="#16212f" />
-      <stop offset="1" stop-color="#0f1722" />
+    <linearGradient id="dbTop" x1="10" y1="11" x2="43" y2="26" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#b4e5f0" />
+      <stop offset="1" stop-color="#49afca" />
     </linearGradient>
-    <linearGradient id="dbTop" x1="17" y1="12" x2="45" y2="24" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#9cd7e7" />
-      <stop offset="1" stop-color="#39a4c4" />
+    <linearGradient id="dbBody" x1="12" y1="18" x2="42" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1384a7" />
+      <stop offset="1" stop-color="#0d617f" />
     </linearGradient>
-    <linearGradient id="dbBody" x1="20" y1="18" x2="42" y2="44" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#1280a4" />
-      <stop offset="1" stop-color="#0b5f7d" />
+    <linearGradient id="lens" x1="33" y1="28" x2="56" y2="53" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#eb8451" />
+      <stop offset="1" stop-color="#c65128" />
     </linearGradient>
   </defs>
 
-  <rect x="4" y="4" width="56" height="56" rx="16" fill="url(#bg)" />
-  <circle cx="50" cy="14" r="11" fill="#dd6d3d" opacity="0.12" />
-
   <path
-    d="M17 20v16c0 3.5 6.3 6.5 14 6.5s14-3 14-6.5V20"
+    d="M12 18v20c0 4.4 7.6 8 17 8s17-3.6 17-8V18"
     fill="url(#dbBody)"
-    stroke="#f5efe2"
-    stroke-opacity="0.16"
-    stroke-width="1.2"
+    stroke="#f8f3e7"
+    stroke-opacity="0.34"
+    stroke-width="1.4"
   />
   <ellipse
-    cx="31"
-    cy="20"
-    rx="14"
-    ry="6.5"
+    cx="29"
+    cy="18"
+    rx="17"
+    ry="8"
     fill="url(#dbTop)"
-    stroke="#f5efe2"
-    stroke-opacity="0.35"
-    stroke-width="1.2"
+    stroke="#f8f3e7"
+    stroke-opacity="0.6"
+    stroke-width="1.4"
   />
-  <ellipse cx="31" cy="28" rx="14" ry="6.2" fill="none" stroke="#f5efe2" stroke-opacity="0.22" stroke-width="1.8" />
-  <ellipse cx="31" cy="36" rx="14" ry="6.2" fill="#0a4f67" stroke="#f5efe2" stroke-opacity="0.2" stroke-width="1.2" />
+  <ellipse
+    cx="29"
+    cy="28"
+    rx="17"
+    ry="7.3"
+    fill="none"
+    stroke="#f8f3e7"
+    stroke-opacity="0.3"
+    stroke-width="2"
+  />
+  <ellipse
+    cx="29"
+    cy="38"
+    rx="17"
+    ry="7.3"
+    fill="#0a526c"
+    stroke="#f8f3e7"
+    stroke-opacity="0.24"
+    stroke-width="1.4"
+  />
 
-  <circle cx="40" cy="39" r="8.5" fill="#f5efe2" fill-opacity="0.08" stroke="#dd6d3d" stroke-width="4" />
-  <path d="M46.2 45.2 52.4 51.4" fill="none" stroke="#dd6d3d" stroke-width="4.6" stroke-linecap="round" />
+  <circle cx="42" cy="40" r="11" fill="#fff8eb" fill-opacity="0.12" stroke="url(#lens)" stroke-width="5.2" />
+  <path d="M50 48 57 55" fill="none" stroke="url(#lens)" stroke-width="5.2" stroke-linecap="round" />
 
-  <circle cx="36.5" cy="36" r="1.4" fill="#f5efe2" />
-  <circle cx="41.8" cy="39" r="1.4" fill="#f5efe2" />
-  <circle cx="38.7" cy="42.4" r="1.4" fill="#f5efe2" />
-  <path d="M36.5 36 41.8 39 38.7 42.4" fill="none" stroke="#f5efe2" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" opacity="0.9" />
+  <circle cx="37.5" cy="36.5" r="1.8" fill="#fff8eb" />
+  <circle cx="44.5" cy="40.2" r="1.8" fill="#fff8eb" />
+  <circle cx="40.4" cy="45" r="1.8" fill="#fff8eb" />
+  <path
+    d="M37.5 36.5 44.5 40.2 40.4 45"
+    fill="none"
+    stroke="#fff8eb"
+    stroke-width="1.8"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
 </svg>

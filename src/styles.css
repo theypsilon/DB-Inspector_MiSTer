@@ -936,20 +936,33 @@ button:hover {
   text-decoration: none;
 }
 
+.node-action-row > .inline-action-button:not(.open-button) {
+  order: 0;
+}
+
 .inline-action-button:hover {
   background: rgba(22, 33, 47, 0.14);
   filter: none;
 }
 
 .open-button {
+  order: 1;
+  color: #f9f8f3;
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+.open-button:hover {
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
+  filter: brightness(1.05);
 }
 
 .download-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  order: 2;
   padding: 0.55rem 0.9rem;
   border-radius: 999px;
   background: linear-gradient(135deg, #3d8751, #1e6a5c);
@@ -968,17 +981,23 @@ button:hover {
 .tree-title-row {
   display: flex;
   align-items: baseline;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 0.7rem;
+  min-width: 0;
+}
+
+.tree-title-row h3 {
   min-width: 0;
 }
 
 .tree-identifier-inline {
   display: inline-flex;
   align-items: baseline;
-  flex-wrap: wrap;
+  flex: 1 1 auto;
+  flex-wrap: nowrap;
   gap: 0.35rem;
   min-width: 0;
+  overflow: hidden;
   color: var(--muted);
   font-size: 0.82rem;
 }
@@ -992,10 +1011,14 @@ button:hover {
 }
 
 .tree-identifier-inline code {
+  display: block;
+  min-width: 0;
   max-width: 100%;
+  overflow: hidden;
   color: inherit;
   font-size: 0.86rem;
-  word-break: break-word;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .node-badge {

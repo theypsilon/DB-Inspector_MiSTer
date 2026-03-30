@@ -1763,7 +1763,7 @@ const TreeEntryRow = memo(function TreeEntryRow({
               {showIdentifier ? (
                 <span className="tree-identifier-inline">
                   <span className="tree-identifier-label">{identifierLabel}</span>
-                  <code>{identifier}</code>
+                  <code title={identifier}>{identifier}</code>
                 </span>
               ) : null}
             </div>
