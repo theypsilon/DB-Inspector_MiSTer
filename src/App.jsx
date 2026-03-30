@@ -1141,13 +1141,6 @@ const TreeEntryRow = memo(function TreeEntryRow({
   ]
     .filter(Boolean)
     .join(' ');
-  const controlClassName = [
-    showCollapseControl ? 'collapse-button' : 'collapse-spacer',
-    row.depth ? 'control-has-parent' : '',
-    hasVisibleChildren ? 'control-has-children' : '',
-  ]
-    .filter(Boolean)
-    .join(' ');
   const Container = isArchive ? 'article' : 'div';
 
   useLayoutEffect(() => {
@@ -1222,13 +1215,13 @@ const TreeEntryRow = memo(function TreeEntryRow({
         {showCollapseControl ? (
           <button
             type="button"
-            className={controlClassName}
+            className="collapse-button"
             onClick={handleToggleRowCollapsed}
           >
             {collapsed ? '+' : '-'}
           </button>
         ) : (
-          <span className={controlClassName} aria-hidden="true">
+          <span className="collapse-spacer" aria-hidden="true">
             <span className="leaf-marker" />
           </span>
         )}
