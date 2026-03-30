@@ -1115,7 +1115,6 @@ const TreeEntryRow = memo(function TreeEntryRow({
   const rowRef = useRef(null);
   const isArchive = row.type === 'archive';
   const childIds = row.childIds;
-  const canCollapse = row.canCollapse;
   const showCollapseControl = isArchive || childIds.length > 0;
   const title = isArchive ? row.archive.title : row.node.name;
   const badge = isArchive ? 'ZIP' : row.node.badge;
@@ -1131,7 +1130,10 @@ const TreeEntryRow = memo(function TreeEntryRow({
   const isFile = !isArchive && row.node.kind === 'file';
   const downloadUrl = isFile ? row.node.downloadUrl : null;
   const bodyCollapsed = isFile && collapsed;
-  const guideDepths = row.depth ? Array.from({ length: row.depth }, (_, index) => index + 1) : [];
+  const ancestorGuideDepths = row.ancestorContinuationDepths.filter(
+    (guideDepth) => guideDepth < row.depth - 1,
+  );
+  const hasVisibleChildren = childIds.length > 0 && !collapsed;
   const containerClassName = [
     'tree-entry',
     row.depth ? 'tree-entry-indented' : '',
@@ -1188,16 +1190,25 @@ const TreeEntryRow = memo(function TreeEntryRow({
       className={containerClassName}
       style={{ ...buildTreeDepthStyle(row.depth), ...virtualStyle }}
     >
-      {guideDepths.length ? (
+      {ancestorGuideDepths.length || row.depth || hasVisibleChildren ? (
         <div className="tree-guides" aria-hidden="true">
-          {guideDepths.map((guideDepth) => (
+          {ancestorGuideDepths.map((guideDepth) => (
             <span
               key={guideDepth}
-              className="tree-guide-line"
+              className="tree-guide-vertical"
               style={buildTreeGuideStyle(guideDepth)}
             />
           ))}
-          <span className="tree-guide-elbow" style={buildTreeGuideStyle(row.depth)} />
+          {row.depth ? (
+            <span
+              className={`tree-guide-parent${row.isLastSibling ? '' : ' tree-guide-parent-continue'}`}
+              style={buildTreeGuideStyle(row.depth - 1)}
+            />
+          ) : null}
+          {row.depth ? <span className="tree-guide-elbow" style={buildTreeGuideStyle(row.depth)} /> : null}
+          {hasVisibleChildren ? (
+            <span className="tree-guide-child" style={buildTreeGuideStyle(row.depth)} />
+          ) : null}
         </div>
       ) : null}
       <div className="tree-row">
@@ -1210,7 +1221,9 @@ const TreeEntryRow = memo(function TreeEntryRow({
             {collapsed ? '+' : '-'}
           </button>
         ) : (
-          <span className="collapse-spacer" />
+          <span className="collapse-spacer" aria-hidden="true">
+            <span className="leaf-marker" />
+          </span>
         )}
         <div className={isArchive ? 'tree-card archive-surface' : 'tree-card'}>
           <div className="tree-heading">
@@ -1275,14 +1288,17 @@ function buildFlatNodeIndex(nodes) {
   const rootIds = [];
   const collapsibleIds = [];
 
-  function visit(node, depth) {
+  function visit(node, depth, ancestorContinuationDepths, siblingIndex, siblingCount) {
     const childIds = [];
+    const isLastSibling = siblingIndex === siblingCount - 1;
     const row = {
       id: node.id,
       type: 'node',
       node,
       depth,
       childIds,
+      isLastSibling,
+      ancestorContinuationDepths,
       canCollapse: node.kind === 'file' || (Array.isArray(node.children) && node.children.length > 0),
     };
 
@@ -1292,17 +1308,23 @@ function buildFlatNodeIndex(nodes) {
     }
 
     if (Array.isArray(node.children) && node.children.length) {
-      for (const child of node.children) {
-        childIds.push(visit(child, depth + 1));
-      }
+      const nextAncestorContinuationDepths = isLastSibling
+        ? ancestorContinuationDepths
+        : ancestorContinuationDepths.concat(depth);
+
+      node.children.forEach((child, childIndex) => {
+        childIds.push(
+          visit(child, depth + 1, nextAncestorContinuationDepths, childIndex, node.children.length),
+        );
+      });
     }
 
     return row.id;
   }
 
-  for (const node of nodes) {
-    rootIds.push(visit(node, 0));
-  }
+  nodes.forEach((node, index) => {
+    rootIds.push(visit(node, 0, [], index, nodes.length));
+  });
 
   return {
     rootIds,
@@ -1316,14 +1338,17 @@ function buildFlatArchiveIndex(archiveViews) {
   const rootIds = [];
   const collapsibleIds = [];
 
-  function visitNode(node, depth) {
+  function visitNode(node, depth, ancestorContinuationDepths, siblingIndex, siblingCount) {
     const childIds = [];
+    const isLastSibling = siblingIndex === siblingCount - 1;
     const row = {
       id: node.id,
       type: 'node',
       node,
       depth,
       childIds,
+      isLastSibling,
+      ancestorContinuationDepths,
       canCollapse: node.kind === 'file' || (Array.isArray(node.children) && node.children.length > 0),
     };
 
@@ -1333,22 +1358,31 @@ function buildFlatArchiveIndex(archiveViews) {
     }
 
     if (Array.isArray(node.children) && node.children.length) {
-      for (const child of node.children) {
-        childIds.push(visitNode(child, depth + 1));
-      }
+      const nextAncestorContinuationDepths = isLastSibling
+        ? ancestorContinuationDepths
+        : ancestorContinuationDepths.concat(depth);
+
+      node.children.forEach((child, childIndex) => {
+        childIds.push(
+          visitNode(child, depth + 1, nextAncestorContinuationDepths, childIndex, node.children.length),
+        );
+      });
     }
 
     return row.id;
   }
 
-  for (const archive of archiveViews) {
+  archiveViews.forEach((archive, archiveIndex) => {
     const childIds = [];
+    const isLastSibling = archiveIndex === archiveViews.length - 1;
     const row = {
       id: archive.nodeId,
       type: 'archive',
       archive,
       depth: 0,
       childIds,
+      isLastSibling,
+      ancestorContinuationDepths: [],
       canCollapse: true,
     };
 
@@ -1356,10 +1390,14 @@ function buildFlatArchiveIndex(archiveViews) {
     rootIds.push(row.id);
     collapsibleIds.push(row.id);
 
-    for (const child of archive.tree.children) {
-      childIds.push(visitNode(child, 1));
-    }
-  }
+    const nextAncestorContinuationDepths = isLastSibling ? [] : [0];
+
+    archive.tree.children.forEach((child, childIndex) => {
+      childIds.push(
+        visitNode(child, 1, nextAncestorContinuationDepths, childIndex, archive.tree.children.length),
+      );
+    });
+  });
 
   return {
     rootIds,

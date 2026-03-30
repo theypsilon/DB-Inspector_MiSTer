@@ -727,7 +727,8 @@ button:hover {
 .tree-entry {
   position: relative;
   --tree-indent-step: 1.55rem;
-  --tree-connector-offset: 0.75rem;
+  --tree-control-size: 2.25rem;
+  --tree-control-center: calc(var(--tree-control-size) / 2);
   padding-left: calc(var(--tree-depth, 0) * var(--tree-indent-step));
 }
 
@@ -741,54 +742,58 @@ button:hover {
 
 .tree-guides {
   position: absolute;
-  inset: -0.35rem 0;
+  inset: 0;
   pointer-events: none;
 }
 
-.tree-guide-line,
+.tree-guide-vertical,
+.tree-guide-parent,
+.tree-guide-child,
 .tree-guide-elbow {
   position: absolute;
 }
 
-.tree-guide-line {
-  left: calc((var(--tree-guide-depth, 0) * var(--tree-indent-step)) - var(--tree-connector-offset));
-  top: 0;
-  bottom: 0;
+.tree-guide-vertical,
+.tree-guide-parent,
+.tree-guide-child {
+  left: calc((var(--tree-guide-depth, 0) * var(--tree-indent-step)) + var(--tree-control-center));
   width: 2px;
-  border-radius: 999px;
-  background: linear-gradient(
-    180deg,
-    transparent 0,
-    var(--tree-line) 0.45rem,
-    var(--tree-line-strong) 38%,
-    var(--tree-line) calc(100% - 0.45rem),
-    transparent 100%
-  );
-}
-
-.tree-guide-elbow {
-  left: calc((var(--tree-guide-depth, 0) * var(--tree-indent-step)) - var(--tree-connector-offset));
-  top: 1.06rem;
-  width: calc(var(--tree-connector-offset) + 0.36rem);
-  border-top: 2px solid var(--tree-line-strong);
-}
-
-.tree-guide-elbow::before {
-  content: '';
-  position: absolute;
-  left: -0.15rem;
-  top: -0.2rem;
-  width: 0.42rem;
-  height: 0.42rem;
+  transform: translateX(-50%);
   border-radius: 999px;
   background: var(--tree-line-strong);
-  box-shadow: 0 0 0 4px rgba(255, 250, 240, 0.92);
+}
+
+.tree-guide-vertical {
+  top: 0;
+  bottom: 0;
+}
+
+.tree-guide-parent {
+  top: 0;
+  height: var(--tree-control-center);
+}
+
+.tree-guide-parent-continue {
+  bottom: 0;
+  height: auto;
+}
+
+.tree-guide-child {
+  top: var(--tree-control-center);
+  bottom: 0;
+}
+
+.tree-guide-elbow {
+  left: calc(((var(--tree-guide-depth, 0) - 1) * var(--tree-indent-step)) + var(--tree-control-center));
+  top: var(--tree-control-center);
+  width: var(--tree-indent-step);
+  border-top: 2px solid var(--tree-line-strong);
 }
 
 .collapse-button,
 .collapse-spacer {
-  width: 2.25rem;
-  height: 2.25rem;
+  width: var(--tree-control-size);
+  height: var(--tree-control-size);
   flex: 0 0 auto;
 }
 
@@ -799,7 +804,17 @@ button:hover {
 }
 
 .collapse-spacer {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.leaf-marker {
+  width: 0.52rem;
+  height: 0.52rem;
+  border-radius: 999px;
+  background: var(--tree-line-strong);
+  box-shadow: 0 0 0 4px rgba(255, 250, 240, 0.94);
 }
 
 .tree-card,
@@ -1185,11 +1200,10 @@ button:hover {
 
   .tree-entry {
     --tree-indent-step: 1rem;
-    --tree-connector-offset: 0.55rem;
     padding-left: calc(var(--tree-depth, 0) * var(--tree-indent-step));
   }
 
   .tree-guide-elbow {
-    width: calc(var(--tree-connector-offset) + 0.25rem);
+    width: var(--tree-indent-step);
   }
 }
