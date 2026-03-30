@@ -1,43 +1,93 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="MiSTer downloader database inspector favicon">
-  <path
-    d="M4 12v37c0 6.1 12.5 11 28 11s28-4.9 28-11V12"
-    fill="#000"
-  />
-  <ellipse
-    cx="32"
-    cy="12"
-    rx="28"
-    ry="11.4"
-    fill="#000"
-  />
-  <ellipse
-    cx="32"
-    cy="27.5"
-    rx="28"
-    ry="10.1"
-    fill="none"
-    stroke="#000"
-    stroke-width="2.3"
-  />
-  <ellipse
-    cx="32"
-    cy="43"
-    rx="28"
-    ry="10.1"
-    fill="none"
-    stroke="#000"
-    stroke-width="2.1"
-  />
-  <ellipse
-    cx="32"
-    cy="55.5"
-    rx="28"
-    ry="7.2"
-    fill="#000"
-  />
+  <defs>
+    <clipPath id="left-half">
+      <rect x="0" y="0" width="32" height="64" />
+    </clipPath>
+    <clipPath id="right-half">
+      <rect x="32" y="0" width="32" height="64" />
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#left-half)">
+    <path
+      d="M4 12v37c0 6.1 12.5 11 28 11s28-4.9 28-11V12"
+      fill="#d92d20"
+    />
+    <ellipse
+      cx="32"
+      cy="12"
+      rx="28"
+      ry="11.4"
+      fill="#d92d20"
+    />
+    <ellipse
+      cx="32"
+      cy="27.5"
+      rx="28"
+      ry="10.1"
+      fill="none"
+      stroke="#d92d20"
+      stroke-width="2.3"
+    />
+    <ellipse
+      cx="32"
+      cy="43"
+      rx="28"
+      ry="10.1"
+      fill="none"
+      stroke="#d92d20"
+      stroke-width="2.1"
+    />
+    <ellipse
+      cx="32"
+      cy="55.5"
+      rx="28"
+      ry="7.2"
+      fill="#d92d20"
+    />
+  </g>
+
+  <g clip-path="url(#right-half)">
+    <path
+      d="M4 12v37c0 6.1 12.5 11 28 11s28-4.9 28-11V12"
+      fill="#2563eb"
+    />
+    <ellipse
+      cx="32"
+      cy="12"
+      rx="28"
+      ry="11.4"
+      fill="#2563eb"
+    />
+    <ellipse
+      cx="32"
+      cy="27.5"
+      rx="28"
+      ry="10.1"
+      fill="none"
+      stroke="#2563eb"
+      stroke-width="2.3"
+    />
+    <ellipse
+      cx="32"
+      cy="43"
+      rx="28"
+      ry="10.1"
+      fill="none"
+      stroke="#2563eb"
+      stroke-width="2.1"
+    />
+    <ellipse
+      cx="32"
+      cy="55.5"
+      rx="28"
+      ry="7.2"
+      fill="#2563eb"
+    />
+  </g>
 
   <path
     d="M38 0v23h14L32 64 12 23h14V0z"
-    fill="#fff"
+    fill="#16a34a"
   />
 </svg>
