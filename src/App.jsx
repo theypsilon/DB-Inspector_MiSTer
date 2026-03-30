@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import {
   loadDatabaseSourceFile,
   loadDatabaseSourceUrl,
@@ -17,35 +17,15 @@ export default function App() {
   const [errorMessage, setErrorMessage] = useState('');
   const [inspection, setInspection] = useState(null);
   const [iniSource, setIniSource] = useState(null);
-  const [collapsedIds, setCollapsedIds] = useState(() => new Set());
   const [databaseDetailed, setDatabaseDetailed] = useState(false);
-  const [filesystemDetailed, setFilesystemDetailed] = useState(false);
-  const [archivesDetailed, setArchivesDetailed] = useState(false);
-  const [nodeDetailVisibility, setNodeDetailVisibility] = useState({});
   const [catalogOptions, setCatalogOptions] = useState([]);
   const [catalogStatus, setCatalogStatus] = useState('loading');
   const [catalogError, setCatalogError] = useState('');
-  const [selectedCatalogKey, setSelectedCatalogKey] = useState('');
-  const [catalogQuery, setCatalogQuery] = useState('');
   const [catalogModalOpen, setCatalogModalOpen] = useState(false);
-  const [selectedIniEntryKey, setSelectedIniEntryKey] = useState('');
-  const [iniQuery, setIniQuery] = useState('');
   const [iniPickerOpen, setIniPickerOpen] = useState(false);
-
-  const filesystemNodeIds = inspection ? collectTreeNodeIds(inspection.filesystemTree) : [];
-  const archiveNodeIds = inspection ? collectArchiveNodeIds(inspection.archiveViews) : [];
-  const selectedCatalogOption =
-    catalogOptions.find((item) => item.key === selectedCatalogKey) ?? null;
-  const filteredCatalogOptions = catalogOptions.filter((option) => {
-    const haystack = `${option.dbId} ${option.title} ${option.dbUrl}`.toLowerCase();
-    return haystack.includes(catalogQuery.trim().toLowerCase());
-  });
-  const selectedIniEntry =
-    iniSource?.entries.find((entry) => entry.key === selectedIniEntryKey) ?? iniSource?.entries[0] ?? null;
-  const filteredIniEntries = (iniSource?.entries ?? []).filter((entry) => {
-    const haystack = `${entry.dbId} ${entry.dbUrl}`.toLowerCase();
-    return haystack.includes(iniQuery.trim().toLowerCase());
-  });
+  const inspectionKey = inspection
+    ? `${inspection.source.sourceLabel}:${inspection.overview.dbId}:${inspection.overview.timestamp}`
+    : 'empty';
 
   useEffect(() => {
     inspectionRef.current = inspection;
@@ -86,8 +66,6 @@ export default function App() {
 
       if (inspectionRef.current?.source?.sourceKind === 'url') {
         setInspection(null);
-        setCollapsedIds(new Set());
-        setNodeDetailVisibility({});
       }
     }
 
@@ -99,14 +77,10 @@ export default function App() {
 
   useEffect(() => {
     if (!iniSource?.entries.length) {
-      setSelectedIniEntryKey('');
-      setIniQuery('');
       setIniPickerOpen(false);
       return;
     }
 
-    setSelectedIniEntryKey(iniSource.entries[0].key);
-    setIniQuery('');
     setIniPickerOpen(true);
   }, [iniSource]);
 
@@ -165,29 +139,9 @@ export default function App() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!catalogOptions.length) {
-      setSelectedCatalogKey('');
-      return;
-    }
-
-    const normalizedCurrentUrl = normalizeComparableUrl(databaseUrl);
-    const matchedOption = catalogOptions.find(
-      (option) => normalizeComparableUrl(option.dbUrl) === normalizedCurrentUrl,
-    );
-
-    setSelectedCatalogKey(matchedOption?.key ?? '');
-  }, [catalogOptions, databaseUrl]);
-
-  function resetRenderedState() {
-    setCollapsedIds(new Set());
-    setNodeDetailVisibility({});
-  }
-
   function clearLoadedSource() {
     setInspection(null);
     setIniSource(null);
-    resetRenderedState();
   }
 
   async function handleLoadedSource(
@@ -199,7 +153,6 @@ export default function App() {
       setIniSource(null);
       setIniPickerOpen(false);
       setCatalogModalOpen(false);
-      resetRenderedState();
 
       if (origin === 'upload') {
         setDatabaseUrl('');
@@ -229,7 +182,6 @@ export default function App() {
 
     setInspection(null);
     setIniSource(loadedSource);
-    resetRenderedState();
 
     if (origin === 'upload') {
       setDatabaseUrl('');
@@ -315,69 +267,10 @@ export default function App() {
     await loadRemoteSource(entry.dbUrl);
   }
 
-  async function openSelectedCatalogDatabase() {
-    if (!selectedCatalogOption) {
-      return;
-    }
-
-    setCatalogModalOpen(false);
-    await loadRemoteSource(selectedCatalogOption.dbUrl);
-  }
-
   function handleDrop(event) {
     event.preventDefault();
     const file = event.dataTransfer.files?.[0];
     void loadFile(file);
-  }
-
-  function toggleNode(nodeId) {
-    setCollapsedIds((current) => {
-      const next = new Set(current);
-      if (next.has(nodeId)) {
-        next.delete(nodeId);
-      } else {
-        next.add(nodeId);
-      }
-      return next;
-    });
-  }
-
-  function setSectionCollapsed(nodeIds, collapsed) {
-    setCollapsedIds((current) => {
-      const next = new Set(current);
-      for (const nodeId of nodeIds) {
-        if (collapsed) {
-          next.add(nodeId);
-        } else {
-          next.delete(nodeId);
-        }
-      }
-      return next;
-    });
-  }
-
-  function isNodeDetailsVisible(nodeId, defaultVisible) {
-    if (Object.hasOwn(nodeDetailVisibility, nodeId)) {
-      return nodeDetailVisibility[nodeId];
-    }
-
-    return defaultVisible;
-  }
-
-  function toggleNodeDetails(nodeId, defaultVisible) {
-    setNodeDetailVisibility((current) => {
-      const currentVisible = Object.hasOwn(current, nodeId) ? current[nodeId] : defaultVisible;
-      const nextVisible = !currentVisible;
-      const next = { ...current };
-
-      if (nextVisible === defaultVisible) {
-        delete next[nodeId];
-      } else {
-        next[nodeId] = nextVisible;
-      }
-
-      return next;
-    });
   }
 
   return (
@@ -484,19 +377,16 @@ export default function App() {
             </p>
           ) : null}
           {catalogStatus === 'error' ? <p className="status error">{catalogError}</p> : null}
-          {!selectedCatalogOption ? (
-            <EmptyState message="Choose a catalog entry in the modal, then open it from there." />
-          ) : null}
+          <EmptyState message="Choose a catalog entry in the modal, then open it from there." />
         </section>
       </section>
 
       <div className="results-stack">
-        {(loadingMessage || errorMessage) && (
+        {errorMessage ? (
           <section className="panel status-panel">
-            {loadingMessage ? <p className="status loading">{loadingMessage}</p> : null}
-            {errorMessage ? <p className="status error">{errorMessage}</p> : null}
+            <p className="status error">{errorMessage}</p>
           </section>
-        )}
+        ) : null}
 
         {iniSource ? (
           <section className="panel source-panel">
@@ -511,18 +401,8 @@ export default function App() {
               <button type="button" onClick={() => setIniPickerOpen(true)}>
                 Browse entries
               </button>
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() => {
-                  void loadIniEntry(selectedIniEntry);
-                }}
-                disabled={!selectedIniEntry}
-              >
-                Open selected
-              </button>
             </div>
-            {!selectedIniEntry ? <EmptyState message="No INI entry is currently selected." /> : null}
+            <EmptyState message="Choose an INI entry in the modal, then open it from there." />
           </section>
         ) : null}
 
@@ -607,69 +487,12 @@ export default function App() {
               </div>
             </section>
 
-            <CollapsibleSection
-              label="Filesystem"
-              title="Files and folders"
-              defaultOpen
-              actions={
-                <SectionControls
-                  detailed={filesystemDetailed}
-                  onDetailedChange={setFilesystemDetailed}
-                  onExpandAll={() => setSectionCollapsed(filesystemNodeIds, false)}
-                  onCollapseAll={() => setSectionCollapsed(filesystemNodeIds, true)}
-                />
-              }
-            >
-              {inspection.filesystemTree.children.length ? (
-                <div className="tree-root">
-                  {inspection.filesystemTree.children.map((node) => (
-                    <TreeNode
-                      key={node.id}
-                      node={node}
-                      showDetails={filesystemDetailed}
-                      areDetailsVisible={isNodeDetailsVisible}
-                      collapsedIds={collapsedIds}
-                      onToggle={toggleNode}
-                      onToggleDetails={toggleNodeDetails}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <EmptyState message="No top-level files or folders were found." />
-              )}
-            </CollapsibleSection>
+            <FilesystemSection key={`filesystem:${inspectionKey}`} tree={inspection.filesystemTree} />
 
-            <CollapsibleSection
-              label="Archives"
-              title="Archive summaries"
-              defaultOpen
-              actions={
-                <SectionControls
-                  detailed={archivesDetailed}
-                  onDetailedChange={setArchivesDetailed}
-                  onExpandAll={() => setSectionCollapsed(archiveNodeIds, false)}
-                  onCollapseAll={() => setSectionCollapsed(archiveNodeIds, true)}
-                />
-              }
-            >
-              {inspection.archiveViews.length ? (
-                <div className="archive-list">
-                  {inspection.archiveViews.map((archive) => (
-                    <ArchiveCard
-                      key={archive.nodeId}
-                      archive={archive}
-                      showDetails={archivesDetailed}
-                      areDetailsVisible={isNodeDetailsVisible}
-                      collapsedIds={collapsedIds}
-                      onToggle={toggleNode}
-                      onToggleDetails={toggleNodeDetails}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <EmptyState message="This database does not define any archives." />
-              )}
-            </CollapsibleSection>
+            <ArchiveSummariesSection
+              key={`archives:${inspectionKey}`}
+              archiveViews={inspection.archiveViews}
+            />
 
             <CollapsibleSection
               label="Diagnostics"
@@ -714,197 +537,358 @@ export default function App() {
       </div>
 
       {catalogModalOpen ? (
-        <ModalFrame
-          label="Picker"
-          title="Browse Update_All_MiSTer catalog"
+        <CatalogPickerModal
+          options={catalogOptions}
+          status={catalogStatus}
+          error={catalogError}
+          initialDatabaseUrl={databaseUrl}
           onClose={() => setCatalogModalOpen(false)}
-          footer={
-            <>
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() => setCatalogModalOpen(false)}
-              >
-                Close
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  void openSelectedCatalogDatabase();
-                }}
-                disabled={!selectedCatalogOption}
-              >
-                Open selected database
-              </button>
-            </>
-          }
-        >
-          <div className="modal-toolbar">
-            <div className="catalog-search">
-              <label className="field-label" htmlFor="catalog-modal-search">
-                Search database picker
-              </label>
-              <input
-                id="catalog-modal-search"
-                type="search"
-                placeholder="Search by db_id, title, or URL"
-                value={catalogQuery}
-                onChange={(event) => setCatalogQuery(event.target.value)}
-                disabled={catalogStatus !== 'ready'}
-              />
-            </div>
-            <p className="catalog-count">
-              {catalogStatus === 'ready'
-                ? `${filteredCatalogOptions.length} of ${catalogOptions.length} entries`
-                : 'Catalog unavailable'}
-            </p>
-          </div>
-          {selectedCatalogOption ? (
-            <article className="compact-selected modal-selected">
-              <p className="section-label">Selected</p>
-              <div className="catalog-selected-grid compact-selected-grid">
-                <div>
-                  <span className="catalog-meta-label">db_id</span>
-                  <code>{selectedCatalogOption.dbId}</code>
-                </div>
-                <div>
-                  <span className="catalog-meta-label">Title</span>
-                  <strong>{selectedCatalogOption.title}</strong>
-                </div>
-                <div className="catalog-selected-url">
-                  <span className="catalog-meta-label">db_url</span>
-                  <a href={selectedCatalogOption.dbUrl} target="_blank" rel="noreferrer">
-                    {selectedCatalogOption.dbUrl}
-                  </a>
-                </div>
-              </div>
-            </article>
-          ) : null}
-          {catalogStatus === 'loading' ? (
-            <p className="helper-copy">
-              Reading the current `Update_All_MiSTer/src/update_all/databases.py` catalog at
-              runtime.
-            </p>
-          ) : null}
-          {catalogStatus === 'error' ? <p className="status error">{catalogError}</p> : null}
-          {catalogStatus === 'ready' ? (
-            filteredCatalogOptions.length ? (
-              <div className="catalog-list modal-list" role="listbox" aria-label="Database picker results">
-                {filteredCatalogOptions.map((option) => (
-                  <button
-                    key={option.key}
-                    type="button"
-                    className={
-                      option.key === selectedCatalogKey
-                        ? 'catalog-option catalog-option-selected'
-                        : 'catalog-option'
-                    }
-                    onClick={() => setSelectedCatalogKey(option.key)}
-                  >
-                    <div className="catalog-option-head">
-                      <code>{option.dbId}</code>
-                      <strong>{option.title}</strong>
-                    </div>
-                    <span className="catalog-option-url">{option.dbUrl}</span>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <EmptyState message="No catalog entries match the current search." />
-            )
-          ) : null}
-        </ModalFrame>
+          onOpenDatabase={(url) => {
+            void loadRemoteSource(url);
+          }}
+        />
       ) : null}
 
       {iniPickerOpen && iniSource ? (
-        <ModalFrame
-          label="INI"
-          title="Choose a database from this INI"
+        <IniPickerModal
+          iniSource={iniSource}
           onClose={() => setIniPickerOpen(false)}
-          footer={
-            <>
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() => setIniPickerOpen(false)}
-              >
-                Close
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  void loadIniEntry(selectedIniEntry);
-                }}
-                disabled={!selectedIniEntry}
-              >
-                Open selected database
-              </button>
-            </>
-          }
-        >
-          <div className="modal-toolbar">
-            <div className="catalog-search">
-              <label className="field-label" htmlFor="ini-modal-search">
-                Search INI entries
-              </label>
-              <input
-                id="ini-modal-search"
-                type="search"
-                placeholder="Search by db_id or URL"
-                value={iniQuery}
-                onChange={(event) => setIniQuery(event.target.value)}
-              />
-            </div>
-            <p className="catalog-count">
-              {filteredIniEntries.length} of {iniSource.entries.length} entries
-            </p>
-          </div>
-          {selectedIniEntry ? (
-            <article className="compact-selected modal-selected">
-              <p className="section-label">Selected</p>
-              <div className="catalog-selected-grid compact-selected-grid">
-                <div>
-                  <span className="catalog-meta-label">db_id</span>
-                  <code>{selectedIniEntry.dbId}</code>
-                </div>
-                <div className="catalog-selected-url">
-                  <span className="catalog-meta-label">db_url</span>
-                  <a href={selectedIniEntry.dbUrl} target="_blank" rel="noreferrer">
-                    {selectedIniEntry.dbUrl}
-                  </a>
-                </div>
-              </div>
-            </article>
-          ) : null}
-          {filteredIniEntries.length ? (
-            <div className="catalog-list modal-list" role="listbox" aria-label="INI database entries">
-              {filteredIniEntries.map((entry) => (
-                <button
-                  key={entry.key}
-                  type="button"
-                  className={
-                    entry.key === selectedIniEntry?.key
-                      ? 'catalog-option catalog-option-selected'
-                      : 'catalog-option'
-                  }
-                  onClick={() => setSelectedIniEntryKey(entry.key)}
-                >
-                  <div className="catalog-option-head">
-                    <code>{entry.dbId}</code>
-                    <strong>Referenced database</strong>
-                  </div>
-                  <span className="catalog-option-url">{entry.dbUrl}</span>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <EmptyState message="No INI entries match the current search." />
-          )}
-        </ModalFrame>
+          onOpenDatabase={(entry) => {
+            void loadIniEntry(entry);
+          }}
+        />
       ) : null}
     </main>
   );
 }
+
+const CatalogPickerModal = memo(function CatalogPickerModal({
+  options,
+  status,
+  error,
+  initialDatabaseUrl,
+  onClose,
+  onOpenDatabase,
+}) {
+  const initialSelectedKey = useMemo(() => {
+    const normalizedCurrentUrl = normalizeComparableUrl(initialDatabaseUrl);
+    return options.find((option) => normalizeComparableUrl(option.dbUrl) === normalizedCurrentUrl)?.key ?? '';
+  }, [initialDatabaseUrl, options]);
+  const [query, setQuery] = useState('');
+  const [selectedKey, setSelectedKey] = useState(initialSelectedKey);
+  const deferredQuery = useDeferredValue(query.trim().toLowerCase());
+
+  useEffect(() => {
+    setSelectedKey(initialSelectedKey);
+  }, [initialSelectedKey]);
+
+  const filteredOptions = useMemo(() => {
+    if (!deferredQuery) {
+      return options;
+    }
+
+    return options.filter((option) => {
+      const haystack = `${option.dbId} ${option.title} ${option.dbUrl}`.toLowerCase();
+      return haystack.includes(deferredQuery);
+    });
+  }, [deferredQuery, options]);
+
+  const selectedOption = useMemo(
+    () => options.find((item) => item.key === selectedKey) ?? null,
+    [options, selectedKey],
+  );
+
+  return (
+    <ModalFrame
+      label="Picker"
+      title="Browse Update_All_MiSTer catalog"
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" className="secondary-button" onClick={onClose}>
+            Close
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (selectedOption) {
+                onOpenDatabase(selectedOption.dbUrl);
+              }
+            }}
+            disabled={!selectedOption}
+          >
+            Open selected database
+          </button>
+        </>
+      }
+    >
+      <div className="modal-toolbar">
+        <div className="catalog-search">
+          <label className="field-label" htmlFor="catalog-modal-search">
+            Search database picker
+          </label>
+          <input
+            id="catalog-modal-search"
+            type="search"
+            placeholder="Search by db_id, title, or URL"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            disabled={status !== 'ready'}
+          />
+        </div>
+        <p className="catalog-count">
+          {status === 'ready'
+            ? `${filteredOptions.length} of ${options.length} entries`
+            : 'Catalog unavailable'}
+        </p>
+      </div>
+      {selectedOption ? (
+        <article className="compact-selected modal-selected">
+          <p className="section-label">Selected</p>
+          <div className="catalog-selected-grid compact-selected-grid">
+            <div>
+              <span className="catalog-meta-label">db_id</span>
+              <code>{selectedOption.dbId}</code>
+            </div>
+            <div>
+              <span className="catalog-meta-label">Title</span>
+              <strong>{selectedOption.title}</strong>
+            </div>
+            <div className="catalog-selected-url">
+              <span className="catalog-meta-label">db_url</span>
+              <a href={selectedOption.dbUrl} target="_blank" rel="noreferrer">
+                {selectedOption.dbUrl}
+              </a>
+            </div>
+          </div>
+        </article>
+      ) : null}
+      {status === 'loading' ? (
+        <p className="helper-copy">
+          Reading the current `Update_All_MiSTer/src/update_all/databases.py` catalog at runtime.
+        </p>
+      ) : null}
+      {status === 'error' ? <p className="status error">{error}</p> : null}
+      {status === 'ready' ? (
+        filteredOptions.length ? (
+          <div className="catalog-list modal-list" role="listbox" aria-label="Database picker results">
+            {filteredOptions.map((option) => (
+              <button
+                key={option.key}
+                type="button"
+                className={
+                  option.key === selectedKey
+                    ? 'catalog-option catalog-option-selected'
+                    : 'catalog-option'
+                }
+                onClick={() => setSelectedKey(option.key)}
+              >
+                <div className="catalog-option-head">
+                  <code>{option.dbId}</code>
+                  <strong>{option.title}</strong>
+                </div>
+                <span className="catalog-option-url">{option.dbUrl}</span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <EmptyState message="No catalog entries match the current search." />
+        )
+      ) : null}
+    </ModalFrame>
+  );
+});
+
+const IniPickerModal = memo(function IniPickerModal({ iniSource, onClose, onOpenDatabase }) {
+  const [query, setQuery] = useState('');
+  const [selectedKey, setSelectedKey] = useState(iniSource.entries[0]?.key ?? '');
+  const deferredQuery = useDeferredValue(query.trim().toLowerCase());
+
+  useEffect(() => {
+    setSelectedKey(iniSource.entries[0]?.key ?? '');
+  }, [iniSource]);
+
+  const filteredEntries = useMemo(() => {
+    if (!deferredQuery) {
+      return iniSource.entries;
+    }
+
+    return iniSource.entries.filter((entry) => {
+      const haystack = `${entry.dbId} ${entry.dbUrl}`.toLowerCase();
+      return haystack.includes(deferredQuery);
+    });
+  }, [deferredQuery, iniSource]);
+
+  const selectedEntry = useMemo(
+    () => iniSource.entries.find((entry) => entry.key === selectedKey) ?? null,
+    [iniSource, selectedKey],
+  );
+
+  return (
+    <ModalFrame
+      label="INI"
+      title="Choose a database from this INI"
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" className="secondary-button" onClick={onClose}>
+            Close
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (selectedEntry) {
+                onOpenDatabase(selectedEntry);
+              }
+            }}
+            disabled={!selectedEntry}
+          >
+            Open selected database
+          </button>
+        </>
+      }
+    >
+      <div className="modal-toolbar">
+        <div className="catalog-search">
+          <label className="field-label" htmlFor="ini-modal-search">
+            Search INI entries
+          </label>
+          <input
+            id="ini-modal-search"
+            type="search"
+            placeholder="Search by db_id or URL"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </div>
+        <p className="catalog-count">
+          {filteredEntries.length} of {iniSource.entries.length} entries
+        </p>
+      </div>
+      {selectedEntry ? (
+        <article className="compact-selected modal-selected">
+          <p className="section-label">Selected</p>
+          <div className="catalog-selected-grid compact-selected-grid">
+            <div>
+              <span className="catalog-meta-label">db_id</span>
+              <code>{selectedEntry.dbId}</code>
+            </div>
+            <div className="catalog-selected-url">
+              <span className="catalog-meta-label">db_url</span>
+              <a href={selectedEntry.dbUrl} target="_blank" rel="noreferrer">
+                {selectedEntry.dbUrl}
+              </a>
+            </div>
+          </div>
+        </article>
+      ) : null}
+      {filteredEntries.length ? (
+        <div className="catalog-list modal-list" role="listbox" aria-label="INI database entries">
+          {filteredEntries.map((entry) => (
+            <button
+              key={entry.key}
+              type="button"
+              className={
+                entry.key === selectedKey
+                  ? 'catalog-option catalog-option-selected'
+                  : 'catalog-option'
+              }
+              onClick={() => setSelectedKey(entry.key)}
+            >
+              <div className="catalog-option-head">
+                <code>{entry.dbId}</code>
+                <strong>Referenced database</strong>
+              </div>
+              <span className="catalog-option-url">{entry.dbUrl}</span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <EmptyState message="No INI entries match the current search." />
+      )}
+    </ModalFrame>
+  );
+});
+
+const FilesystemSection = memo(function FilesystemSection({ tree }) {
+  const [detailed, setDetailed] = useState(false);
+  const [collapseCommand, setCollapseCommand] = useState({ version: 0, collapsed: false });
+
+  return (
+    <CollapsibleSection
+      label="Filesystem"
+      title="Files and folders"
+      defaultOpen
+      actions={
+        <SectionControls
+          detailed={detailed}
+          onDetailedChange={setDetailed}
+          onExpandAll={() =>
+            setCollapseCommand((current) => ({ version: current.version + 1, collapsed: false }))
+          }
+          onCollapseAll={() =>
+            setCollapseCommand((current) => ({ version: current.version + 1, collapsed: true }))
+          }
+        />
+      }
+    >
+      {tree.children.length ? (
+        <div className="tree-root">
+          {tree.children.map((node) => (
+            <TreeNode
+              key={node.id}
+              node={node}
+              showDetails={detailed}
+              collapseCommand={collapseCommand}
+            />
+          ))}
+        </div>
+      ) : (
+        <EmptyState message="No top-level files or folders were found." />
+      )}
+    </CollapsibleSection>
+  );
+});
+
+const ArchiveSummariesSection = memo(function ArchiveSummariesSection({ archiveViews }) {
+  const [detailed, setDetailed] = useState(false);
+  const [collapseCommand, setCollapseCommand] = useState({ version: 0, collapsed: false });
+
+  return (
+    <CollapsibleSection
+      label="Archives"
+      title="Archive summaries"
+      defaultOpen
+      actions={
+        <SectionControls
+          detailed={detailed}
+          onDetailedChange={setDetailed}
+          onExpandAll={() =>
+            setCollapseCommand((current) => ({ version: current.version + 1, collapsed: false }))
+          }
+          onCollapseAll={() =>
+            setCollapseCommand((current) => ({ version: current.version + 1, collapsed: true }))
+          }
+        />
+      }
+    >
+      {archiveViews.length ? (
+        <div className="archive-list">
+          {archiveViews.map((archive) => (
+            <ArchiveCard
+              key={archive.nodeId}
+              archive={archive}
+              showDetails={detailed}
+              collapseCommand={collapseCommand}
+            />
+          ))}
+        </div>
+      ) : (
+        <EmptyState message="This database does not define any archives." />
+      )}
+    </CollapsibleSection>
+  );
+});
 
 function readDatabaseUrlSearchParam() {
   if (typeof window === 'undefined') {
@@ -986,21 +970,19 @@ function ModalFrame({ label, title, onClose, footer, children }) {
   );
 }
 
-function ArchiveCard({
-  archive,
-  showDetails,
-  areDetailsVisible,
-  collapsedIds,
-  onToggle,
-  onToggleDetails,
-}) {
-  const collapsed = collapsedIds.has(archive.nodeId);
-  const detailsVisible = areDetailsVisible(archive.nodeId, showDetails);
+const ArchiveCard = memo(function ArchiveCard({ archive, showDetails, collapseCommand }) {
+  const [collapsed, setCollapsed] = useState(false);
+  const [detailsOverride, setDetailsOverride] = useState(null);
+  const detailsVisible = detailsOverride ?? showDetails;
+
+  useEffect(() => {
+    setCollapsed(collapseCommand.collapsed);
+  }, [collapseCommand]);
 
   return (
     <article className="archive-card">
       <div className="tree-row">
-        <button type="button" className="collapse-button" onClick={() => onToggle(archive.nodeId)}>
+        <button type="button" className="collapse-button" onClick={() => setCollapsed((value) => !value)}>
           {collapsed ? '+' : '-'}
         </button>
         <div className="tree-card archive-surface">
@@ -1014,7 +996,13 @@ function ArchiveCard({
                 <button
                   type="button"
                   className="inline-action-button"
-                  onClick={() => onToggleDetails(archive.nodeId, showDetails)}
+                  onClick={() =>
+                    setDetailsOverride((current) => {
+                      const currentVisible = current ?? showDetails;
+                      const nextVisible = !currentVisible;
+                      return nextVisible === showDetails ? null : nextVisible;
+                    })
+                  }
                 >
                   {detailsVisible ? 'Hide details' : 'Show details'}
                 </button>
@@ -1045,10 +1033,7 @@ function ArchiveCard({
                 key={node.id}
                 node={node}
                 showDetails={showDetails}
-                areDetailsVisible={areDetailsVisible}
-                collapsedIds={collapsedIds}
-                onToggle={onToggle}
-                onToggleDetails={onToggleDetails}
+                collapseCommand={collapseCommand}
               />
             ))}
           </div>
@@ -1060,27 +1045,27 @@ function ArchiveCard({
       ) : null}
     </article>
   );
-}
+});
 
-function TreeNode({
-  node,
-  showDetails,
-  areDetailsVisible,
-  collapsedIds,
-  onToggle,
-  onToggleDetails,
-}) {
+const TreeNode = memo(function TreeNode({ node, showDetails, collapseCommand }) {
   const hasChildren = Array.isArray(node.children) && node.children.length > 0;
   const canCollapse = hasChildren || node.kind === 'file';
-  const collapsed = collapsedIds.has(node.id);
-  const detailsVisible = areDetailsVisible(node.id, showDetails);
+  const [collapsed, setCollapsed] = useState(false);
+  const [detailsOverride, setDetailsOverride] = useState(null);
+  const detailsVisible = detailsOverride ?? showDetails;
   const bodyCollapsed = node.kind === 'file' && collapsed;
+
+  useEffect(() => {
+    if (canCollapse) {
+      setCollapsed(collapseCommand.collapsed);
+    }
+  }, [canCollapse, collapseCommand]);
 
   return (
     <div className="tree-node">
       <div className="tree-row">
         {canCollapse ? (
-          <button type="button" className="collapse-button" onClick={() => onToggle(node.id)}>
+          <button type="button" className="collapse-button" onClick={() => setCollapsed((value) => !value)}>
             {collapsed ? '+' : '-'}
           </button>
         ) : (
@@ -1099,7 +1084,13 @@ function TreeNode({
                 <button
                   type="button"
                   className="inline-action-button"
-                  onClick={() => onToggleDetails(node.id, showDetails)}
+                  onClick={() =>
+                    setDetailsOverride((current) => {
+                      const currentVisible = current ?? showDetails;
+                      const nextVisible = !currentVisible;
+                      return nextVisible === showDetails ? null : nextVisible;
+                    })
+                  }
                 >
                   {detailsVisible ? 'Hide details' : 'Show details'}
                 </button>
@@ -1130,17 +1121,14 @@ function TreeNode({
               key={child.id}
               node={child}
               showDetails={showDetails}
-              areDetailsVisible={areDetailsVisible}
-              collapsedIds={collapsedIds}
-              onToggle={onToggle}
-              onToggleDetails={onToggleDetails}
+              collapseCommand={collapseCommand}
             />
           ))}
         </div>
       ) : null}
     </div>
   );
-}
+});
 
 function HighlightCard({ label, value, subvalue, accent }) {
   return (
@@ -1337,39 +1325,4 @@ function DetailedToggle({ detailed, onDetailedChange }) {
       </button>
     </div>
   );
-}
-
-function collectTreeNodeIds(tree) {
-  const ids = [];
-
-  function visit(node) {
-    if (!node) {
-      return;
-    }
-
-    ids.push(node.id);
-
-    if (Array.isArray(node.children) && node.children.length) {
-      for (const child of node.children) {
-        visit(child);
-      }
-    }
-  }
-
-  for (const child of tree?.children || []) {
-    visit(child);
-  }
-
-  return ids;
-}
-
-function collectArchiveNodeIds(archives) {
-  const ids = [];
-
-  for (const archive of archives || []) {
-    ids.push(archive.nodeId);
-    ids.push(...collectTreeNodeIds(archive.tree));
-  }
-
-  return ids;
 }
