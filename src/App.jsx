@@ -4,6 +4,7 @@ import {
   useCallback,
   useDeferredValue,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -16,8 +17,8 @@ import {
 } from './lib/database.js';
 
 const DATABASE_URL_PARAM = 'database-url';
-const INITIAL_TREE_RENDER_COUNT = 120;
-const TREE_RENDER_CHUNK_SIZE = 180;
+const TREE_LIST_GAP_PX = 13;
+const TREE_OVERSCAN_PX = 900;
 
 export default function App() {
   const fileInputRef = useRef(null);
@@ -896,14 +897,33 @@ const TreeSection = memo(function TreeSection({
   emptyMessage,
   index,
 }) {
+  const containerRef = useRef(null);
   const [detailed, setDetailed] = useState(false);
   const [collapsedIds, setCollapsedIds] = useState(() => new Set());
   const [detailOverrides, setDetailOverrides] = useState(() => new Map());
+  const [measuredHeights, setMeasuredHeights] = useState(() => new Map());
   const visibleRowIds = useMemo(
     () => collectVisibleRowIds(index.rootIds, index.rowsById, collapsedIds),
     [index, collapsedIds],
   );
-  const renderedRowIds = useProgressiveRows(visibleRowIds);
+  const viewport = useWindowViewport();
+  const containerTop = containerRef.current
+    ? containerRef.current.getBoundingClientRect().top + viewport.scrollY
+    : 0;
+  const virtualRows = useMemo(
+    () =>
+      buildVirtualRows({
+        rowIds: visibleRowIds,
+        rowsById: index.rowsById,
+        collapsedIds,
+        detailOverrides,
+        defaultDetailed: detailed,
+        measuredHeights,
+        containerTop,
+        viewport,
+      }),
+    [visibleRowIds, index, collapsedIds, detailOverrides, detailed, measuredHeights, containerTop, viewport],
+  );
 
   const handleDetailedChange = useCallback((nextDetailed) => {
     startTransition(() => {
@@ -938,6 +958,23 @@ const TreeSection = memo(function TreeSection({
     [detailed],
   );
 
+  const handleRowHeightChange = useCallback((rowId, height) => {
+    setMeasuredHeights((current) => {
+      const previous = current.get(rowId);
+      if (previous === height) {
+        return current;
+      }
+
+      const next = new Map(current);
+      next.set(rowId, height);
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    setMeasuredHeights(new Map());
+  }, [index]);
+
   return (
     <CollapsibleSection
       label={label}
@@ -952,9 +989,9 @@ const TreeSection = memo(function TreeSection({
         />
       }
     >
-      {renderedRowIds.length ? (
-        <div className={listClassName}>
-          {renderedRowIds.map((rowId) => {
+      {visibleRowIds.length ? (
+        <div className={listClassName} ref={containerRef} style={{ height: `${virtualRows.totalHeight}px` }}>
+          {virtualRows.items.map(({ rowId, top }) => {
             const row = index.rowsById.get(rowId);
             if (!row) {
               return null;
@@ -968,15 +1005,11 @@ const TreeSection = memo(function TreeSection({
                 detailsVisible={detailOverrides.get(row.id) ?? detailed}
                 onToggleCollapsed={handleToggleCollapsed}
                 onToggleDetails={handleToggleDetails}
+                onHeightChange={handleRowHeightChange}
+                virtualStyle={buildVirtualRowStyle(top)}
               />
             );
           })}
-          {renderedRowIds.length < visibleRowIds.length ? (
-            <p className="tree-progress">
-              Rendering {renderedRowIds.length.toLocaleString()} of{' '}
-              {visibleRowIds.length.toLocaleString()} visible entries...
-            </p>
-          ) : null}
         </div>
       ) : (
         <EmptyState message={emptyMessage} />
@@ -1076,7 +1109,10 @@ const TreeEntryRow = memo(function TreeEntryRow({
   detailsVisible,
   onToggleCollapsed,
   onToggleDetails,
+  onHeightChange,
+  virtualStyle,
 }) {
+  const rowRef = useRef(null);
   const isArchive = row.type === 'archive';
   const canCollapse = row.canCollapse;
   const childIds = row.childIds;
@@ -1101,8 +1137,37 @@ const TreeEntryRow = memo(function TreeEntryRow({
     .join(' ');
   const Container = isArchive ? 'article' : 'div';
 
+  useLayoutEffect(() => {
+    const element = rowRef.current;
+    if (!element) {
+      return undefined;
+    }
+
+    const reportHeight = () => {
+      onHeightChange(row.id, Math.ceil(element.getBoundingClientRect().height));
+    };
+
+    reportHeight();
+
+    if (typeof ResizeObserver === 'undefined') {
+      return undefined;
+    }
+
+    const observer = new ResizeObserver(() => {
+      reportHeight();
+    });
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+    };
+  }, [row.id, collapsed, detailsVisible, onHeightChange]);
+
   return (
-    <Container className={containerClassName} style={buildTreeDepthStyle(row.depth)}>
+    <Container
+      ref={rowRef}
+      className={containerClassName}
+      style={{ ...buildTreeDepthStyle(row.depth), ...virtualStyle }}
+    >
       <div className="tree-row">
         {canCollapse ? (
           <button
@@ -1319,34 +1384,199 @@ function buildTreeDepthStyle(depth) {
   return { '--tree-depth': depth };
 }
 
-function useProgressiveRows(rowIds) {
-  const deferredRowIds = useDeferredValue(rowIds);
-  const [renderCount, setRenderCount] = useState(deferredRowIds.length);
+function buildVirtualRowStyle(top) {
+  return {
+    position: 'absolute',
+    top: `${top}px`,
+    left: 0,
+    right: 0,
+  };
+}
+
+function useWindowViewport() {
+  const [viewport, setViewport] = useState(() => ({
+    scrollY: typeof window === 'undefined' ? 0 : window.scrollY,
+    height: typeof window === 'undefined' ? 0 : window.innerHeight,
+  }));
 
   useEffect(() => {
-    if (deferredRowIds.length <= INITIAL_TREE_RENDER_COUNT) {
-      setRenderCount(deferredRowIds.length);
+    if (typeof window === 'undefined') {
       return undefined;
     }
 
     let frameId = 0;
-    setRenderCount(INITIAL_TREE_RENDER_COUNT);
+    let resizeObserver = null;
 
-    const pump = () => {
-      setRenderCount((current) => {
-        const next = Math.min(deferredRowIds.length, current + TREE_RENDER_CHUNK_SIZE);
-        if (next < deferredRowIds.length) {
-          frameId = window.requestAnimationFrame(pump);
+    const updateViewport = () => {
+      frameId = 0;
+      setViewport((current) => {
+        const next = {
+          scrollY: window.scrollY,
+          height: window.innerHeight,
+        };
+
+        if (current.scrollY === next.scrollY && current.height === next.height) {
+          return current;
         }
+
         return next;
       });
     };
 
-    frameId = window.requestAnimationFrame(pump);
-    return () => window.cancelAnimationFrame(frameId);
-  }, [deferredRowIds]);
+    const scheduleUpdate = () => {
+      if (!frameId) {
+        frameId = window.requestAnimationFrame(updateViewport);
+      }
+    };
 
-  return useMemo(() => deferredRowIds.slice(0, renderCount), [deferredRowIds, renderCount]);
+    scheduleUpdate();
+    window.addEventListener('scroll', scheduleUpdate, { passive: true });
+    window.addEventListener('resize', scheduleUpdate);
+
+    if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => {
+        scheduleUpdate();
+      });
+      resizeObserver.observe(document.body);
+      resizeObserver.observe(document.documentElement);
+    }
+
+    return () => {
+      if (frameId) {
+        window.cancelAnimationFrame(frameId);
+      }
+
+      window.removeEventListener('scroll', scheduleUpdate);
+      window.removeEventListener('resize', scheduleUpdate);
+      resizeObserver?.disconnect();
+    };
+  }, []);
+
+  return viewport;
+}
+
+function buildVirtualRows({
+  rowIds,
+  rowsById,
+  collapsedIds,
+  detailOverrides,
+  defaultDetailed,
+  measuredHeights,
+  containerTop,
+  viewport,
+}) {
+  if (!rowIds.length) {
+    return {
+      totalHeight: 0,
+      items: [],
+    };
+  }
+
+  const offsets = new Array(rowIds.length);
+  const bottoms = new Array(rowIds.length);
+  let totalHeight = 0;
+
+  for (let index = 0; index < rowIds.length; index += 1) {
+    const rowId = rowIds[index];
+    const row = rowsById.get(rowId);
+    const collapsed = collapsedIds.has(rowId);
+    const detailsVisible = detailOverrides.get(rowId) ?? defaultDetailed;
+    const measuredHeight = measuredHeights.get(rowId);
+    const rowHeight =
+      measuredHeight ?? estimateRowHeight(row, { collapsed, detailsVisible });
+
+    offsets[index] = totalHeight;
+    bottoms[index] = totalHeight + rowHeight;
+    totalHeight += rowHeight;
+
+    if (index < rowIds.length - 1) {
+      totalHeight += TREE_LIST_GAP_PX;
+    }
+  }
+
+  const viewportTop = viewport.scrollY - containerTop - TREE_OVERSCAN_PX;
+  const viewportBottom = viewport.scrollY + viewport.height - containerTop + TREE_OVERSCAN_PX;
+  const startIndex = lowerBound(bottoms, viewportTop);
+  const endIndex = Math.min(rowIds.length, upperBound(offsets, viewportBottom));
+  const items = [];
+
+  for (let index = startIndex; index < endIndex; index += 1) {
+    items.push({
+      rowId: rowIds[index],
+      top: offsets[index],
+    });
+  }
+
+  return {
+    totalHeight,
+    items,
+  };
+}
+
+function estimateRowHeight(row, { collapsed, detailsVisible }) {
+  if (!row) {
+    return 180;
+  }
+
+  if (row.type === 'archive') {
+    let estimate = 180;
+    if (detailsVisible) {
+      estimate += 120;
+    }
+
+    if (row.archive.issues.length) {
+      estimate += Math.min(row.archive.issues.length, 4) * 42;
+    }
+
+    if (!collapsed && !row.childIds.length) {
+      estimate += 48;
+    }
+
+    return estimate;
+  }
+
+  if (row.node.kind === 'file' && collapsed) {
+    return 120;
+  }
+
+  let estimate = row.node.kind === 'folder' ? 145 : 155;
+  if (detailsVisible) {
+    estimate += 110;
+  }
+
+  return estimate;
+}
+
+function lowerBound(values, target) {
+  let low = 0;
+  let high = values.length;
+
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    if (values[middle] < target) {
+      low = middle + 1;
+    } else {
+      high = middle;
+    }
+  }
+
+  return low;
+}
+
+function upperBound(values, target) {
+  let low = 0;
+  let high = values.length;
+
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    if (values[middle] <= target) {
+      low = middle + 1;
+    } else {
+      high = middle;
+    }
+  }
+
+  return low;
 }
 
 function HighlightCard({ label, value, subvalue, accent }) {

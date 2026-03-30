@@ -714,8 +714,8 @@ button:hover {
 
 .tree-root,
 .archive-list {
-  display: grid;
-  gap: 0.8rem;
+  position: relative;
+  min-height: 1px;
 }
 
 .archive-card {
