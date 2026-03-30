@@ -1114,8 +1114,9 @@ const TreeEntryRow = memo(function TreeEntryRow({
 }) {
   const rowRef = useRef(null);
   const isArchive = row.type === 'archive';
-  const canCollapse = row.canCollapse;
   const childIds = row.childIds;
+  const canCollapse = row.canCollapse;
+  const showCollapseControl = isArchive || childIds.length > 0;
   const title = isArchive ? row.archive.title : row.node.name;
   const badge = isArchive ? 'ZIP' : row.node.badge;
   const badgeClassName = isArchive
@@ -1187,7 +1188,7 @@ const TreeEntryRow = memo(function TreeEntryRow({
       style={{ ...buildTreeDepthStyle(row.depth), ...virtualStyle }}
     >
       <div className="tree-row">
-        {canCollapse ? (
+        {showCollapseControl ? (
           <button
             type="button"
             className="collapse-button"

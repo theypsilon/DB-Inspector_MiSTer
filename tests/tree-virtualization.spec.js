@@ -26,13 +26,13 @@ test('virtualized filesystem and archive trees still behave correctly', async ({
     })
     .first();
 
+  await expect(firstFileRow.locator('.collapse-button')).toHaveCount(0);
   await firstFileRow.getByRole('button', { name: 'Show details' }).click();
-  await expect(firstFileRow.getByText('Hash')).toBeVisible();
-
-  await firstFileRow.locator('.collapse-button').click();
-  await expect(firstFileRow.getByText('Hash')).toHaveCount(0);
+  await expect(firstFileRow.getByText('Hash', { exact: true })).toBeVisible();
+  await firstFileRow.getByRole('button', { name: 'Hide details' }).click();
+  await expect(firstFileRow.getByText('Hash', { exact: true })).toHaveCount(0);
   await firstFileRow.getByRole('button', { name: 'Show details' }).click();
-  await expect(firstFileRow.getByText('Hash')).toBeVisible();
+  await expect(firstFileRow.getByText('Hash', { exact: true })).toBeVisible();
 
   await scrollVirtualListNearBottom(page, '.tree-root');
   await expect(page.getByRole('heading', { name: `file_${pad(FILE_COUNT - 1)}.rbf` })).toBeVisible();
