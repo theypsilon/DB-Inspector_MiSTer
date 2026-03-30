@@ -465,10 +465,10 @@ export default function App() {
     <main className="app-shell">
       <section className="hero panel">
         <div>
-          <p className="eyebrow">MiSTer Databases</p>
+          <p className="eyebrow">Downloader Databases</p>
           <h1>Custom Database Inspector</h1>
           <p className="hero-copy">
-            Open a MiSTer database from your computer or from a web link. Review its details,
+            Open a Downloader database from your computer or from a web link. Review its details,
             browse folders and files, inspect archives, and spot warnings in one place.
           </p>
         </div>
