@@ -989,7 +989,6 @@ function buildFolderRecord({ scope, context, path, dbVersion, dbId, folder, tagL
       tags: tagEntries,
     }),
     details: [
-      { label: 'Destination', value: pathInfo.displayPath, kind: 'code' },
       {
         label: 'External path',
         value:
@@ -1041,7 +1040,6 @@ function buildFileRecord({
       tags: tagEntries,
     }),
     details: [
-      { label: 'Destination', value: pathInfo.displayPath, kind: 'code' },
       ...buildHashAndSizeDetails({
         hash: getString(fileRecord.hash),
         size: Number(fileRecord.size),
@@ -1122,7 +1120,6 @@ function buildArchiveFolderRecord({
       tags: tagEntries,
     }),
     details: [
-      { label: 'Destination', value: pathInfo.displayPath, kind: 'code' },
       { label: 'Archive ID', value: arcId || 'Missing', kind: 'code' },
       {
         label: 'External path',
@@ -1208,7 +1205,6 @@ function buildArchiveFileRecord({
       tags: tagEntries,
     }),
     details: [
-      { label: 'Destination', value: pathInfo.displayPath, kind: 'code' },
       ...buildHashAndSizeDetails({
         hash: getString(wrapped.hash),
         size: Number(wrapped.size),
