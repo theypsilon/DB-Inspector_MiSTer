@@ -43,6 +43,7 @@ export default function App() {
   const [filterInput, setFilterInput] = useState('');
   const [debouncedFilterInput, setDebouncedFilterInput] = useState('');
   const [iniSource, setIniSource] = useState(null);
+  const [sourceDefaultFilter, setSourceDefaultFilter] = useState('');
   const [databaseDetailed, setDatabaseDetailed] = useState(false);
   const [runtimeCatalogOptions, setRuntimeCatalogOptions] = useState([]);
   const [customCatalogOptions, setCustomCatalogOptions] = useState([]);
@@ -76,11 +77,13 @@ export default function App() {
     filterSearchParamReadyRef.current = false;
 
     const sharedFilter = readFilterSearchParam();
-    const nextFilter = sharedFilter.isPresent ? sharedFilter.value : inspection?.overview.defaultFilter || '';
+    const nextFilter = sharedFilter.isPresent
+      ? sharedFilter.value
+      : sourceDefaultFilter || inspection?.overview.defaultFilter || '';
     expectedFilterSearchParamValueRef.current = nextFilter;
     setFilterInput(nextFilter);
     setDebouncedFilterInput(nextFilter);
-  }, [inspectionKeyBase]);
+  }, [inspectionKeyBase, sourceDefaultFilter]);
 
   useEffect(() => {
     if (filterInput === debouncedFilterInput) {
@@ -255,9 +258,13 @@ export default function App() {
   function clearLoadedSource() {
     setInspection(null);
     setIniSource(null);
+    setSourceDefaultFilter('');
   }
 
-  function startRemoteDatabaseLoad(url, { registerInCatalog = false } = {}) {
+  function startRemoteDatabaseLoad(
+    url,
+    { registerInCatalog = false, sourceDefaultFilter = '' } = {},
+  ) {
     const requestedUrl = String(url).trim();
     if (!requestedUrl) {
       return;
@@ -269,7 +276,11 @@ export default function App() {
     clearLoadedSource();
 
     window.setTimeout(() => {
-      void loadRemoteSource(requestedUrl, { skipPrepare: true, registerInCatalog });
+      void loadRemoteSource(requestedUrl, {
+        skipPrepare: true,
+        registerInCatalog,
+        sourceDefaultFilter,
+      });
     }, 0);
   }
 
@@ -281,6 +292,7 @@ export default function App() {
       syncSearchParam = true,
       visitedUrls = new Set(),
       registerInCatalog = true,
+      sourceDefaultFilter: nextSourceDefaultFilter = '',
     } = {},
   ) {
     if (registerInCatalog) {
@@ -293,6 +305,7 @@ export default function App() {
     }
 
     if (loadedSource.kind === 'database') {
+      setSourceDefaultFilter(nextSourceDefaultFilter);
       setInspection(loadedSource.inspection);
       setIniSource(null);
       setIniPickerOpen(false);
@@ -321,11 +334,13 @@ export default function App() {
         syncSearchParam: origin === 'url' ? syncSearchParam : true,
         visitedUrls,
         registerInCatalog: false,
+        sourceDefaultFilter: loadedSource.defaultFilter || '',
       });
       return;
     }
 
     setInspection(null);
+    setSourceDefaultFilter('');
     setIniSource(loadedSource);
 
     if (origin === 'upload') {
@@ -373,6 +388,7 @@ export default function App() {
       visitedUrls = new Set(),
       skipPrepare = false,
       registerInCatalog = true,
+      sourceDefaultFilter = '',
     } = {},
   ) {
     const requestedUrl = String(input).trim();
@@ -417,6 +433,7 @@ export default function App() {
         syncSearchParam,
         visitedUrls: nextVisitedUrls,
         registerInCatalog,
+        sourceDefaultFilter,
       });
     } catch (error) {
       setErrorMessage(error.message);
@@ -435,7 +452,10 @@ export default function App() {
       return;
     }
 
-    startRemoteDatabaseLoad(entry.dbUrl, { registerInCatalog: false });
+    startRemoteDatabaseLoad(entry.dbUrl, {
+      registerInCatalog: false,
+      sourceDefaultFilter: iniSource?.defaultFilter || '',
+    });
   }
 
   function triggerDropzoneDropPulse() {

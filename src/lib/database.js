@@ -204,6 +204,7 @@ async function buildLoadedSource(decoded, source) {
     kind: 'ini',
     source,
     entries: decoded.entries,
+    defaultFilter: decoded.defaultFilter || '',
   };
 }
 
@@ -374,9 +375,11 @@ function parseSupportedSourceText(text, sourceName, { containerType, entryName, 
 
   function parseIni() {
     try {
+      const parsedIni = parseDatabaseListIni(text, sourceName, { baseUrl });
       return {
         documentType: 'ini',
-        entries: parseDatabaseListIni(text, sourceName, { baseUrl }),
+        entries: parsedIni.entries,
+        defaultFilter: parsedIni.defaultFilter,
         containerType: inferredIniContainerType,
         entryName,
       };
@@ -437,6 +440,8 @@ function parseDatabaseListIni(source, sourceName, { baseUrl = null } = {}) {
   const entries = [];
   let currentEntry = null;
   let ignoredSectionActive = false;
+  let ignoredSectionName = '';
+  let defaultFilter = '';
 
   function finalizeEntry() {
     if (!currentEntry) {
@@ -473,6 +478,7 @@ function parseDatabaseListIni(source, sourceName, { baseUrl = null } = {}) {
     if (sectionMatch) {
       finalizeEntry();
       const sectionName = sectionMatch[1].trim();
+      ignoredSectionName = sectionName.toLowerCase();
       ignoredSectionActive = isIgnoredDatabaseListSection(sectionName);
       currentEntry = ignoredSectionActive
         ? null
@@ -491,16 +497,19 @@ function parseDatabaseListIni(source, sourceName, { baseUrl = null } = {}) {
       );
     }
 
+    const key = rawLine.slice(0, separatorIndex).trim().toLowerCase();
+    const value = rawLine.slice(separatorIndex + 1).trim();
+
     if (!currentEntry) {
       if (ignoredSectionActive) {
+        if (ignoredSectionName === 'mister' && key === 'filter') {
+          defaultFilter = value;
+        }
         continue;
       }
 
       throw new Error(`Line ${index + 1} appears before any section header in ${sourceName}.`);
     }
-
-    const key = rawLine.slice(0, separatorIndex).trim().toLowerCase();
-    const value = rawLine.slice(separatorIndex + 1).trim();
 
     if (key === 'db_url') {
       currentEntry.dbUrl = value;
@@ -513,7 +522,10 @@ function parseDatabaseListIni(source, sourceName, { baseUrl = null } = {}) {
     throw new Error('No database entries with a URL were found.');
   }
 
-  return entries;
+  return {
+    entries,
+    defaultFilter,
+  };
 }
 
 function isIgnoredDatabaseListSection(sectionName) {
