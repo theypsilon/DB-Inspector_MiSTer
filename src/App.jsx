@@ -2323,22 +2323,20 @@ function SectionControls({
 
 function DetailedToggle({ detailed, onDetailedChange }) {
   return (
-    <div className="toggle-group" aria-label="Detailed toggle">
+    <button
+      type="button"
+      className="toggle-group toggle-group-button"
+      aria-label="Detailed toggle"
+      aria-pressed={detailed}
+      onClick={() => onDetailedChange(!detailed)}
+    >
       <span className="toggle-label">Detailed</span>
-      <button
-        type="button"
-        className={!detailed ? 'toggle-chip active' : 'toggle-chip'}
-        onClick={() => onDetailedChange(false)}
-      >
+      <span className={!detailed ? 'toggle-chip active' : 'toggle-chip'}>
         Off
-      </button>
-      <button
-        type="button"
-        className={detailed ? 'toggle-chip active' : 'toggle-chip'}
-        onClick={() => onDetailedChange(true)}
-      >
+      </span>
+      <span className={detailed ? 'toggle-chip active' : 'toggle-chip'}>
         On
-      </button>
-    </div>
+      </span>
+    </button>
   );
 }
