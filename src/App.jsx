@@ -1,4 +1,13 @@
-import { memo, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  memo,
+  startTransition,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { flushSync } from 'react-dom';
 import {
   loadDatabaseSourceFile,
@@ -848,7 +857,46 @@ const IniPickerModal = memo(function IniPickerModal({ iniSource, onClose, onOpen
 
 const FilesystemSection = memo(function FilesystemSection({ tree }) {
   const [detailed, setDetailed] = useState(false);
-  const [collapseCommand, setCollapseCommand] = useState({ version: 0, collapsed: false });
+  const [collapsedIds, setCollapsedIds] = useState(() => new Set());
+  const [detailOverrides, setDetailOverrides] = useState(() => new Map());
+  const index = useMemo(() => buildFlatNodeIndex(tree.children), [tree]);
+  const visibleRows = useMemo(
+    () => collectVisibleRows(index.rootIds, index.rowsById, collapsedIds),
+    [index, collapsedIds],
+  );
+
+  const handleDetailedChange = useCallback((nextDetailed) => {
+    startTransition(() => {
+      setDetailed(nextDetailed);
+    });
+  }, []);
+
+  const handleExpandAll = useCallback(() => {
+    startTransition(() => {
+      setCollapsedIds(new Set());
+    });
+  }, []);
+
+  const handleCollapseAll = useCallback(() => {
+    startTransition(() => {
+      setCollapsedIds(new Set(index.collapsibleIds));
+    });
+  }, [index]);
+
+  const handleToggleCollapsed = useCallback((rowId) => {
+    startTransition(() => {
+      setCollapsedIds((current) => toggleSetMembership(current, rowId));
+    });
+  }, []);
+
+  const handleToggleDetails = useCallback(
+    (rowId) => {
+      startTransition(() => {
+        setDetailOverrides((current) => toggleDetailOverride(current, rowId, detailed));
+      });
+    },
+    [detailed],
+  );
 
   return (
     <CollapsibleSection
@@ -858,24 +906,22 @@ const FilesystemSection = memo(function FilesystemSection({ tree }) {
       actions={
         <SectionControls
           detailed={detailed}
-          onDetailedChange={setDetailed}
-          onExpandAll={() =>
-            setCollapseCommand((current) => ({ version: current.version + 1, collapsed: false }))
-          }
-          onCollapseAll={() =>
-            setCollapseCommand((current) => ({ version: current.version + 1, collapsed: true }))
-          }
+          onDetailedChange={handleDetailedChange}
+          onExpandAll={handleExpandAll}
+          onCollapseAll={handleCollapseAll}
         />
       }
     >
-      {tree.children.length ? (
+      {visibleRows.length ? (
         <div className="tree-root">
-          {tree.children.map((node) => (
-            <TreeNode
-              key={node.id}
-              node={node}
-              showDetails={detailed}
-              collapseCommand={collapseCommand}
+          {visibleRows.map((row) => (
+            <FlatNodeRow
+              key={row.id}
+              row={row}
+              collapsed={collapsedIds.has(row.id)}
+              detailsVisible={detailOverrides.get(row.id) ?? detailed}
+              onToggleCollapsed={handleToggleCollapsed}
+              onToggleDetails={handleToggleDetails}
             />
           ))}
         </div>
@@ -888,7 +934,46 @@ const FilesystemSection = memo(function FilesystemSection({ tree }) {
 
 const ArchiveSummariesSection = memo(function ArchiveSummariesSection({ archiveViews }) {
   const [detailed, setDetailed] = useState(false);
-  const [collapseCommand, setCollapseCommand] = useState({ version: 0, collapsed: false });
+  const [collapsedIds, setCollapsedIds] = useState(() => new Set());
+  const [detailOverrides, setDetailOverrides] = useState(() => new Map());
+  const index = useMemo(() => buildFlatArchiveIndex(archiveViews), [archiveViews]);
+  const visibleRows = useMemo(
+    () => collectVisibleRows(index.rootIds, index.rowsById, collapsedIds),
+    [index, collapsedIds],
+  );
+
+  const handleDetailedChange = useCallback((nextDetailed) => {
+    startTransition(() => {
+      setDetailed(nextDetailed);
+    });
+  }, []);
+
+  const handleExpandAll = useCallback(() => {
+    startTransition(() => {
+      setCollapsedIds(new Set());
+    });
+  }, []);
+
+  const handleCollapseAll = useCallback(() => {
+    startTransition(() => {
+      setCollapsedIds(new Set(index.collapsibleIds));
+    });
+  }, [index]);
+
+  const handleToggleCollapsed = useCallback((rowId) => {
+    startTransition(() => {
+      setCollapsedIds((current) => toggleSetMembership(current, rowId));
+    });
+  }, []);
+
+  const handleToggleDetails = useCallback(
+    (rowId) => {
+      startTransition(() => {
+        setDetailOverrides((current) => toggleDetailOverride(current, rowId, detailed));
+      });
+    },
+    [detailed],
+  );
 
   return (
     <CollapsibleSection
@@ -898,26 +983,35 @@ const ArchiveSummariesSection = memo(function ArchiveSummariesSection({ archiveV
       actions={
         <SectionControls
           detailed={detailed}
-          onDetailedChange={setDetailed}
-          onExpandAll={() =>
-            setCollapseCommand((current) => ({ version: current.version + 1, collapsed: false }))
-          }
-          onCollapseAll={() =>
-            setCollapseCommand((current) => ({ version: current.version + 1, collapsed: true }))
-          }
+          onDetailedChange={handleDetailedChange}
+          onExpandAll={handleExpandAll}
+          onCollapseAll={handleCollapseAll}
         />
       }
     >
-      {archiveViews.length ? (
+      {visibleRows.length ? (
         <div className="archive-list">
-          {archiveViews.map((archive) => (
-            <ArchiveCard
-              key={archive.nodeId}
-              archive={archive}
-              showDetails={detailed}
-              collapseCommand={collapseCommand}
-            />
-          ))}
+          {visibleRows.map((row) =>
+            row.type === 'archive' ? (
+              <FlatArchiveRow
+                key={row.id}
+                row={row}
+                collapsed={collapsedIds.has(row.id)}
+                detailsVisible={detailOverrides.get(row.id) ?? detailed}
+                onToggleCollapsed={handleToggleCollapsed}
+                onToggleDetails={handleToggleDetails}
+              />
+            ) : (
+              <FlatNodeRow
+                key={row.id}
+                row={row}
+                collapsed={collapsedIds.has(row.id)}
+                detailsVisible={detailOverrides.get(row.id) ?? detailed}
+                onToggleCollapsed={handleToggleCollapsed}
+                onToggleDetails={handleToggleDetails}
+              />
+            ),
+          )}
         </div>
       ) : (
         <EmptyState message="This database does not define any archives." />
@@ -1003,19 +1097,25 @@ function ModalFrame({ label, title, onClose, footer, children }) {
   );
 }
 
-const ArchiveCard = memo(function ArchiveCard({ archive, showDetails, collapseCommand }) {
-  const [collapsed, setCollapsed] = useState(false);
-  const [detailsOverride, setDetailsOverride] = useState(null);
-  const detailsVisible = detailsOverride ?? showDetails;
-
-  useEffect(() => {
-    setCollapsed(collapseCommand.collapsed);
-  }, [collapseCommand]);
-
+const FlatArchiveRow = memo(function FlatArchiveRow({
+  row,
+  collapsed,
+  detailsVisible,
+  onToggleCollapsed,
+  onToggleDetails,
+}) {
+  const { archive, childIds } = row;
   return (
-    <article className="archive-card">
+    <article
+      className={row.depth ? 'tree-entry tree-entry-indented archive-card' : 'tree-entry archive-card'}
+      style={buildTreeDepthStyle(row.depth)}
+    >
       <div className="tree-row">
-        <button type="button" className="collapse-button" onClick={() => setCollapsed((value) => !value)}>
+        <button
+          type="button"
+          className="collapse-button"
+          onClick={() => onToggleCollapsed(row.id)}
+        >
           {collapsed ? '+' : '-'}
         </button>
         <div className="tree-card archive-surface">
@@ -1029,13 +1129,7 @@ const ArchiveCard = memo(function ArchiveCard({ archive, showDetails, collapseCo
                 <button
                   type="button"
                   className="inline-action-button"
-                  onClick={() =>
-                    setDetailsOverride((current) => {
-                      const currentVisible = current ?? showDetails;
-                      const nextVisible = !currentVisible;
-                      return nextVisible === showDetails ? null : nextVisible;
-                    })
-                  }
+                  onClick={() => onToggleDetails(row.id)}
                 >
                   {detailsVisible ? 'Hide details' : 'Show details'}
                 </button>
@@ -1055,50 +1149,39 @@ const ArchiveCard = memo(function ArchiveCard({ archive, showDetails, collapseCo
               ))}
             </ul>
           ) : null}
+          {!collapsed && !childIds.length ? (
+            <div className="archive-empty-inline">
+              <EmptyState message="No summary entries could be rendered for this archive." />
+            </div>
+          ) : null}
         </div>
       </div>
-
-      {!collapsed ? (
-        archive.tree.children.length ? (
-          <div className="tree-children archive-children">
-            {archive.tree.children.map((node) => (
-              <TreeNode
-                key={node.id}
-                node={node}
-                showDetails={showDetails}
-                collapseCommand={collapseCommand}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="archive-empty">
-            <EmptyState message="No summary entries could be rendered for this archive." />
-          </div>
-        )
-      ) : null}
     </article>
   );
 });
 
-const TreeNode = memo(function TreeNode({ node, showDetails, collapseCommand }) {
-  const hasChildren = Array.isArray(node.children) && node.children.length > 0;
-  const canCollapse = hasChildren || node.kind === 'file';
-  const [collapsed, setCollapsed] = useState(false);
-  const [detailsOverride, setDetailsOverride] = useState(null);
-  const detailsVisible = detailsOverride ?? showDetails;
+const FlatNodeRow = memo(function FlatNodeRow({
+  row,
+  collapsed,
+  detailsVisible,
+  onToggleCollapsed,
+  onToggleDetails,
+}) {
+  const { node, canCollapse } = row;
   const bodyCollapsed = node.kind === 'file' && collapsed;
 
-  useEffect(() => {
-    if (canCollapse) {
-      setCollapsed(collapseCommand.collapsed);
-    }
-  }, [canCollapse, collapseCommand]);
-
   return (
-    <div className="tree-node">
+    <div
+      className={row.depth ? 'tree-entry tree-entry-indented' : 'tree-entry'}
+      style={buildTreeDepthStyle(row.depth)}
+    >
       <div className="tree-row">
         {canCollapse ? (
-          <button type="button" className="collapse-button" onClick={() => setCollapsed((value) => !value)}>
+          <button
+            type="button"
+            className="collapse-button"
+            onClick={() => onToggleCollapsed(row.id)}
+          >
             {collapsed ? '+' : '-'}
           </button>
         ) : (
@@ -1117,13 +1200,7 @@ const TreeNode = memo(function TreeNode({ node, showDetails, collapseCommand }) 
                 <button
                   type="button"
                   className="inline-action-button"
-                  onClick={() =>
-                    setDetailsOverride((current) => {
-                      const currentVisible = current ?? showDetails;
-                      const nextVisible = !currentVisible;
-                      return nextVisible === showDetails ? null : nextVisible;
-                    })
-                  }
+                  onClick={() => onToggleDetails(row.id)}
                 >
                   {detailsVisible ? 'Hide details' : 'Show details'}
                 </button>
@@ -1146,22 +1223,160 @@ const TreeNode = memo(function TreeNode({ node, showDetails, collapseCommand }) 
           {!bodyCollapsed && detailsVisible ? <MetadataList fields={node.details} /> : null}
         </div>
       </div>
-
-      {hasChildren && !collapsed ? (
-        <div className="tree-children">
-          {node.children.map((child) => (
-            <TreeNode
-              key={child.id}
-              node={child}
-              showDetails={showDetails}
-              collapseCommand={collapseCommand}
-            />
-          ))}
-        </div>
-      ) : null}
     </div>
   );
 });
+
+function buildFlatNodeIndex(nodes) {
+  const rowsById = new Map();
+  const rootIds = [];
+  const collapsibleIds = [];
+
+  function visit(node, depth) {
+    const childIds = [];
+    const row = {
+      id: node.id,
+      type: 'node',
+      node,
+      depth,
+      childIds,
+      canCollapse: node.kind === 'file' || (Array.isArray(node.children) && node.children.length > 0),
+    };
+
+    rowsById.set(row.id, row);
+    if (row.canCollapse) {
+      collapsibleIds.push(row.id);
+    }
+
+    if (Array.isArray(node.children) && node.children.length) {
+      for (const child of node.children) {
+        childIds.push(visit(child, depth + 1));
+      }
+    }
+
+    return row.id;
+  }
+
+  for (const node of nodes) {
+    rootIds.push(visit(node, 0));
+  }
+
+  return {
+    rootIds,
+    rowsById,
+    collapsibleIds,
+  };
+}
+
+function buildFlatArchiveIndex(archiveViews) {
+  const rowsById = new Map();
+  const rootIds = [];
+  const collapsibleIds = [];
+
+  function visitNode(node, depth) {
+    const childIds = [];
+    const row = {
+      id: node.id,
+      type: 'node',
+      node,
+      depth,
+      childIds,
+      canCollapse: node.kind === 'file' || (Array.isArray(node.children) && node.children.length > 0),
+    };
+
+    rowsById.set(row.id, row);
+    if (row.canCollapse) {
+      collapsibleIds.push(row.id);
+    }
+
+    if (Array.isArray(node.children) && node.children.length) {
+      for (const child of node.children) {
+        childIds.push(visitNode(child, depth + 1));
+      }
+    }
+
+    return row.id;
+  }
+
+  for (const archive of archiveViews) {
+    const childIds = [];
+    const row = {
+      id: archive.nodeId,
+      type: 'archive',
+      archive,
+      depth: 0,
+      childIds,
+      canCollapse: true,
+    };
+
+    rowsById.set(row.id, row);
+    rootIds.push(row.id);
+    collapsibleIds.push(row.id);
+
+    for (const child of archive.tree.children) {
+      childIds.push(visitNode(child, 1));
+    }
+  }
+
+  return {
+    rootIds,
+    rowsById,
+    collapsibleIds,
+  };
+}
+
+function collectVisibleRows(rootIds, rowsById, collapsedIds) {
+  const visibleRows = [];
+
+  function visit(rowId) {
+    const row = rowsById.get(rowId);
+    if (!row) {
+      return;
+    }
+
+    visibleRows.push(row);
+    if (row.childIds.length && !collapsedIds.has(row.id)) {
+      for (const childId of row.childIds) {
+        visit(childId);
+      }
+    }
+  }
+
+  for (const rowId of rootIds) {
+    visit(rowId);
+  }
+
+  return visibleRows;
+}
+
+function toggleSetMembership(currentSet, value) {
+  const next = new Set(currentSet);
+  if (next.has(value)) {
+    next.delete(value);
+  } else {
+    next.add(value);
+  }
+
+  return next;
+}
+
+function toggleDetailOverride(currentMap, rowId, defaultDetailed) {
+  const currentVisible = currentMap.get(rowId) ?? defaultDetailed;
+  const nextVisible = !currentVisible;
+  const next = new Map(currentMap);
+
+  if (nextVisible === defaultDetailed) {
+    next.delete(rowId);
+  } else {
+    next.set(rowId, nextVisible);
+  }
+
+  return next;
+}
+
+function buildTreeDepthStyle(depth) {
+  return { '--tree-depth': depth };
+}
 
 function HighlightCard({ label, value, subvalue, accent }) {
   return (
