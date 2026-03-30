@@ -1131,6 +1131,7 @@ const TreeEntryRow = memo(function TreeEntryRow({
   const isFile = !isArchive && row.node.kind === 'file';
   const downloadUrl = isFile ? row.node.downloadUrl : null;
   const bodyCollapsed = isFile && collapsed;
+  const guideDepths = row.depth ? Array.from({ length: row.depth }, (_, index) => index + 1) : [];
   const containerClassName = [
     'tree-entry',
     row.depth ? 'tree-entry-indented' : '',
@@ -1187,6 +1188,18 @@ const TreeEntryRow = memo(function TreeEntryRow({
       className={containerClassName}
       style={{ ...buildTreeDepthStyle(row.depth), ...virtualStyle }}
     >
+      {guideDepths.length ? (
+        <div className="tree-guides" aria-hidden="true">
+          {guideDepths.map((guideDepth) => (
+            <span
+              key={guideDepth}
+              className="tree-guide-line"
+              style={buildTreeGuideStyle(guideDepth)}
+            />
+          ))}
+          <span className="tree-guide-elbow" style={buildTreeGuideStyle(row.depth)} />
+        </div>
+      ) : null}
       <div className="tree-row">
         {showCollapseControl ? (
           <button
@@ -1406,6 +1419,10 @@ function toggleDetailOverride(currentMap, rowId, defaultDetailed) {
 
 function buildTreeDepthStyle(depth) {
   return { '--tree-depth': depth };
+}
+
+function buildTreeGuideStyle(depth) {
+  return { '--tree-guide-depth': depth };
 }
 
 function buildVirtualRowStyle(top) {
