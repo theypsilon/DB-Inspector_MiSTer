@@ -159,6 +159,37 @@ export function applyInspectionFilter(inspection, rawFilterInput) {
   };
 }
 
+export function summarizeInspectionStorage(inspection, clusterSizeBytes) {
+  const fileSizes = collectInspectionFileSizes(inspection);
+  const rawBytes = fileSizes.reduce((sum, size) => sum + size, 0);
+
+  return {
+    rawBytes,
+    clusteredBytes: calculateClusteredFileBytes(fileSizes, clusterSizeBytes),
+    sizedFileCount: fileSizes.length,
+    unsizedFileCount: countInspectionUnsizedFiles(inspection),
+  };
+}
+
+export function calculateClusteredFileBytes(fileSizes, clusterSizeBytes) {
+  const normalizedClusterSize = Number(clusterSizeBytes);
+  if (!Number.isFinite(normalizedClusterSize) || normalizedClusterSize <= 0) {
+    return 0;
+  }
+
+  return fileSizes.reduce((sum, size) => {
+    if (!Number.isFinite(size) || size < 0) {
+      return sum;
+    }
+
+    if (size === 0) {
+      return sum;
+    }
+
+    return sum + Math.ceil(size / normalizedClusterSize) * normalizedClusterSize;
+  }, 0);
+}
+
 export function formatBytes(value) {
   if (!Number.isFinite(value)) {
     return 'Unknown size';
@@ -1130,6 +1161,7 @@ function buildFileRecord({
   const resolvedUrl =
     explicitUrl || resolveBasePathUrl(baseFilesUrl, pathInfo.displayPath) || null;
   const tagEntries = buildTagEntries(fileRecord.tags, tagLookup);
+  const sizeBytes = normalizeRecordSize(fileRecord.size);
 
   if (!resolvedUrl) {
     addIssue(
@@ -1143,6 +1175,7 @@ function buildFileRecord({
   return {
     id: `${scope}:file:${path}`,
     kind: 'file',
+    sizeBytes,
     downloadUrl: resolvedUrl,
     filterTags: buildFilterTagNames(fileRecord.tags, tagLookup),
     path: pathInfo.displayPath,
@@ -1154,7 +1187,7 @@ function buildFileRecord({
     details: [
       ...buildHashAndSizeDetails({
         hash: getString(fileRecord.hash),
-        size: Number(fileRecord.size),
+        size: sizeBytes,
       }),
       ...buildDownloadDetails({
         explicitUrl,
@@ -1301,6 +1334,7 @@ function buildArchiveFileRecord({
 
   const explicitUrl = getString(wrapped.url);
   const tagEntries = buildTagEntries(wrapped.tags, tagLookup);
+  const sizeBytes = normalizeRecordSize(wrapped.size);
   const resolvedUrl =
     explicitUrl ||
     resolveBasePathUrl(archiveBaseFilesUrl, pathInfo.displayPath) ||
@@ -1310,6 +1344,7 @@ function buildArchiveFileRecord({
   return {
     id: `archive:${archiveId}:file:${path}`,
     kind: 'file',
+    sizeBytes,
     downloadUrl: resolvedUrl,
     filterTags: buildFilterTagNames(wrapped.tags, tagLookup),
     path: pathInfo.displayPath,
@@ -1321,7 +1356,7 @@ function buildArchiveFileRecord({
     details: [
       ...buildHashAndSizeDetails({
         hash: getString(wrapped.hash),
-        size: Number(wrapped.size),
+        size: sizeBytes,
       }),
       { label: 'Archive ID', value: arcId || 'Missing', kind: 'code' },
       {
@@ -1376,6 +1411,45 @@ function buildHashAndSizeDetails({ hash, size }) {
   }
 
   return details;
+}
+
+function normalizeRecordSize(value) {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) && numericValue >= 0 ? numericValue : null;
+}
+
+function collectInspectionFileSizes(inspection) {
+  if (!inspection) {
+    return [];
+  }
+
+  return collectInspectionFileRecords(inspection)
+    .map((record) => record.sizeBytes)
+    .filter((size) => Number.isFinite(size));
+}
+
+function countInspectionUnsizedFiles(inspection) {
+  if (!inspection) {
+    return 0;
+  }
+
+  return collectInspectionFileRecords(inspection).filter((record) => !Number.isFinite(record.sizeBytes))
+    .length;
+}
+
+function collectInspectionFileRecords(inspection) {
+  const filesystemFiles = Array.isArray(inspection.filesystemRecords)
+    ? inspection.filesystemRecords.filter((record) => record.kind === 'file')
+    : [];
+  const archiveFiles = Array.isArray(inspection.archiveViews)
+    ? inspection.archiveViews.flatMap((archive) =>
+        Array.isArray(archive.summaryRecords)
+          ? archive.summaryRecords.filter((record) => record.kind === 'file')
+          : [],
+      )
+    : [];
+
+  return [...filesystemFiles, ...archiveFiles];
 }
 
 function buildTreeFromRecords(records, scope) {

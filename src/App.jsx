@@ -12,9 +12,11 @@ import {
 import { flushSync } from 'react-dom';
 import {
   applyInspectionFilter,
+  formatBytes,
   loadDatabaseSourceFile,
   loadDatabaseSourceUrl,
   loadRuntimeDatabaseCatalog,
+  summarizeInspectionStorage,
 } from './lib/database.js';
 
 const DATABASE_URL_PARAM = 'database-url';
@@ -23,6 +25,18 @@ const FILTER_INPUT_DEBOUNCE_MS = 600;
 const TREE_LIST_GAP_PX = 13;
 const TREE_OVERSCAN_PX = 900;
 const BACKGROUND_DOWNLOAD_FRAME_NAME = 'background-download-frame';
+const DEFAULT_CLUSTER_SIZE_BYTES = 128 * 1024;
+const CLUSTER_SIZE_OPTIONS = [
+  4 * 1024,
+  8 * 1024,
+  16 * 1024,
+  32 * 1024,
+  64 * 1024,
+  128 * 1024,
+  256 * 1024,
+  512 * 1024,
+  1024 * 1024,
+];
 
 let backgroundDownloadFrame = null;
 
@@ -42,6 +56,7 @@ export default function App() {
   const [inspection, setInspection] = useState(null);
   const [filterInput, setFilterInput] = useState('');
   const [debouncedFilterInput, setDebouncedFilterInput] = useState('');
+  const [clusterSizeBytes, setClusterSizeBytes] = useState(DEFAULT_CLUSTER_SIZE_BYTES);
   const [iniSource, setIniSource] = useState(null);
   const [sourceDefaultFilter, setSourceDefaultFilter] = useState('');
   const [databaseDetailed, setDatabaseDetailed] = useState(false);
@@ -65,6 +80,13 @@ export default function App() {
   const displayedInspection = useMemo(
     () => (inspection ? applyInspectionFilter(inspection, debouncedFilterInput) : null),
     [inspection, debouncedFilterInput],
+  );
+  const storageSummary = useMemo(
+    () =>
+      displayedInspection
+        ? summarizeInspectionStorage(displayedInspection, clusterSizeBytes)
+        : null,
+    [clusterSizeBytes, displayedInspection],
   );
   const filterPending = filterInput !== debouncedFilterInput;
   const inspectionKey = `${inspectionKeyBase}:${String(debouncedFilterInput).trim().toLowerCase()}`;
@@ -809,6 +831,31 @@ export default function App() {
                   ? 'Updating preview...'
                   : buildFilterSummaryCopy(displayedInspection.activeFilter)}
               </p>
+              {!filterPending && storageSummary ? (
+                <p className="catalog-count-inline disk-usage-inline">
+                  Disk space used:{' '}
+                  <span
+                    className="disk-usage-value"
+                    title={buildRawByteHoverCopy(storageSummary)}
+                  >
+                    {formatBytes(storageSummary.clusteredBytes)}
+                  </span>{' '}
+                  at{' '}
+                  <select
+                    aria-label="Cluster size"
+                    className="cluster-size-select"
+                    value={clusterSizeBytes}
+                    onChange={(event) => setClusterSizeBytes(Number(event.target.value))}
+                  >
+                    {CLUSTER_SIZE_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {formatBytes(option)}
+                      </option>
+                    ))}
+                  </select>{' '}
+                  clusters.
+                </p>
+              ) : null}
             </CollapsibleSection>
 
             <FilesystemSection
@@ -1523,6 +1570,20 @@ function buildFilterSummaryCopy(activeFilter) {
   }
 
   return `Showing ${files} files, ${folders} folders, and ${archives} archives for this filter.`;
+}
+
+function buildRawByteHoverCopy(storageSummary) {
+  if (!storageSummary) {
+    return '';
+  }
+
+  const suffix = storageSummary.unsizedFileCount
+    ? ` ${storageSummary.unsizedFileCount.toLocaleString()} file${
+        storageSummary.unsizedFileCount === 1 ? ' has' : 's have'
+      } no declared size and ${storageSummary.unsizedFileCount === 1 ? 'is' : 'are'} excluded.`
+    : '';
+
+  return `Raw file sizes: ${formatBytes(storageSummary.rawBytes)} (${storageSummary.rawBytes.toLocaleString()} bytes).${suffix}`;
 }
 
 function getLoadedSourceUrl(loadedSource) {
