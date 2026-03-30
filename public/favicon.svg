@@ -1,19 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="MiSTer downloader database inspector favicon">
   <path
     d="M4 43H60V55.5Q32 62.7 4 55.5Z"
-    fill="#ea4335"
+    fill="#4285f4"
   />
   <ellipse
     cx="32"
     cy="55.5"
     rx="28"
     ry="7.2"
-    fill="#ea4335"
+    fill="#4285f4"
   />
 
   <path
     d="M4 27.5H60V43Q32 53.1 4 43Z"
-    fill="#34a853"
+    fill="#4285f4"
   />
 
   <path
