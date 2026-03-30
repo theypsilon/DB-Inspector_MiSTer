@@ -473,11 +473,27 @@ export default function App() {
           </p>
         </div>
         <div className="hero-note">
-          <strong>Remote access</strong>
+          <strong>About MiSTer Downloader</strong>
           <p>
-            Some websites do not allow direct browser downloads. If a link does not open here,
-            download the file first and load it from your computer.
+            MiSTer Downloader is the updater used on{' '}
+            <a
+              href="https://github.com/MiSTer-devel/Main_MiSTer/wiki"
+              target="_blank"
+              rel="noreferrer"
+            >
+              MiSTer FPGA
+            </a>{' '}
+            to install and refresh cores, content, and support files from database definitions.
+            This inspector helps you review those custom database files in the browser before using
+            them.
           </p>
+          <a
+            href="https://github.com/MiSTer-devel/Downloader_MiSTer/blob/main/docs/custom-databases.md"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Read the custom database spec
+          </a>
         </div>
       </section>
 
