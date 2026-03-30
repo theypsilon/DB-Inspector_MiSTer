@@ -1192,7 +1192,12 @@ const TreeEntryRow = memo(function TreeEntryRow({
     >
       {row.depth || hasVisibleChildren ? (
         <div className="tree-guides" aria-hidden="true">
-          {row.depth ? <span className="tree-guide-parent" style={buildTreeGuideStyle(row.depth - 1)} /> : null}
+          {row.depth ? (
+            <span
+              className={`tree-guide-parent${row.isLastSibling ? '' : ' tree-guide-parent-continue'}`}
+              style={buildTreeGuideStyle(row.depth - 1)}
+            />
+          ) : null}
           {row.depth ? <span className="tree-guide-elbow" style={buildTreeGuideStyle(row.depth)} /> : null}
           {hasVisibleChildren ? (
             <span className="tree-guide-child" style={buildTreeGuideStyle(row.depth)} />

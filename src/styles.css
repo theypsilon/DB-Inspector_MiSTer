@@ -779,6 +779,11 @@ button:hover {
   );
 }
 
+.tree-guide-parent-continue {
+  bottom: calc(var(--tree-guide-bottom-overlap) * -1);
+  height: auto;
+}
+
 .tree-guide-child {
   top: calc(var(--tree-control-center) - var(--tree-guide-join-overlap));
   bottom: calc(var(--tree-guide-bottom-overlap) * -1);
