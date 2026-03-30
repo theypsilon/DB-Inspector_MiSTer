@@ -487,6 +487,11 @@ button:hover {
   color: var(--danger);
 }
 
+.overview-panel {
+  display: grid;
+  gap: 1rem;
+}
+
 .overview-header,
 .section-heading {
   display: flex;

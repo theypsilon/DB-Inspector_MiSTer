@@ -527,10 +527,12 @@ export default function App() {
 
             <FilesystemSection key={`filesystem:${inspectionKey}`} tree={inspection.filesystemTree} />
 
-            <ArchiveSummariesSection
-              key={`archives:${inspectionKey}`}
-              archiveViews={inspection.archiveViews}
-            />
+            {inspection.archiveViews.length ? (
+              <ArchiveSummariesSection
+                key={`archives:${inspectionKey}`}
+                archiveViews={inspection.archiveViews}
+              />
+            ) : null}
 
             <CollapsibleSection
               label="Diagnostics"
