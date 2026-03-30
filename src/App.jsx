@@ -25,6 +25,7 @@ export default function App() {
   const autoLoadHandledRef = useRef(false);
   const inspectionRef = useRef(null);
   const iniSourceRef = useRef(null);
+  const uploadCatalogUrlsRef = useRef(new Set());
   const dropzoneDragDepthRef = useRef(0);
   const dropzoneDropPulseTimeoutRef = useRef(0);
   const [databaseUrl, setDatabaseUrl] = useState(() => readDatabaseUrlSearchParam());
@@ -33,13 +34,20 @@ export default function App() {
   const [inspection, setInspection] = useState(null);
   const [iniSource, setIniSource] = useState(null);
   const [databaseDetailed, setDatabaseDetailed] = useState(false);
-  const [catalogOptions, setCatalogOptions] = useState([]);
+  const [runtimeCatalogOptions, setRuntimeCatalogOptions] = useState([]);
+  const [customCatalogOptions, setCustomCatalogOptions] = useState([]);
   const [catalogStatus, setCatalogStatus] = useState('loading');
   const [catalogError, setCatalogError] = useState('');
   const [catalogModalOpen, setCatalogModalOpen] = useState(false);
   const [iniPickerOpen, setIniPickerOpen] = useState(false);
   const [dropzoneActive, setDropzoneActive] = useState(false);
   const [dropzoneDropPulse, setDropzoneDropPulse] = useState(false);
+  const catalogOptions = useMemo(
+    () => mergeCatalogEntries(customCatalogOptions, runtimeCatalogOptions),
+    [customCatalogOptions, runtimeCatalogOptions],
+  );
+  const catalogReady = catalogOptions.length > 0;
+  const catalogDisplayStatus = catalogReady ? 'ready' : catalogStatus;
   const inspectionKey = inspection
     ? `${inspection.source.sourceLabel}:${inspection.overview.dbId}:${inspection.overview.timestamp}`
     : 'empty';
@@ -128,6 +136,12 @@ export default function App() {
       if (dropzoneDropPulseTimeoutRef.current) {
         window.clearTimeout(dropzoneDropPulseTimeoutRef.current);
       }
+
+      for (const url of uploadCatalogUrlsRef.current) {
+        URL.revokeObjectURL(url);
+      }
+
+      uploadCatalogUrlsRef.current.clear();
     },
     [],
   );
@@ -145,14 +159,14 @@ export default function App() {
           return;
         }
 
-        setCatalogOptions(entries);
+        setRuntimeCatalogOptions(entries);
         setCatalogStatus('ready');
       } catch (error) {
         if (cancelled) {
           return;
         }
 
-        setCatalogOptions([]);
+        setRuntimeCatalogOptions([]);
         setCatalogStatus('error');
         setCatalogError(error.message);
       }
@@ -170,7 +184,7 @@ export default function App() {
     setIniSource(null);
   }
 
-  function startRemoteDatabaseLoad(url) {
+  function startRemoteDatabaseLoad(url, { registerInCatalog = false } = {}) {
     const requestedUrl = String(url).trim();
     if (!requestedUrl) {
       return;
@@ -182,14 +196,29 @@ export default function App() {
     clearLoadedSource();
 
     window.setTimeout(() => {
-      void loadRemoteSource(requestedUrl, { skipPrepare: true });
+      void loadRemoteSource(requestedUrl, { skipPrepare: true, registerInCatalog });
     }, 0);
   }
 
   async function handleLoadedSource(
     loadedSource,
-    { origin, requestedUrl = '', syncSearchParam = true, visitedUrls = new Set() } = {},
+    {
+      origin,
+      requestedUrl = '',
+      syncSearchParam = true,
+      visitedUrls = new Set(),
+      registerInCatalog = true,
+    } = {},
   ) {
+    if (registerInCatalog) {
+      setCustomCatalogOptions((current) =>
+        mergeCustomCatalogEntries(
+          createCatalogEntriesFromLoadedSource(loadedSource, mergeCatalogEntries(current, runtimeCatalogOptions)),
+          current,
+        ),
+      );
+    }
+
     if (loadedSource.kind === 'database') {
       setInspection(loadedSource.inspection);
       setIniSource(null);
@@ -218,6 +247,7 @@ export default function App() {
       await loadRemoteSource(entry.dbUrl, {
         syncSearchParam: origin === 'url' ? syncSearchParam : true,
         visitedUrls,
+        registerInCatalog: false,
       });
       return;
     }
@@ -248,7 +278,13 @@ export default function App() {
 
     try {
       const loadedSource = await loadDatabaseSourceFile(file);
-      await handleLoadedSource(loadedSource, { origin: 'upload' });
+      if (loadedSource.kind === 'database') {
+        const objectUrl = URL.createObjectURL(file);
+        uploadCatalogUrlsRef.current.add(objectUrl);
+        loadedSource.inspection.source.sourceUrl = objectUrl;
+      }
+
+      await handleLoadedSource(loadedSource, { origin: 'upload', registerInCatalog: true });
     } catch (error) {
       setIniPickerOpen(false);
       setErrorMessage(error.message);
@@ -259,7 +295,12 @@ export default function App() {
 
   async function loadRemoteSource(
     input,
-    { syncSearchParam = true, visitedUrls = new Set(), skipPrepare = false } = {},
+    {
+      syncSearchParam = true,
+      visitedUrls = new Set(),
+      skipPrepare = false,
+      registerInCatalog = true,
+    } = {},
   ) {
     const requestedUrl = String(input).trim();
     if (!requestedUrl) {
@@ -302,6 +343,7 @@ export default function App() {
         requestedUrl,
         syncSearchParam,
         visitedUrls: nextVisitedUrls,
+        registerInCatalog,
       });
     } catch (error) {
       setErrorMessage(error.message);
@@ -320,7 +362,7 @@ export default function App() {
       return;
     }
 
-    startRemoteDatabaseLoad(entry.dbUrl);
+    startRemoteDatabaseLoad(entry.dbUrl, { registerInCatalog: false });
   }
 
   function triggerDropzoneDropPulse() {
@@ -483,20 +525,20 @@ export default function App() {
             <button
               type="button"
               onClick={() => setCatalogModalOpen(true)}
-              disabled={catalogStatus !== 'ready'}
+              disabled={!catalogReady}
             >
               Browse catalog
             </button>
           </div>
           <p className="catalog-count-inline">
-            {catalogStatus === 'ready'
+            {catalogReady
               ? `${catalogOptions.length} entries available`
               : 'Catalog unavailable'}
           </p>
-          {catalogStatus === 'loading' ? (
+          {catalogDisplayStatus === 'loading' ? (
             <p className="helper-copy">Loading catalog entries.</p>
           ) : null}
-          {catalogStatus === 'error' ? <p className="status error">{catalogError}</p> : null}
+          {catalogDisplayStatus === 'error' ? <p className="status error">{catalogError}</p> : null}
           <EmptyState message="Choose a database in the catalog modal to open it." />
         </section>
       </section>
@@ -662,12 +704,12 @@ export default function App() {
       {catalogModalOpen ? (
         <CatalogPickerModal
           options={catalogOptions}
-          status={catalogStatus}
+          status={catalogDisplayStatus}
           error={catalogError}
           initialDatabaseUrl={databaseUrl}
           onClose={() => setCatalogModalOpen(false)}
           onOpenDatabase={(url) => {
-            startRemoteDatabaseLoad(url);
+            startRemoteDatabaseLoad(url, { registerInCatalog: false });
           }}
         />
       ) : null}
@@ -1146,6 +1188,123 @@ function getLoadedSourceUrl(loadedSource) {
   }
 
   return loadedSource.source.sourceUrl || loadedSource.source.sourceLabel;
+}
+
+function createCatalogEntriesFromLoadedSource(loadedSource, existingEntries = []) {
+  if (loadedSource.kind === 'database') {
+    const dbId = loadedSource.inspection.overview.dbId || '(missing)';
+    const dbUrl = getLoadedSourceUrl(loadedSource);
+    if (!dbUrl) {
+      return [];
+    }
+
+    return [
+      {
+        key: buildCustomCatalogEntryKey(dbId, dbUrl),
+        dbId,
+        dbUrl,
+        title:
+          findPreservedCatalogTitle(existingEntries, dbId, dbUrl) ||
+          buildLoadedDatabaseCatalogTitle(loadedSource.inspection),
+      },
+    ];
+  }
+
+  return loadedSource.entries.map((entry) => ({
+    key: buildCustomCatalogEntryKey(entry.dbId, entry.dbUrl),
+    dbId: entry.dbId,
+    dbUrl: entry.dbUrl,
+    title:
+      findPreservedCatalogTitle(existingEntries, entry.dbId, entry.dbUrl) ||
+      buildCatalogTitleFromLocation(entry.dbUrl, entry.dbId),
+  }));
+}
+
+function mergeCustomCatalogEntries(nextEntries, currentEntries) {
+  const deduplicatedEntries = dedupeCatalogEntriesByDbId(nextEntries);
+  const replacedDbIds = new Set(deduplicatedEntries.map((entry) => normalizeCatalogDbId(entry.dbId)));
+
+  return [
+    ...deduplicatedEntries,
+    ...currentEntries.filter((entry) => !replacedDbIds.has(normalizeCatalogDbId(entry.dbId))),
+  ];
+}
+
+function mergeCatalogEntries(customEntries, runtimeEntries) {
+  const overriddenDbIds = new Set(customEntries.map((entry) => normalizeCatalogDbId(entry.dbId)));
+  return [
+    ...customEntries,
+    ...runtimeEntries.filter((entry) => !overriddenDbIds.has(normalizeCatalogDbId(entry.dbId))),
+  ];
+}
+
+function dedupeCatalogEntriesByDbId(entries) {
+  const seenDbIds = new Set();
+  const deduplicatedEntries = [];
+
+  for (const entry of entries) {
+    const normalizedDbId = normalizeCatalogDbId(entry.dbId);
+    if (seenDbIds.has(normalizedDbId)) {
+      continue;
+    }
+
+    seenDbIds.add(normalizedDbId);
+    deduplicatedEntries.push(entry);
+  }
+
+  return deduplicatedEntries;
+}
+
+function findPreservedCatalogTitle(existingEntries, dbId, dbUrl) {
+  const normalizedDbUrl = normalizeComparableUrl(dbUrl);
+  if (normalizedDbUrl) {
+    const exactUrlEntry = existingEntries.find(
+      (entry) => normalizeComparableUrl(entry.dbUrl) === normalizedDbUrl,
+    );
+    if (exactUrlEntry?.title) {
+      return exactUrlEntry.title;
+    }
+  }
+
+  const sameDbIdEntries = existingEntries.filter(
+    (entry) => normalizeCatalogDbId(entry.dbId) === normalizeCatalogDbId(dbId) && entry.title,
+  );
+  if (sameDbIdEntries.length === 1) {
+    return sameDbIdEntries[0].title;
+  }
+
+  return '';
+}
+
+function buildLoadedDatabaseCatalogTitle(inspection) {
+  if (inspection.source.sourceKind === 'upload') {
+    return `Uploaded: ${inspection.source.sourceLabel}`;
+  }
+
+  return buildCatalogTitleFromLocation(
+    inspection.source.sourceLabel || inspection.source.sourceUrl,
+    inspection.overview.dbId,
+  );
+}
+
+function buildCatalogTitleFromLocation(location, dbId = '') {
+  try {
+    const parsedUrl = new URL(String(location).trim());
+    const segments = parsedUrl.pathname.split('/').filter(Boolean);
+    const tail = segments.slice(-2).join(' / ');
+    return `${parsedUrl.hostname} / ${tail || parsedUrl.pathname || dbId || 'database'}`;
+  } catch {
+    const normalizedLocation = String(location || '').trim();
+    return normalizedLocation || dbId || 'Custom database';
+  }
+}
+
+function buildCustomCatalogEntryKey(dbId, dbUrl) {
+  return `custom:${normalizeCatalogDbId(dbId)}:${normalizeComparableUrl(dbUrl) || String(dbUrl).trim()}`;
+}
+
+function normalizeCatalogDbId(dbId) {
+  return String(dbId || '').trim().toLowerCase();
 }
 
 function isFileDragEvent(event) {
