@@ -991,7 +991,7 @@ const TreeSection = memo(function TreeSection({
     >
       {visibleRowIds.length ? (
         <div className={listClassName} ref={containerRef} style={{ height: `${virtualRows.totalHeight}px` }}>
-          {virtualRows.items.map(({ rowId, top }) => {
+          {virtualRows.items.map(({ rowId, top, trimTopGuide, trimBottomGuide }) => {
             const row = index.rowsById.get(rowId);
             if (!row) {
               return null;
@@ -1006,7 +1006,10 @@ const TreeSection = memo(function TreeSection({
                 onToggleCollapsed={handleToggleCollapsed}
                 onToggleDetails={handleToggleDetails}
                 onHeightChange={handleRowHeightChange}
-                virtualStyle={buildVirtualRowStyle(top)}
+                virtualStyle={buildVirtualRowStyle(top, {
+                  trimTopGuide,
+                  trimBottomGuide,
+                })}
               />
             );
           })}
@@ -1288,13 +1291,14 @@ function buildFlatNodeIndex(nodes) {
   const rootIds = [];
   const collapsibleIds = [];
 
-  function visit(node, depth, ancestorContinuationDepths, siblingIndex, siblingCount) {
+  function visit(node, depth, ancestorContinuationDepths, siblingIndex, siblingCount, parentId = null) {
     const childIds = [];
     const isLastSibling = siblingIndex === siblingCount - 1;
     const row = {
       id: node.id,
       type: 'node',
       node,
+      parentId,
       depth,
       childIds,
       isLastSibling,
@@ -1314,7 +1318,7 @@ function buildFlatNodeIndex(nodes) {
 
       node.children.forEach((child, childIndex) => {
         childIds.push(
-          visit(child, depth + 1, nextAncestorContinuationDepths, childIndex, node.children.length),
+          visit(child, depth + 1, nextAncestorContinuationDepths, childIndex, node.children.length, row.id),
         );
       });
     }
@@ -1338,13 +1342,14 @@ function buildFlatArchiveIndex(archiveViews) {
   const rootIds = [];
   const collapsibleIds = [];
 
-  function visitNode(node, depth, ancestorContinuationDepths, siblingIndex, siblingCount) {
+  function visitNode(node, depth, ancestorContinuationDepths, siblingIndex, siblingCount, parentId) {
     const childIds = [];
     const isLastSibling = siblingIndex === siblingCount - 1;
     const row = {
       id: node.id,
       type: 'node',
       node,
+      parentId,
       depth,
       childIds,
       isLastSibling,
@@ -1364,7 +1369,14 @@ function buildFlatArchiveIndex(archiveViews) {
 
       node.children.forEach((child, childIndex) => {
         childIds.push(
-          visitNode(child, depth + 1, nextAncestorContinuationDepths, childIndex, node.children.length),
+          visitNode(
+            child,
+            depth + 1,
+            nextAncestorContinuationDepths,
+            childIndex,
+            node.children.length,
+            row.id,
+          ),
         );
       });
     }
@@ -1379,6 +1391,7 @@ function buildFlatArchiveIndex(archiveViews) {
       id: archive.nodeId,
       type: 'archive',
       archive,
+      parentId: null,
       depth: 0,
       childIds,
       isLastSibling,
@@ -1394,7 +1407,14 @@ function buildFlatArchiveIndex(archiveViews) {
 
     archive.tree.children.forEach((child, childIndex) => {
       childIds.push(
-        visitNode(child, 1, nextAncestorContinuationDepths, childIndex, archive.tree.children.length),
+        visitNode(
+          child,
+          1,
+          nextAncestorContinuationDepths,
+          childIndex,
+          archive.tree.children.length,
+          row.id,
+        ),
       );
     });
   });
@@ -1463,12 +1483,14 @@ function buildTreeGuideStyle(depth) {
   return { '--tree-guide-depth': depth };
 }
 
-function buildVirtualRowStyle(top) {
+function buildVirtualRowStyle(top, { trimTopGuide = false, trimBottomGuide = false } = {}) {
   return {
     position: 'absolute',
     top: `${top}px`,
     left: 0,
     right: 0,
+    '--tree-guide-top-overlap': trimTopGuide ? '0px' : 'var(--tree-guide-overlap)',
+    '--tree-guide-bottom-overlap': trimBottomGuide ? '0px' : 'var(--tree-guide-overlap)',
   };
 }
 
@@ -1596,12 +1618,43 @@ function buildVirtualRows({
   const viewportBottom = viewport.scrollY + viewport.height - containerTop + TREE_OVERSCAN_PX;
   const startIndex = lowerBound(bottoms, viewportTop);
   const endIndex = Math.min(rowIds.length, upperBound(offsets, viewportBottom));
+  const rowIndexById = new Map();
+  for (let index = 0; index < rowIds.length; index += 1) {
+    rowIndexById.set(rowIds[index], index);
+  }
+
+  const renderedIndexes = new Set();
+  for (let index = startIndex; index < endIndex; index += 1) {
+    renderedIndexes.add(index);
+  }
+
+  if (startIndex < rowIds.length) {
+    let ancestorRowId = rowsById.get(rowIds[startIndex])?.parentId ?? null;
+    while (ancestorRowId) {
+      const ancestorIndex = rowIndexById.get(ancestorRowId);
+      if (ancestorIndex == null) {
+        break;
+      }
+
+      renderedIndexes.add(ancestorIndex);
+      ancestorRowId = rowsById.get(ancestorRowId)?.parentId ?? null;
+    }
+  }
+
+  const sortedIndexes = Array.from(renderedIndexes).sort((left, right) => left - right);
+  if (!sortedIndexes.length) {
+    sortedIndexes.push(Math.max(0, Math.min(rowIds.length - 1, startIndex)));
+  }
   const items = [];
 
-  for (let index = startIndex; index < endIndex; index += 1) {
+  for (const index of sortedIndexes) {
     items.push({
       rowId: rowIds[index],
       top: offsets[index],
+      trimTopGuide: index === sortedIndexes[0] && sortedIndexes[0] > 0,
+      trimBottomGuide:
+        index === sortedIndexes[sortedIndexes.length - 1] &&
+        sortedIndexes[sortedIndexes.length - 1] < rowIds.length - 1,
     });
   }
 

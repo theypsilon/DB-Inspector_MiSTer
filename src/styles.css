@@ -731,6 +731,8 @@ button:hover {
   --tree-control-center: calc(var(--tree-control-size) / 2);
   --tree-guide-overlap: 0.44rem;
   --tree-guide-join-overlap: 0.08rem;
+  --tree-guide-top-overlap: var(--tree-guide-overlap);
+  --tree-guide-bottom-overlap: var(--tree-guide-overlap);
   padding-left: calc(var(--tree-depth, 0) * var(--tree-indent-step));
 }
 
@@ -766,23 +768,25 @@ button:hover {
 }
 
 .tree-guide-vertical {
-  top: calc(var(--tree-guide-overlap) * -1);
-  bottom: calc(var(--tree-guide-overlap) * -1);
+  top: calc(var(--tree-guide-top-overlap) * -1);
+  bottom: calc(var(--tree-guide-bottom-overlap) * -1);
 }
 
 .tree-guide-parent {
-  top: calc(var(--tree-guide-overlap) * -1);
-  height: calc(var(--tree-control-center) + var(--tree-guide-overlap) + var(--tree-guide-join-overlap));
+  top: calc(var(--tree-guide-top-overlap) * -1);
+  height: calc(
+    var(--tree-control-center) + var(--tree-guide-top-overlap) + var(--tree-guide-join-overlap)
+  );
 }
 
 .tree-guide-parent-continue {
-  bottom: calc(var(--tree-guide-overlap) * -1);
+  bottom: calc(var(--tree-guide-bottom-overlap) * -1);
   height: auto;
 }
 
 .tree-guide-child {
   top: calc(var(--tree-control-center) - var(--tree-guide-join-overlap));
-  bottom: calc(var(--tree-guide-overlap) * -1);
+  bottom: calc(var(--tree-guide-bottom-overlap) * -1);
 }
 
 .tree-guide-elbow {
