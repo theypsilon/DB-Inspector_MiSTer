@@ -262,7 +262,7 @@ export default function App() {
       if (skipPrepare) {
         setLoadingMessage('');
       }
-      setErrorMessage(`Detected a loop while following db_url references from ${requestedUrl}.`);
+      setErrorMessage(`Detected a loop while following linked databases from ${requestedUrl}.`);
       return;
     }
 
@@ -320,20 +320,18 @@ export default function App() {
     <main className="app-shell">
       <section className="hero panel">
         <div>
-          <p className="eyebrow">MiSTer Downloader</p>
+          <p className="eyebrow">MiSTer Databases</p>
           <h1>Custom Database Inspector</h1>
           <p className="hero-copy">
-            Load a custom downloader database from disk or fetch it from a URL. The app inspects
-            downloader JSON databases, understands downloader INI lists that point to databases,
-            resolves indexed tags through the tag dictionary, follows remote archive summaries,
-            and renders the filesystem and archive trees in the browser.
+            Open a MiSTer database from your computer or from a web link. Review its details,
+            browse folders and files, inspect archives, and spot warnings in one place.
           </p>
         </div>
         <div className="hero-note">
-          <strong>Remote fetch note</strong>
+          <strong>Remote access</strong>
           <p>
-            Database and summary URLs still need normal browser access. If the host blocks CORS,
-            the inspector cannot fetch that resource from GitHub Pages.
+            Some websites do not allow direct browser downloads. If a link does not open here,
+            download the file first and load it from your computer.
           </p>
         </div>
       </section>
@@ -347,8 +345,8 @@ export default function App() {
           <p className="section-label">Upload</p>
           <h2>Drag a database here</h2>
           <p>
-            Accepted: .json, .json.zip, .ini, .ini.zip, or any ZIP whose first supported entry is
-            a downloader JSON or INI source.
+            Supported files: <code>.json</code>, <code>.json.zip</code>, <code>.ini</code>,
+            <code>.ini.zip</code>, and ZIP files that contain one of those formats.
           </p>
           <label className="dropzone-surface" htmlFor="database-file-input">
             <span className="dropzone-note">Drop database files here</span>
@@ -386,19 +384,17 @@ export default function App() {
             <button type="submit">Fetch database</button>
           </form>
           <p className="helper-copy">
-            The URL must end in <code>.json</code>, <code>.json.zip</code>, <code>.ini</code>, or
-            <code>.ini.zip</code>. INI sources with multiple entries open a chooser first.
-            Archive summary files are fetched automatically when present, and successful remote
-            fetches update the page URL so you can share the inspector state directly.
+            Enter a direct link to a database or database list. If the file includes more than one
+            database, you can choose which one to open. After a successful load, the page address
+            updates so you can share this view.
           </p>
         </section>
 
         <section className="panel source-panel source-card">
-          <p className="section-label">Picker</p>
-          <h2>Use Update_All_MiSTer catalog</h2>
+          <p className="section-label">Catalog</p>
+          <h2>Browse known databases</h2>
           <p className="helper-copy">
-            Browse the runtime-loaded `Update_All_MiSTer` catalog in a modal instead of keeping the
-            full picker expanded in the page layout.
+            Open a list of known databases in a modal and load one directly from there.
           </p>
           <div className="button-row">
             <button
@@ -415,13 +411,10 @@ export default function App() {
               : 'Catalog unavailable'}
           </p>
           {catalogStatus === 'loading' ? (
-            <p className="helper-copy">
-              Reading the current `Update_All_MiSTer/src/update_all/databases.py` catalog at
-              runtime.
-            </p>
+            <p className="helper-copy">Loading catalog entries.</p>
           ) : null}
           {catalogStatus === 'error' ? <p className="status error">{catalogError}</p> : null}
-          <EmptyState message="Choose a catalog entry in the modal, then open it from there." />
+          <EmptyState message="Choose a database in the catalog modal to open it." />
         </section>
       </section>
 
@@ -434,19 +427,19 @@ export default function App() {
 
         {iniSource ? (
           <section className="panel source-panel">
-            <p className="section-label">INI</p>
-            <h2>Choose a database from this list</h2>
+            <p className="section-label">Database List</p>
+            <h2>Choose a database</h2>
             <p className="helper-copy">
-              {iniSource.source.sourceLabel} was parsed as {describeSourceContainer(iniSource.source)}
-              {' and contains '}
-              {iniSource.entries.length} {iniSource.entries.length === 1 ? 'entry' : 'entries'}.
+              {iniSource.source.sourceLabel} contains {iniSource.entries.length}{' '}
+              {iniSource.entries.length === 1 ? 'entry' : 'entries'}. Choose the one you want to
+              open.
             </p>
             <div className="button-row">
               <button type="button" onClick={() => setIniPickerOpen(true)}>
                 Browse entries
               </button>
             </div>
-            <EmptyState message="Choose an INI entry in the modal, then open it from there." />
+            <EmptyState message="Choose a database in the list modal to open it." />
           </section>
         ) : null}
 
@@ -490,8 +483,8 @@ export default function App() {
                       label: 'Container',
                       value:
                         inspection.source.containerType === 'zip'
-                          ? `ZIP archive -> ${inspection.source.extractedEntry}`
-                          : 'Plain JSON',
+                          ? `ZIP file (${inspection.source.extractedEntry})`
+                          : 'JSON file',
                     },
                   ]}
                 />
@@ -576,8 +569,8 @@ export default function App() {
             <p className="section-label">Ready</p>
             <h2>No database loaded yet</h2>
             <p>
-              Upload a local JSON or INI source, or fetch a remote one to inspect the database
-              metadata, path tree, archive contents, and resolved tags.
+              Upload a local database file or open one from the web to inspect its details, files,
+              folders, archives, and warnings.
             </p>
           </section>
         ) : null}
@@ -647,8 +640,8 @@ const CatalogPickerModal = memo(function CatalogPickerModal({
 
   return (
     <ModalFrame
-      label="Picker"
-      title="Browse Update_All_MiSTer catalog"
+      label="Catalog"
+      title="Browse database catalog"
       onClose={onClose}
       footer={
         <>
@@ -677,12 +670,12 @@ const CatalogPickerModal = memo(function CatalogPickerModal({
       <div className="modal-toolbar">
         <div className="catalog-search">
           <label className="field-label" htmlFor="catalog-modal-search">
-            Search database picker
+            Search catalog
           </label>
           <input
             id="catalog-modal-search"
             type="search"
-            placeholder="Search by db_id, title, or URL"
+            placeholder="Search by ID, title, or URL"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             disabled={status !== 'ready'}
@@ -699,7 +692,7 @@ const CatalogPickerModal = memo(function CatalogPickerModal({
           <p className="section-label">Selected</p>
           <div className="catalog-selected-grid compact-selected-grid">
             <div>
-              <span className="catalog-meta-label">db_id</span>
+              <span className="catalog-meta-label">Database ID</span>
               <code>{selectedOption.dbId}</code>
             </div>
             <div>
@@ -707,7 +700,7 @@ const CatalogPickerModal = memo(function CatalogPickerModal({
               <strong>{selectedOption.title}</strong>
             </div>
             <div className="catalog-selected-url">
-              <span className="catalog-meta-label">db_url</span>
+              <span className="catalog-meta-label">URL</span>
               <a href={selectedOption.dbUrl} target="_blank" rel="noreferrer">
                 {selectedOption.dbUrl}
               </a>
@@ -716,14 +709,12 @@ const CatalogPickerModal = memo(function CatalogPickerModal({
         </article>
       ) : null}
       {status === 'loading' ? (
-        <p className="helper-copy">
-          Reading the current `Update_All_MiSTer/src/update_all/databases.py` catalog at runtime.
-        </p>
+        <p className="helper-copy">Loading catalog entries.</p>
       ) : null}
       {status === 'error' ? <p className="status error">{error}</p> : null}
       {status === 'ready' ? (
         filteredOptions.length ? (
-          <div className="catalog-list modal-list" role="listbox" aria-label="Database picker results">
+          <div className="catalog-list modal-list" role="listbox" aria-label="Catalog results">
             {filteredOptions.map((option) => (
               <button
                 key={option.key}
@@ -778,8 +769,8 @@ const IniPickerModal = memo(function IniPickerModal({ iniSource, onClose, onOpen
 
   return (
     <ModalFrame
-      label="INI"
-      title="Choose a database from this INI"
+      label="List"
+      title="Choose a database from this list"
       onClose={onClose}
       footer={
         <>
@@ -808,12 +799,12 @@ const IniPickerModal = memo(function IniPickerModal({ iniSource, onClose, onOpen
       <div className="modal-toolbar">
         <div className="catalog-search">
           <label className="field-label" htmlFor="ini-modal-search">
-            Search INI entries
+            Search list
           </label>
           <input
             id="ini-modal-search"
             type="search"
-            placeholder="Search by db_id or URL"
+            placeholder="Search by ID or URL"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
@@ -827,11 +818,11 @@ const IniPickerModal = memo(function IniPickerModal({ iniSource, onClose, onOpen
           <p className="section-label">Selected</p>
           <div className="catalog-selected-grid compact-selected-grid">
             <div>
-              <span className="catalog-meta-label">db_id</span>
+              <span className="catalog-meta-label">Database ID</span>
               <code>{selectedEntry.dbId}</code>
             </div>
             <div className="catalog-selected-url">
-              <span className="catalog-meta-label">db_url</span>
+              <span className="catalog-meta-label">URL</span>
               <a href={selectedEntry.dbUrl} target="_blank" rel="noreferrer">
                 {selectedEntry.dbUrl}
               </a>
@@ -840,7 +831,7 @@ const IniPickerModal = memo(function IniPickerModal({ iniSource, onClose, onOpen
         </article>
       ) : null}
       {filteredEntries.length ? (
-        <div className="catalog-list modal-list" role="listbox" aria-label="INI database entries">
+        <div className="catalog-list modal-list" role="listbox" aria-label="Database list entries">
           {filteredEntries.map((entry) => (
             <button
               key={entry.key}
@@ -854,14 +845,14 @@ const IniPickerModal = memo(function IniPickerModal({ iniSource, onClose, onOpen
             >
               <div className="catalog-option-head">
                 <code>{entry.dbId}</code>
-                <strong>Referenced database</strong>
+                <strong>Database</strong>
               </div>
               <span className="catalog-option-url">{entry.dbUrl}</span>
             </button>
           ))}
         </div>
       ) : (
-        <EmptyState message="No INI entries match the current search." />
+        <EmptyState message="No entries match the current search." />
       )}
     </ModalFrame>
   );
@@ -1080,18 +1071,6 @@ function runAfterNextPaint(callback) {
       callback();
     }, 0);
   });
-}
-
-function describeSourceContainer(source) {
-  if (source?.containerType === 'zip') {
-    return `ZIP archive -> ${source.extractedEntry}`;
-  }
-
-  if (source?.containerType === 'ini') {
-    return 'plain INI';
-  }
-
-  return 'plain JSON';
 }
 
 function ModalFrame({ label, title, onClose, footer, children }) {

@@ -78,7 +78,7 @@ export async function loadDatabaseSourceUrl(input) {
 export async function inspectDatabaseFile(file) {
   const loadedSource = await loadDatabaseSourceFile(file);
   if (loadedSource.kind !== 'database') {
-    throw new Error('The uploaded source is an INI list, not a database JSON.');
+    throw new Error('The uploaded file is a database list, not a single database.');
   }
 
   return loadedSource.inspection;
@@ -87,7 +87,7 @@ export async function inspectDatabaseFile(file) {
 export async function inspectDatabaseUrl(input) {
   const loadedSource = await loadDatabaseSourceUrl(input);
   if (loadedSource.kind !== 'database') {
-    throw new Error('The requested URL points to an INI list, not a database JSON.');
+    throw new Error('The requested link points to a database list, not a single database.');
   }
 
   return loadedSource.inspection;
@@ -96,9 +96,7 @@ export async function inspectDatabaseUrl(input) {
 export async function loadRuntimeDatabaseCatalog() {
   const response = await fetch(UPDATE_ALL_DATABASES_SOURCE_URL);
   if (!response.ok) {
-    throw new Error(
-      `Could not fetch Update_All_MiSTer catalog source: ${response.status} ${response.statusText}.`,
-    );
+    throw new Error(`Could not load the database catalog: ${response.status} ${response.statusText}.`);
   }
 
   const source = await response.text();
@@ -217,7 +215,7 @@ async function fetchRemoteResource(url) {
   } catch (error) {
     if (error instanceof TypeError) {
       throw new Error(
-        `Browser could not fetch ${url}. The host may block cross-origin requests (CORS), redirect to a blocked resource, or be temporarily unavailable.`,
+        `Could not open ${url} in the browser. The website may block direct access or be temporarily unavailable.`,
       );
     }
 
@@ -393,7 +391,7 @@ function parseDatabaseListIni(source, sourceName, { baseUrl = null } = {}) {
     }
 
     if (!currentEntry.dbUrl) {
-      throw new Error(`Section [${currentEntry.dbId}] is missing db_url.`);
+      throw new Error(`Section [${currentEntry.dbId}] is missing a database URL.`);
     }
 
     entries.push({
@@ -428,12 +426,12 @@ function parseDatabaseListIni(source, sourceName, { baseUrl = null } = {}) {
     const separatorIndex = rawLine.indexOf('=');
     if (separatorIndex === -1) {
       throw new Error(
-        `Line ${index + 1} must be either a [db_id] section or a key=value entry in ${sourceName}.`,
+        `Line ${index + 1} in ${sourceName} must be a section like [name] or a setting like key=value.`,
       );
     }
 
     if (!currentEntry) {
-      throw new Error(`Line ${index + 1} appears before any [db_id] section in ${sourceName}.`);
+      throw new Error(`Line ${index + 1} appears before any section header in ${sourceName}.`);
     }
 
     const key = rawLine.slice(0, separatorIndex).trim().toLowerCase();
@@ -447,7 +445,7 @@ function parseDatabaseListIni(source, sourceName, { baseUrl = null } = {}) {
   finalizeEntry();
 
   if (!entries.length) {
-    throw new Error('No [db_id] sections with db_url entries were found.');
+    throw new Error('No database entries with a URL were found.');
   }
 
   return entries;
@@ -458,7 +456,7 @@ function normalizeReferencedDatabaseUrl(input, { baseUrl = null, dbId = '' } = {
     return normalizeSupportedSourceUrl(input, { baseUrl });
   } catch (error) {
     if (dbId) {
-      throw new Error(`Section [${dbId}] has an invalid db_url. ${error.message}`);
+      throw new Error(`Section [${dbId}] has an invalid database URL. ${error.message}`);
     }
 
     throw error;
@@ -503,9 +501,7 @@ function parseRuntimeDatabaseCatalog(source) {
   }
 
   if (!entries.length) {
-    throw new Error(
-      'Could not find any Database(...) entries in Update_All_MiSTer databases.py.',
-    );
+    throw new Error('Could not find any database entries in the catalog.');
   }
 
   return entries;
