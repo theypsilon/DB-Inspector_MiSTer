@@ -1193,7 +1193,8 @@ function getLoadedSourceUrl(loadedSource) {
 function createCatalogEntriesFromLoadedSource(loadedSource, existingEntries = []) {
   if (loadedSource.kind === 'database') {
     const dbId = loadedSource.inspection.overview.dbId || '(missing)';
-    const dbUrl = getLoadedSourceUrl(loadedSource);
+    const dbUrl = getCatalogEntryUrl(loadedSource);
+    const matchDbUrls = getCatalogMatchUrls(loadedSource);
     if (!dbUrl) {
       return [];
     }
@@ -1203,8 +1204,9 @@ function createCatalogEntriesFromLoadedSource(loadedSource, existingEntries = []
         key: buildCustomCatalogEntryKey(dbId, dbUrl),
         dbId,
         dbUrl,
+        matchDbUrls,
         title:
-          findPreservedCatalogTitle(existingEntries, dbId, dbUrl) ||
+          findPreservedCatalogTitle(existingEntries, dbId, matchDbUrls) ||
           buildLoadedDatabaseCatalogTitle(loadedSource.inspection),
       },
     ];
@@ -1221,59 +1223,16 @@ function createCatalogEntriesFromLoadedSource(loadedSource, existingEntries = []
 }
 
 function mergeCustomCatalogEntries(nextEntries, currentEntries) {
-  const deduplicatedEntries = dedupeCatalogEntriesByDbId(nextEntries);
-  const replacedDbIds = new Set(deduplicatedEntries.map((entry) => normalizeCatalogDbId(entry.dbId)));
-
-  return [
-    ...deduplicatedEntries,
-    ...currentEntries.filter((entry) => !replacedDbIds.has(normalizeCatalogDbId(entry.dbId))),
-  ];
+  return mergeCatalogEntryList(nextEntries, currentEntries);
 }
 
 function mergeCatalogEntries(customEntries, runtimeEntries) {
-  const overriddenDbIds = new Set(customEntries.map((entry) => normalizeCatalogDbId(entry.dbId)));
-  return [
-    ...customEntries,
-    ...runtimeEntries.filter((entry) => !overriddenDbIds.has(normalizeCatalogDbId(entry.dbId))),
-  ];
+  return mergeCatalogEntryList(customEntries, runtimeEntries, { preferExistingTitle: true });
 }
 
-function dedupeCatalogEntriesByDbId(entries) {
-  const seenDbIds = new Set();
-  const deduplicatedEntries = [];
-
-  for (const entry of entries) {
-    const normalizedDbId = normalizeCatalogDbId(entry.dbId);
-    if (seenDbIds.has(normalizedDbId)) {
-      continue;
-    }
-
-    seenDbIds.add(normalizedDbId);
-    deduplicatedEntries.push(entry);
-  }
-
-  return deduplicatedEntries;
-}
-
-function findPreservedCatalogTitle(existingEntries, dbId, dbUrl) {
-  const normalizedDbUrl = normalizeComparableUrl(dbUrl);
-  if (normalizedDbUrl) {
-    const exactUrlEntry = existingEntries.find(
-      (entry) => normalizeComparableUrl(entry.dbUrl) === normalizedDbUrl,
-    );
-    if (exactUrlEntry?.title) {
-      return exactUrlEntry.title;
-    }
-  }
-
-  const sameDbIdEntries = existingEntries.filter(
-    (entry) => normalizeCatalogDbId(entry.dbId) === normalizeCatalogDbId(dbId) && entry.title,
-  );
-  if (sameDbIdEntries.length === 1) {
-    return sameDbIdEntries[0].title;
-  }
-
-  return '';
+function findPreservedCatalogTitle(existingEntries, dbId, matchDbUrls) {
+  const existingEntry = findCatalogOverrideEntry({ dbId, matchDbUrls }, existingEntries);
+  return existingEntry?.title || '';
 }
 
 function buildLoadedDatabaseCatalogTitle(inspection) {
@@ -1303,8 +1262,98 @@ function buildCustomCatalogEntryKey(dbId, dbUrl) {
   return `custom:${normalizeCatalogDbId(dbId)}:${normalizeComparableUrl(dbUrl) || String(dbUrl).trim()}`;
 }
 
+function getCatalogEntryUrl(loadedSource) {
+  if (loadedSource.kind !== 'database') {
+    return '';
+  }
+
+  const source = loadedSource.inspection.source;
+  if (source.sourceKind === 'upload') {
+    return source.sourceUrl || '';
+  }
+
+  return source.sourceLabel || source.sourceUrl || '';
+}
+
+function getCatalogMatchUrls(loadedSource) {
+  if (loadedSource.kind !== 'database') {
+    return [];
+  }
+
+  const source = loadedSource.inspection.source;
+  return [...new Set([source.sourceLabel, source.sourceUrl, source.requestedUrl, source.resolvedUrl])]
+    .map((value) => normalizeComparableUrl(value))
+    .filter(Boolean);
+}
+
+function mergeCatalogEntryList(incomingEntries, existingEntries, { preferExistingTitle = false } = {}) {
+  const remainingEntries = [...existingEntries];
+  const mergedIncomingEntries = [];
+
+  for (const incomingEntry of incomingEntries) {
+    const matchingIndex = findCatalogOverrideIndex(incomingEntry, remainingEntries);
+    if (matchingIndex !== -1) {
+      const [existingEntry] = remainingEntries.splice(matchingIndex, 1);
+      mergedIncomingEntries.push(
+        mergeCatalogEntry(incomingEntry, existingEntry, { preferExistingTitle }),
+      );
+      continue;
+    }
+
+    mergedIncomingEntries.push(incomingEntry);
+  }
+
+  return [...mergedIncomingEntries, ...remainingEntries];
+}
+
+function findCatalogOverrideEntry(entry, entries) {
+  const matchingIndex = findCatalogOverrideIndex(entry, entries);
+  return matchingIndex === -1 ? null : entries[matchingIndex];
+}
+
+function findCatalogOverrideIndex(entry, entries) {
+  const comparableUrls = getCatalogComparableUrls(entry);
+  if (comparableUrls.length) {
+    const exactUrlIndex = entries.findIndex((existingEntry) => {
+      const existingComparableUrls = getCatalogComparableUrls(existingEntry);
+      return existingComparableUrls.some((existingUrl) => comparableUrls.includes(existingUrl));
+    });
+    if (exactUrlIndex !== -1) {
+      return exactUrlIndex;
+    }
+  }
+
+  const sameDbIdIndexes = entries
+    .map((existingEntry, index) =>
+      normalizeCatalogDbId(existingEntry.dbId) === normalizeCatalogDbId(entry.dbId) ? index : -1,
+    )
+    .filter((index) => index !== -1);
+
+  return sameDbIdIndexes.length === 1 ? sameDbIdIndexes[0] : -1;
+}
+
 function normalizeCatalogDbId(dbId) {
   return String(dbId || '').trim().toLowerCase();
+}
+
+function mergeCatalogEntry(incomingEntry, existingEntry, { preferExistingTitle = false } = {}) {
+  return {
+    ...incomingEntry,
+    matchDbUrls: [...new Set([...getCatalogComparableUrls(incomingEntry), ...getCatalogComparableUrls(existingEntry)])],
+    title:
+      (preferExistingTitle ? existingEntry?.title || incomingEntry.title : incomingEntry.title || existingEntry?.title) ||
+      '',
+  };
+}
+
+function getCatalogComparableUrls(entry) {
+  const matchDbUrls = Array.isArray(entry?.matchDbUrls) ? entry.matchDbUrls : [];
+  const normalizedUrls = [
+    ...matchDbUrls,
+    normalizeComparableUrl(entry?.dbUrl),
+  ].filter(Boolean);
+
+  return [...new Set(normalizedUrls)];
 }
 
 function isFileDragEvent(event) {
