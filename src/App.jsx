@@ -490,220 +490,228 @@ export default function App() {
         </section>
       </section>
 
-      {(loadingMessage || errorMessage) && (
-        <section className="panel status-panel">
-          {loadingMessage ? <p className="status loading">{loadingMessage}</p> : null}
-          {errorMessage ? <p className="status error">{errorMessage}</p> : null}
-        </section>
-      )}
+      <div className="results-stack">
+        {(loadingMessage || errorMessage) && (
+          <section className="panel status-panel">
+            {loadingMessage ? <p className="status loading">{loadingMessage}</p> : null}
+            {errorMessage ? <p className="status error">{errorMessage}</p> : null}
+          </section>
+        )}
 
-      {iniSource ? (
-        <section className="panel source-panel">
-          <p className="section-label">INI</p>
-          <h2>Choose a database from this list</h2>
-          <p className="helper-copy">
-            {iniSource.source.sourceLabel} was parsed as {describeSourceContainer(iniSource.source)}
-            {' and contains '}
-            {iniSource.entries.length} {iniSource.entries.length === 1 ? 'entry' : 'entries'}.
-          </p>
-          <div className="button-row">
-            <button type="button" onClick={() => setIniPickerOpen(true)}>
-              Browse entries
-            </button>
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={() => {
-                void loadIniEntry(selectedIniEntry);
-              }}
-              disabled={!selectedIniEntry}
-            >
-              Open selected
-            </button>
-          </div>
-          {!selectedIniEntry ? <EmptyState message="No INI entry is currently selected." /> : null}
-        </section>
-      ) : null}
-
-      {inspection ? (
-        <>
-          <section className="panel overview-panel">
-            <div className="overview-header">
-              <div>
-                <p className="section-label">Database</p>
-                <h2>{inspection.overview.dbId}</h2>
-              </div>
-              <div className="overview-side">
-                <div className="highlight-row">
-                  <HighlightCard
-                    label="Version"
-                    value={`v${inspection.overview.version}`}
-                    accent="version"
-                  />
-                  <HighlightCard
-                    label="Timestamp"
-                    value={inspection.overview.timestampLabel}
-                    subvalue={`Epoch ${inspection.overview.timestamp}`}
-                    accent="timestamp"
-                  />
-                </div>
-                <div className="overview-controls">
-                  <DetailedToggle
-                    detailed={databaseDetailed}
-                    onDetailedChange={setDatabaseDetailed}
-                  />
-                </div>
-              </div>
+        {iniSource ? (
+          <section className="panel source-panel">
+            <p className="section-label">INI</p>
+            <h2>Choose a database from this list</h2>
+            <p className="helper-copy">
+              {iniSource.source.sourceLabel} was parsed as {describeSourceContainer(iniSource.source)}
+              {' and contains '}
+              {iniSource.entries.length} {iniSource.entries.length === 1 ? 'entry' : 'entries'}.
+            </p>
+            <div className="button-row">
+              <button type="button" onClick={() => setIniPickerOpen(true)}>
+                Browse entries
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => {
+                  void loadIniEntry(selectedIniEntry);
+                }}
+                disabled={!selectedIniEntry}
+              >
+                Open selected
+              </button>
             </div>
+            {!selectedIniEntry ? <EmptyState message="No INI entry is currently selected." /> : null}
+          </section>
+        ) : null}
 
-            <div className="overview-grid">
-              <MetadataCard
-                title="Source"
-                fields={[
-                  { label: 'Loaded from', value: inspection.source.sourceLabel, kind: 'url' },
-                  {
-                    label: 'Container',
-                    value:
-                      inspection.source.containerType === 'zip'
-                        ? `ZIP archive -> ${inspection.source.extractedEntry}`
-                        : 'Plain JSON',
-                  },
-                ]}
-              />
-              <MetadataCard
-                title="Counts"
-                fields={[
-                  { label: 'Files', value: inspection.overview.counts.files.toLocaleString() },
-                  { label: 'Folders', value: inspection.overview.counts.folders.toLocaleString() },
-                  {
-                    label: 'Archives',
-                    value: inspection.overview.counts.archives.toLocaleString(),
-                  },
-                ]}
-              />
-              {databaseDetailed ? (
+        {inspection ? (
+          <>
+            <section className="panel overview-panel">
+              <div className="overview-header">
+                <div>
+                  <p className="section-label">Database</p>
+                  <h2>{inspection.overview.dbId}</h2>
+                </div>
+                <div className="overview-side">
+                  <div className="highlight-row">
+                    <HighlightCard
+                      label="Version"
+                      value={`v${inspection.overview.version}`}
+                      accent="version"
+                    />
+                    <HighlightCard
+                      label="Timestamp"
+                      value={inspection.overview.timestampLabel}
+                      subvalue={`Epoch ${inspection.overview.timestamp}`}
+                      accent="timestamp"
+                    />
+                  </div>
+                  <div className="overview-controls">
+                    <DetailedToggle
+                      detailed={databaseDetailed}
+                      onDetailedChange={setDatabaseDetailed}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="overview-grid">
                 <MetadataCard
-                  title="Options"
+                  title="Source"
                   fields={[
+                    { label: 'Loaded from', value: inspection.source.sourceLabel, kind: 'url' },
                     {
-                      label: 'base_files_url',
-                      value: inspection.overview.baseFilesUrl || 'None',
-                      kind: 'url',
-                    },
-                    {
-                      label: 'Default filter',
-                      value: inspection.overview.defaultFilter || 'None',
-                    },
-                    {
-                      label: 'Imported db_files',
-                      value: inspection.overview.importedDatabases.length
-                        ? inspection.overview.importedDatabases
-                        : ['None'],
+                      label: 'Container',
+                      value:
+                        inspection.source.containerType === 'zip'
+                          ? `ZIP archive -> ${inspection.source.extractedEntry}`
+                          : 'Plain JSON',
                     },
                   ]}
                 />
-              ) : null}
-            </div>
-          </section>
-
-          <CollapsibleSection
-            label="Filesystem"
-            title="Files and folders"
-            defaultOpen
-            actions={
-              <SectionControls
-                detailed={filesystemDetailed}
-                onDetailedChange={setFilesystemDetailed}
-                onExpandAll={() => setSectionCollapsed(filesystemNodeIds, false)}
-                onCollapseAll={() => setSectionCollapsed(filesystemNodeIds, true)}
-              />
-            }
-          >
-            {inspection.filesystemTree.children.length ? (
-              <div className="tree-root">
-                {inspection.filesystemTree.children.map((node) => (
-                  <TreeNode
-                    key={node.id}
-                    node={node}
-                    showDetails={filesystemDetailed}
-                    areDetailsVisible={isNodeDetailsVisible}
-                    collapsedIds={collapsedIds}
-                    onToggle={toggleNode}
-                    onToggleDetails={toggleNodeDetails}
+                <MetadataCard
+                  title="Counts"
+                  fields={[
+                    { label: 'Files', value: inspection.overview.counts.files.toLocaleString() },
+                    { label: 'Folders', value: inspection.overview.counts.folders.toLocaleString() },
+                    {
+                      label: 'Archives',
+                      value: inspection.overview.counts.archives.toLocaleString(),
+                    },
+                  ]}
+                />
+                {databaseDetailed ? (
+                  <MetadataCard
+                    title="Options"
+                    fields={[
+                      {
+                        label: 'base_files_url',
+                        value: inspection.overview.baseFilesUrl || 'None',
+                        kind: 'url',
+                      },
+                      {
+                        label: 'Default filter',
+                        value: inspection.overview.defaultFilter || 'None',
+                      },
+                      {
+                        label: 'Imported db_files',
+                        value: inspection.overview.importedDatabases.length
+                          ? inspection.overview.importedDatabases
+                          : ['None'],
+                      },
+                    ]}
                   />
-                ))}
+                ) : null}
               </div>
-            ) : (
-              <EmptyState message="No top-level files or folders were found." />
-            )}
-          </CollapsibleSection>
+            </section>
 
-          <CollapsibleSection
-            label="Archives"
-            title="Archive summaries"
-            defaultOpen
-            actions={
-              <SectionControls
-                detailed={archivesDetailed}
-                onDetailedChange={setArchivesDetailed}
-                onExpandAll={() => setSectionCollapsed(archiveNodeIds, false)}
-                onCollapseAll={() => setSectionCollapsed(archiveNodeIds, true)}
-              />
-            }
-          >
-            {inspection.archiveViews.length ? (
-              <div className="archive-list">
-                {inspection.archiveViews.map((archive) => (
-                  <ArchiveCard
-                    key={archive.nodeId}
-                    archive={archive}
-                    showDetails={archivesDetailed}
-                    areDetailsVisible={isNodeDetailsVisible}
-                    collapsedIds={collapsedIds}
-                    onToggle={toggleNode}
-                    onToggleDetails={toggleNodeDetails}
-                  />
-                ))}
-              </div>
-            ) : (
-              <EmptyState message="This database does not define any archives." />
-            )}
-          </CollapsibleSection>
+            <CollapsibleSection
+              label="Filesystem"
+              title="Files and folders"
+              defaultOpen
+              actions={
+                <SectionControls
+                  detailed={filesystemDetailed}
+                  onDetailedChange={setFilesystemDetailed}
+                  onExpandAll={() => setSectionCollapsed(filesystemNodeIds, false)}
+                  onCollapseAll={() => setSectionCollapsed(filesystemNodeIds, true)}
+                />
+              }
+            >
+              {inspection.filesystemTree.children.length ? (
+                <div className="tree-root">
+                  {inspection.filesystemTree.children.map((node) => (
+                    <TreeNode
+                      key={node.id}
+                      node={node}
+                      showDetails={filesystemDetailed}
+                      areDetailsVisible={isNodeDetailsVisible}
+                      collapsedIds={collapsedIds}
+                      onToggle={toggleNode}
+                      onToggleDetails={toggleNodeDetails}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <EmptyState message="No top-level files or folders were found." />
+              )}
+            </CollapsibleSection>
 
-          <CollapsibleSection
-            label="Diagnostics"
-            title="Issues and warnings"
-            defaultOpen
-          >
-            {inspection.issues.length ? (
-              <ul className="issue-list">
-                {inspection.issues.map((issue) => (
-                  <li key={issue.id} className={`issue issue-${issue.level}`}>
-                    <span className="issue-level">{issue.level}</span>
-                    <strong>{issue.context}</strong>
-                    <span>{issue.message}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <EmptyState message="No schema or path issues were detected by the browser-side inspector." />
-            )}
-          </CollapsibleSection>
+            <CollapsibleSection
+              label="Archives"
+              title="Archive summaries"
+              defaultOpen
+              actions={
+                <SectionControls
+                  detailed={archivesDetailed}
+                  onDetailedChange={setArchivesDetailed}
+                  onExpandAll={() => setSectionCollapsed(archiveNodeIds, false)}
+                  onCollapseAll={() => setSectionCollapsed(archiveNodeIds, true)}
+                />
+              }
+            >
+              {inspection.archiveViews.length ? (
+                <div className="archive-list">
+                  {inspection.archiveViews.map((archive) => (
+                    <ArchiveCard
+                      key={archive.nodeId}
+                      archive={archive}
+                      showDetails={archivesDetailed}
+                      areDetailsVisible={isNodeDetailsVisible}
+                      collapsedIds={collapsedIds}
+                      onToggle={toggleNode}
+                      onToggleDetails={toggleNodeDetails}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <EmptyState message="This database does not define any archives." />
+              )}
+            </CollapsibleSection>
 
-          <section className="panel">
-            <TagDictionary tags={inspection.overview.tagDictionary} />
+            <CollapsibleSection
+              label="Diagnostics"
+              title="Issues and warnings"
+              defaultOpen
+            >
+              {inspection.issues.length ? (
+                <ul className="issue-list">
+                  {inspection.issues.map((issue) => (
+                    <li key={issue.id} className={`issue issue-${issue.level}`}>
+                      <span className="issue-level">{issue.level}</span>
+                      <strong>{issue.context}</strong>
+                      <span>{issue.message}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <EmptyState message="No schema or path issues were detected by the browser-side inspector." />
+              )}
+            </CollapsibleSection>
+
+            <section className="panel">
+              <TagDictionary tags={inspection.overview.tagDictionary} />
+            </section>
+          </>
+        ) : loadingMessage ? (
+          <section className="panel empty-screen loading-screen">
+            <p className="section-label">Loading</p>
+            <h2>Database is being loaded</h2>
+            <p>{loadingMessage}</p>
           </section>
-        </>
-      ) : !iniSource ? (
-        <section className="panel empty-screen">
-          <p className="section-label">Ready</p>
-          <h2>No database loaded yet</h2>
-          <p>
-            Upload a local JSON or INI source, or fetch a remote one to inspect the database
-            metadata, path tree, archive contents, and resolved tags.
-          </p>
-        </section>
-      ) : null}
+        ) : !iniSource ? (
+          <section className="panel empty-screen">
+            <p className="section-label">Ready</p>
+            <h2>No database loaded yet</h2>
+            <p>
+              Upload a local JSON or INI source, or fetch a remote one to inspect the database
+              metadata, path tree, archive contents, and resolved tags.
+            </p>
+          </section>
+        ) : null}
+      </div>
 
       {catalogModalOpen ? (
         <ModalFrame

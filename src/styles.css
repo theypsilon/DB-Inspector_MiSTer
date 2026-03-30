@@ -237,6 +237,10 @@ button:hover {
   min-height: 100%;
 }
 
+.results-stack {
+  margin-top: 0.35rem;
+}
+
 .catalog-toolbar {
   display: grid;
   grid-template-columns: minmax(0, 1.7fr) minmax(250px, 0.7fr);
