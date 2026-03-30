@@ -1133,9 +1133,6 @@ const TreeEntryRow = memo(function TreeEntryRow({
   const isFile = !isArchive && row.node.kind === 'file';
   const downloadUrl = isFile ? row.node.downloadUrl : null;
   const bodyCollapsed = isFile && collapsed;
-  const ancestorGuideDepths = row.ancestorContinuationDepths.filter(
-    (guideDepth) => guideDepth < row.depth - 1,
-  );
   const hasVisibleChildren = childIds.length > 0 && !collapsed;
   const containerClassName = [
     'tree-entry',
@@ -1193,21 +1190,9 @@ const TreeEntryRow = memo(function TreeEntryRow({
       className={containerClassName}
       style={{ ...buildTreeDepthStyle(row.depth), ...virtualStyle }}
     >
-      {ancestorGuideDepths.length || row.depth || hasVisibleChildren ? (
+      {row.depth || hasVisibleChildren ? (
         <div className="tree-guides" aria-hidden="true">
-          {ancestorGuideDepths.map((guideDepth) => (
-            <span
-              key={guideDepth}
-              className="tree-guide-vertical"
-              style={buildTreeGuideStyle(guideDepth)}
-            />
-          ))}
-          {row.depth ? (
-            <span
-              className={`tree-guide-parent${row.isLastSibling ? '' : ' tree-guide-parent-continue'}`}
-              style={buildTreeGuideStyle(row.depth - 1)}
-            />
-          ) : null}
+          {row.depth ? <span className="tree-guide-parent" style={buildTreeGuideStyle(row.depth - 1)} /> : null}
           {row.depth ? <span className="tree-guide-elbow" style={buildTreeGuideStyle(row.depth)} /> : null}
           {hasVisibleChildren ? (
             <span className="tree-guide-child" style={buildTreeGuideStyle(row.depth)} />
