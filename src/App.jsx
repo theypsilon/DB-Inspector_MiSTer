@@ -156,26 +156,16 @@ export default function App() {
     setIniSource(null);
   }
 
-  function openRemoteDatabaseFromModal(url, { closeCatalog = false, closeIni = false } = {}) {
+  function startRemoteDatabaseLoad(url) {
     const requestedUrl = String(url).trim();
     if (!requestedUrl) {
       return;
     }
 
-    flushSync(() => {
-      if (closeCatalog) {
-        setCatalogModalOpen(false);
-      }
-
-      if (closeIni) {
-        setIniPickerOpen(false);
-      }
-
-      setDatabaseUrl(requestedUrl);
-      setLoadingMessage(`Fetching ${requestedUrl}...`);
-      setErrorMessage('');
-      clearLoadedSource();
-    });
+    setDatabaseUrl(requestedUrl);
+    setLoadingMessage(`Fetching ${requestedUrl}...`);
+    setErrorMessage('');
+    clearLoadedSource();
 
     window.setTimeout(() => {
       void loadRemoteSource(requestedUrl, { skipPrepare: true });
@@ -311,7 +301,7 @@ export default function App() {
       return;
     }
 
-    openRemoteDatabaseFromModal(entry.dbUrl, { closeIni: true });
+    startRemoteDatabaseLoad(entry.dbUrl);
   }
 
   function handleDrop(event) {
@@ -591,7 +581,7 @@ export default function App() {
           initialDatabaseUrl={databaseUrl}
           onClose={() => setCatalogModalOpen(false)}
           onOpenDatabase={(url) => {
-            openRemoteDatabaseFromModal(url, { closeCatalog: true });
+            startRemoteDatabaseLoad(url);
           }}
         />
       ) : null}
@@ -659,7 +649,12 @@ const CatalogPickerModal = memo(function CatalogPickerModal({
             type="button"
             onClick={() => {
               if (selectedOption) {
-                onOpenDatabase(selectedOption.dbUrl);
+                flushSync(() => {
+                  onClose();
+                });
+                runAfterNextPaint(() => {
+                  onOpenDatabase(selectedOption.dbUrl);
+                });
               }
             }}
             disabled={!selectedOption}
@@ -785,7 +780,12 @@ const IniPickerModal = memo(function IniPickerModal({ iniSource, onClose, onOpen
             type="button"
             onClick={() => {
               if (selectedEntry) {
-                onOpenDatabase(selectedEntry);
+                flushSync(() => {
+                  onClose();
+                });
+                runAfterNextPaint(() => {
+                  onOpenDatabase(selectedEntry);
+                });
               }
             }}
             disabled={!selectedEntry}
@@ -1019,6 +1019,14 @@ function normalizeComparableUrl(value) {
   } catch {
     return '';
   }
+}
+
+function runAfterNextPaint(callback) {
+  window.requestAnimationFrame(() => {
+    window.setTimeout(() => {
+      callback();
+    }, 0);
+  });
 }
 
 function describeSourceContainer(source) {
