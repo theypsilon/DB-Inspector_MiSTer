@@ -894,6 +894,7 @@ async function buildArchiveView({
         dbVersion,
         dbId,
         file,
+        archiveExtractMode: getString(archiveRecord.extract),
         tagLookup,
         issues,
         localIssues,
@@ -1134,6 +1135,7 @@ function buildArchiveFileRecord({
   dbVersion,
   dbId,
   file,
+  archiveExtractMode,
   tagLookup,
   issues,
   localIssues,
@@ -1153,6 +1155,7 @@ function buildArchiveFileRecord({
 
   const arcId = getString(wrapped.arc_id);
   const arcAt = getString(wrapped.arc_at);
+  const isExtractAllArchive = archiveExtractMode === 'all';
 
   if (arcId && arcId !== archiveId) {
     addIssue(
@@ -1171,7 +1174,7 @@ function buildArchiveFileRecord({
 
   if (arcAt) {
     validateArchiveMemberPath(arcAt, issues, archiveId || 'archive');
-  } else {
+  } else if (!isExtractAllArchive) {
     addIssue(
       issues,
       'warning',
@@ -1203,7 +1206,11 @@ function buildArchiveFileRecord({
     details: [
       { label: 'Destination', value: pathInfo.displayPath, kind: 'code' },
       { label: 'Archive ID', value: arcId || 'Missing', kind: 'code' },
-      { label: 'Archive path', value: arcAt || 'Missing', kind: 'code' },
+      {
+        label: 'Archive path',
+        value: arcAt || (isExtractAllArchive ? 'Not required for extract-all' : 'Missing'),
+        kind: 'code',
+      },
       ...buildDownloadDetails({
         explicitUrl,
         resolvedUrl,

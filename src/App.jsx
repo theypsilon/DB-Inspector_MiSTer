@@ -520,6 +520,7 @@ export default function App() {
           </>
         ) : loadingMessage ? (
           <section className="panel empty-screen loading-screen">
+            <div className="loading-spinner" aria-hidden="true" />
             <p className="section-label">Loading</p>
             <h2>Database is being loaded</h2>
             <p>{loadingMessage}</p>
@@ -544,6 +545,7 @@ export default function App() {
           initialDatabaseUrl={databaseUrl}
           onClose={() => setCatalogModalOpen(false)}
           onOpenDatabase={(url) => {
+            setCatalogModalOpen(false);
             void loadRemoteSource(url);
           }}
         />
@@ -959,9 +961,6 @@ function ModalFrame({ label, title, onClose, footer, children }) {
             <p className="section-label">{label}</p>
             <h2>{title}</h2>
           </div>
-          <button type="button" className="modal-close-button" onClick={onClose}>
-            Close
-          </button>
         </div>
         <div className="modal-body">{children}</div>
         {footer ? <div className="modal-footer">{footer}</div> : null}
