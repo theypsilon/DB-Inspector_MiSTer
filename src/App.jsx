@@ -18,6 +18,7 @@ import {
 } from './lib/database.js';
 
 const DATABASE_URL_PARAM = 'database-url';
+const FILTER_URL_PARAM = 'filter';
 const FILTER_INPUT_DEBOUNCE_MS = 600;
 const TREE_LIST_GAP_PX = 13;
 const TREE_OVERSCAN_PX = 900;
@@ -33,6 +34,8 @@ export default function App() {
   const uploadCatalogUrlsRef = useRef(new Set());
   const dropzoneDragDepthRef = useRef(0);
   const dropzoneDropPulseTimeoutRef = useRef(0);
+  const filterSearchParamReadyRef = useRef(false);
+  const expectedFilterSearchParamValueRef = useRef('');
   const [databaseUrl, setDatabaseUrl] = useState(() => readDatabaseUrlSearchParam());
   const [loadingMessage, setLoadingMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
@@ -70,9 +73,13 @@ export default function App() {
   }, [inspection]);
 
   useEffect(() => {
-    const defaultFilter = inspection?.overview.defaultFilter || '';
-    setFilterInput(defaultFilter);
-    setDebouncedFilterInput(defaultFilter);
+    filterSearchParamReadyRef.current = false;
+
+    const sharedFilter = readFilterSearchParam();
+    const nextFilter = sharedFilter.isPresent ? sharedFilter.value : inspection?.overview.defaultFilter || '';
+    expectedFilterSearchParamValueRef.current = nextFilter;
+    setFilterInput(nextFilter);
+    setDebouncedFilterInput(nextFilter);
   }, [inspectionKeyBase]);
 
   useEffect(() => {
@@ -90,8 +97,38 @@ export default function App() {
   }, [debouncedFilterInput, filterInput]);
 
   useEffect(() => {
+    if (!inspection) {
+      filterSearchParamReadyRef.current = false;
+      return;
+    }
+
+    if (debouncedFilterInput === expectedFilterSearchParamValueRef.current) {
+      filterSearchParamReadyRef.current = true;
+    }
+  }, [inspection, inspectionKeyBase, debouncedFilterInput]);
+
+  useEffect(() => {
     iniSourceRef.current = iniSource;
   }, [iniSource]);
+
+  useEffect(() => {
+    if (!inspection || !filterSearchParamReadyRef.current) {
+      return;
+    }
+
+    if (inspection.source.sourceKind !== 'url') {
+      writeFilterSearchParam('', { isPresent: false });
+      return;
+    }
+
+    const defaultFilter = inspection.overview.defaultFilter || '';
+    if (debouncedFilterInput === defaultFilter) {
+      writeFilterSearchParam('', { isPresent: false });
+      return;
+    }
+
+    writeFilterSearchParam(debouncedFilterInput, { isPresent: true });
+  }, [inspection, debouncedFilterInput]);
 
   useEffect(() => {
     if (autoLoadHandledRef.current) {
@@ -110,7 +147,10 @@ export default function App() {
   useEffect(() => {
     function handlePopState() {
       const sharedDatabaseUrl = readDatabaseUrlSearchParam();
+      const sharedFilter = readFilterSearchParam();
       setDatabaseUrl(sharedDatabaseUrl);
+      setFilterInput(sharedFilter.isPresent ? sharedFilter.value : '');
+      setDebouncedFilterInput(sharedFilter.isPresent ? sharedFilter.value : '');
       setErrorMessage('');
 
       if (sharedDatabaseUrl) {
@@ -260,12 +300,12 @@ export default function App() {
 
       if (origin === 'upload') {
         setDatabaseUrl('');
-        writeDatabaseUrlSearchParam('', { pushHistory: true });
+        writeDatabaseUrlSearchParam('', { pushHistory: true, preserveFilter: false });
       } else {
         const sharedUrl = loadedSource.inspection.source.sourceLabel;
         setDatabaseUrl(sharedUrl);
         if (syncSearchParam) {
-          writeDatabaseUrlSearchParam(sharedUrl, { pushHistory: true });
+          writeDatabaseUrlSearchParam(sharedUrl, { pushHistory: true, preserveFilter: false });
         }
       }
 
@@ -290,13 +330,13 @@ export default function App() {
 
     if (origin === 'upload') {
       setDatabaseUrl('');
-      writeDatabaseUrlSearchParam('', { pushHistory: true });
+      writeDatabaseUrlSearchParam('', { pushHistory: true, preserveFilter: false });
       return;
     }
 
     setDatabaseUrl(requestedUrl);
     if (syncSearchParam) {
-      writeDatabaseUrlSearchParam(requestedUrl, { pushHistory: true });
+      writeDatabaseUrlSearchParam(requestedUrl, { pushHistory: true, preserveFilter: false });
     }
   }
 
@@ -761,7 +801,7 @@ export default function App() {
               }
             />
 
-            {inspection?.archiveViews.length || displayedInspection.activeFilter.isFiltering ? (
+            {displayedInspection.archiveViews.length ? (
               <ArchiveSummariesSection
                 key={`archives:${inspectionKey}`}
                 archiveViews={displayedInspection.archiveViews}
@@ -1378,7 +1418,19 @@ function readDatabaseUrlSearchParam() {
   return searchParams.get(DATABASE_URL_PARAM) ?? '';
 }
 
-function writeDatabaseUrlSearchParam(value, { pushHistory = false } = {}) {
+function readFilterSearchParam() {
+  if (typeof window === 'undefined') {
+    return { isPresent: false, value: '' };
+  }
+
+  const searchParams = new URLSearchParams(window.location.search);
+  return {
+    isPresent: searchParams.has(FILTER_URL_PARAM),
+    value: searchParams.get(FILTER_URL_PARAM) ?? '',
+  };
+}
+
+function writeDatabaseUrlSearchParam(value, { pushHistory = false, preserveFilter = true } = {}) {
   if (typeof window === 'undefined') {
     return;
   }
@@ -1388,6 +1440,33 @@ function writeDatabaseUrlSearchParam(value, { pushHistory = false } = {}) {
     currentUrl.searchParams.set(DATABASE_URL_PARAM, value);
   } else {
     currentUrl.searchParams.delete(DATABASE_URL_PARAM);
+  }
+
+  if (!preserveFilter) {
+    currentUrl.searchParams.delete(FILTER_URL_PARAM);
+  }
+
+  if (currentUrl.toString() === window.location.href) {
+    return;
+  }
+
+  if (pushHistory) {
+    window.history.pushState({}, '', currentUrl);
+  } else {
+    window.history.replaceState({}, '', currentUrl);
+  }
+}
+
+function writeFilterSearchParam(value, { pushHistory = false, isPresent = true } = {}) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const currentUrl = new URL(window.location.href);
+  if (isPresent) {
+    currentUrl.searchParams.set(FILTER_URL_PARAM, value);
+  } else {
+    currentUrl.searchParams.delete(FILTER_URL_PARAM);
   }
 
   if (currentUrl.toString() === window.location.href) {
