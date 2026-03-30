@@ -577,6 +577,7 @@ button:hover {
   gap: 0.35rem;
   padding: 0.3rem;
   border-radius: 999px;
+  overflow: hidden;
   background: rgba(22, 33, 47, 0.08);
 }
 
@@ -607,7 +608,12 @@ button:hover {
 }
 
 .toggle-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 3.1rem;
   padding: 0.5rem 0.9rem;
+  border-radius: 999px;
   color: var(--ink);
   background: transparent;
   box-shadow: none;
@@ -913,12 +919,20 @@ button:hover {
 .tree-heading-actions {
   display: flex;
   align-items: center;
+  flex: 0 0 auto;
 }
 
 .node-action-row {
   display: flex;
   flex-wrap: wrap;
   justify-content: end;
+  gap: 0.45rem;
+}
+
+.node-download-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
   gap: 0.45rem;
 }
 
@@ -936,17 +950,12 @@ button:hover {
   text-decoration: none;
 }
 
-.node-action-row > .inline-action-button:not(.open-button) {
-  order: 0;
-}
-
 .inline-action-button:hover {
   background: rgba(22, 33, 47, 0.14);
   filter: none;
 }
 
 .open-button {
-  order: 1;
   color: #f9f8f3;
   background: linear-gradient(135deg, var(--accent), var(--accent-strong));
   letter-spacing: 0.04em;
@@ -962,7 +971,6 @@ button:hover {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  order: 2;
   padding: 0.55rem 0.9rem;
   border-radius: 999px;
   background: linear-gradient(135deg, #3d8751, #1e6a5c);
@@ -982,12 +990,17 @@ button:hover {
   display: flex;
   align-items: baseline;
   flex-wrap: nowrap;
+  flex: 1 1 auto;
   gap: 0.7rem;
   min-width: 0;
 }
 
 .tree-title-row h3 {
+  flex: 0 1 auto;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tree-identifier-inline {

@@ -1759,7 +1759,7 @@ const TreeEntryRow = memo(function TreeEntryRow({
           <div className="tree-heading">
             <div className="tree-title-row">
               <span className={badgeClassName}>{badge}</span>
-              <h3>{title}</h3>
+              <h3 title={title}>{title}</h3>
               {showIdentifier ? (
                 <span className="tree-identifier-inline">
                   <span className="tree-identifier-label">{identifierLabel}</span>
@@ -1776,24 +1776,28 @@ const TreeEntryRow = memo(function TreeEntryRow({
                 >
                   {detailsVisible ? 'Hide details' : 'Show details'}
                 </button>
-                {openUrl ? (
-                  <a
-                    className="inline-action-button open-button"
-                    href={openUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    OPEN
-                  </a>
-                ) : null}
-                {downloadUrl ? (
-                  <button
-                    type="button"
-                    className="download-button"
-                    onClick={handleDownload}
-                  >
-                    Download
-                  </button>
+                {openUrl || downloadUrl ? (
+                  <div className="node-download-actions">
+                    {openUrl ? (
+                      <a
+                        className="inline-action-button open-button"
+                        href={openUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        OPEN
+                      </a>
+                    ) : null}
+                    {downloadUrl ? (
+                      <button
+                        type="button"
+                        className="download-button"
+                        onClick={handleDownload}
+                      >
+                        Download
+                      </button>
+                    ) : null}
+                  </div>
                 ) : null}
               </div>
             </div>

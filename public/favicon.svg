@@ -8,7 +8,7 @@
       <stop offset="0" stop-color="#1384a7" />
       <stop offset="1" stop-color="#0d617f" />
     </linearGradient>
-    <linearGradient id="lens" x1="33" y1="28" x2="56" y2="53" gradientUnits="userSpaceOnUse">
+    <linearGradient id="lens" x1="29" y1="23" x2="59" y2="57" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#eb8451" />
       <stop offset="1" stop-color="#c65128" />
     </linearGradient>
@@ -52,17 +52,17 @@
     stroke-width="1.4"
   />
 
-  <circle cx="42" cy="40" r="11" fill="#fff8eb" fill-opacity="0.12" stroke="url(#lens)" stroke-width="5.2" />
-  <path d="M50 48 57 55" fill="none" stroke="url(#lens)" stroke-width="5.2" stroke-linecap="round" />
+  <circle cx="43" cy="41" r="16" fill="#fff8eb" fill-opacity="0.12" stroke="url(#lens)" stroke-width="6.2" />
+  <path d="M54 52 61 59" fill="none" stroke="url(#lens)" stroke-width="6.2" stroke-linecap="round" />
 
-  <circle cx="37.5" cy="36.5" r="1.8" fill="#fff8eb" />
-  <circle cx="44.5" cy="40.2" r="1.8" fill="#fff8eb" />
-  <circle cx="40.4" cy="45" r="1.8" fill="#fff8eb" />
+  <circle cx="36.5" cy="35.5" r="2.1" fill="#fff8eb" />
+  <circle cx="46.5" cy="41" r="2.1" fill="#fff8eb" />
+  <circle cx="40.8" cy="47.3" r="2.1" fill="#fff8eb" />
   <path
-    d="M37.5 36.5 44.5 40.2 40.4 45"
+    d="M36.5 35.5 46.5 41 40.8 47.3"
     fill="none"
     stroke="#fff8eb"
-    stroke-width="1.8"
+    stroke-width="2.1"
     stroke-linecap="round"
     stroke-linejoin="round"
   />
