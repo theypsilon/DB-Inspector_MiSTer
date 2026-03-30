@@ -21,6 +21,9 @@ const DATABASE_URL_PARAM = 'database-url';
 const FILTER_INPUT_DEBOUNCE_MS = 600;
 const TREE_LIST_GAP_PX = 13;
 const TREE_OVERSCAN_PX = 900;
+const BACKGROUND_DOWNLOAD_FRAME_NAME = 'background-download-frame';
+
+let backgroundDownloadFrame = null;
 
 export default function App() {
   const fileInputRef = useRef(null);
@@ -1254,6 +1257,118 @@ const TreeSection = memo(function TreeSection({
   );
 });
 
+const OPENABLE_TEXT_FILE_EXTENSIONS = new Set(['txt', 'ini', 'md']);
+const OPENABLE_IMAGE_FILE_EXTENSIONS = new Set([
+  'apng',
+  'avif',
+  'bmp',
+  'gif',
+  'ico',
+  'jpeg',
+  'jpg',
+  'png',
+  'svg',
+  'webp',
+]);
+
+function isBrowserOpenableFile(path) {
+  const normalizedPath = String(path).trim().toLowerCase();
+  const extension = normalizedPath.split('.').pop();
+  if (!extension || extension === normalizedPath) {
+    return false;
+  }
+
+  return (
+    OPENABLE_TEXT_FILE_EXTENSIONS.has(extension) ||
+    extension === 'pdf' ||
+    OPENABLE_IMAGE_FILE_EXTENSIONS.has(extension)
+  );
+}
+
+function resolveDownloadFileName(fileName, url) {
+  const normalizedName = String(fileName || '').trim();
+  if (normalizedName) {
+    return normalizedName;
+  }
+
+  try {
+    const parsedUrl = new URL(String(url).trim());
+    const leaf = parsedUrl.pathname.split('/').pop();
+    return leaf || 'download';
+  } catch {
+    return 'download';
+  }
+}
+
+function ensureBackgroundDownloadFrame() {
+  if (typeof document === 'undefined') {
+    return null;
+  }
+
+  if (backgroundDownloadFrame?.isConnected) {
+    return backgroundDownloadFrame;
+  }
+
+  const existingFrame = document.querySelector(
+    `iframe[data-download-target="${BACKGROUND_DOWNLOAD_FRAME_NAME}"]`,
+  );
+  if (existingFrame instanceof HTMLIFrameElement) {
+    backgroundDownloadFrame = existingFrame;
+    return backgroundDownloadFrame;
+  }
+
+  const iframe = document.createElement('iframe');
+  iframe.name = BACKGROUND_DOWNLOAD_FRAME_NAME;
+  iframe.dataset.downloadTarget = BACKGROUND_DOWNLOAD_FRAME_NAME;
+  iframe.tabIndex = -1;
+  iframe.setAttribute('aria-hidden', 'true');
+  iframe.style.display = 'none';
+  document.body.append(iframe);
+  backgroundDownloadFrame = iframe;
+  return backgroundDownloadFrame;
+}
+
+function triggerBrowserDownload(href, fileName, target = '') {
+  if (typeof document === 'undefined') {
+    return;
+  }
+
+  const link = document.createElement('a');
+  link.href = href;
+  link.download = resolveDownloadFileName(fileName, href);
+  link.rel = 'noreferrer';
+  if (target) {
+    link.target = target;
+  }
+  link.style.display = 'none';
+  document.body.append(link);
+  link.click();
+  link.remove();
+}
+
+async function triggerFileDownload(url, fileName) {
+  if (!url || typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    const response = await fetch(url, { redirect: 'follow' });
+    if (!response.ok) {
+      throw new Error(`Could not download ${url}.`);
+    }
+
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    triggerBrowserDownload(objectUrl, fileName);
+    window.setTimeout(() => {
+      URL.revokeObjectURL(objectUrl);
+    }, 60_000);
+  } catch {
+    const fallbackFrame = ensureBackgroundDownloadFrame();
+    triggerBrowserDownload(url, fileName, fallbackFrame?.name || '');
+  }
+}
+
 function readDatabaseUrlSearchParam() {
   if (typeof window === 'undefined') {
     return '';
@@ -1549,6 +1664,7 @@ const TreeEntryRow = memo(function TreeEntryRow({
   const issues = isArchive ? row.archive.issues : [];
   const isFile = !isArchive && row.node.kind === 'file';
   const downloadUrl = isFile ? row.node.downloadUrl : null;
+  const openUrl = isFile && isBrowserOpenableFile(row.node.path) ? downloadUrl : null;
   const bodyCollapsed = isFile && collapsed;
   const hasVisibleChildren = childIds.length > 0 && !collapsed;
   const containerClassName = [
@@ -1599,6 +1715,10 @@ const TreeEntryRow = memo(function TreeEntryRow({
     }
 
     onToggleCollapsed(row.id);
+  };
+
+  const handleDownload = () => {
+    void triggerFileDownload(downloadUrl, row.node.name);
   };
 
   return (
@@ -1656,16 +1776,24 @@ const TreeEntryRow = memo(function TreeEntryRow({
                 >
                   {detailsVisible ? 'Hide details' : 'Show details'}
                 </button>
-                {downloadUrl ? (
+                {openUrl ? (
                   <a
-                    className="download-button"
-                    href={downloadUrl}
+                    className="inline-action-button open-button"
+                    href={openUrl}
                     target="_blank"
                     rel="noreferrer"
-                    download
+                  >
+                    OPEN
+                  </a>
+                ) : null}
+                {downloadUrl ? (
+                  <button
+                    type="button"
+                    className="download-button"
+                    onClick={handleDownload}
                   >
                     Download
-                  </a>
+                  </button>
                 ) : null}
               </div>
             </div>
