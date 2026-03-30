@@ -1358,7 +1358,7 @@ function buildHashAndSizeDetails({ hash, size }) {
   const details = [];
 
   if (hash) {
-    details.push({ label: 'Hash', value: hash, kind: 'code' });
+    details.push({ label: 'MD5 HASH', value: hash, kind: 'code' });
   }
 
   if (Number.isFinite(size)) {

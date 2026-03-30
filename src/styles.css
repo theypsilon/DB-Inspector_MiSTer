@@ -581,19 +581,15 @@ button:hover {
 }
 
 .toggle-group-button {
+  appearance: none;
   color: inherit;
   box-shadow: none;
   cursor: pointer;
-  transition:
-    background 140ms ease,
-    box-shadow 140ms ease,
-    transform 140ms ease;
+  transition: none;
 }
 
 .toggle-group-button:hover {
   filter: none;
-  background: rgba(22, 33, 47, 0.12);
-  box-shadow: inset 0 0 0 1px rgba(22, 33, 47, 0.08);
 }
 
 .toggle-group-button:focus-visible {
