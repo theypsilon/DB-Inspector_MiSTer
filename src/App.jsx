@@ -681,7 +681,7 @@ export default function App() {
 
             <CollapsibleSection
               label="FILTER"
-              title="Introduce terms to filter"
+              title="Enter terms to filter by"
               defaultOpen
               className="filter-panel"
             >
