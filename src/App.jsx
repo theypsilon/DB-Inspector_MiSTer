@@ -1122,6 +1122,8 @@ const TreeEntryRow = memo(function TreeEntryRow({
     ? 'node-badge archive-badge'
     : `node-badge ${row.node.kind === 'file' ? 'file-badge' : 'folder-badge'}`;
   const identifier = isArchive ? row.archive.id : row.node.path;
+  const identifierLabel = isArchive ? 'Archive' : 'Path';
+  const showIdentifier = isArchive || identifier !== title;
   const primaryFields = isArchive ? row.archive.primaryFields : row.node.primaryFields;
   const details = isArchive ? row.archive.details : row.node.details;
   const issues = isArchive ? row.archive.issues : [];
@@ -1162,6 +1164,14 @@ const TreeEntryRow = memo(function TreeEntryRow({
     };
   }, [row.id, collapsed, detailsVisible, onHeightChange]);
 
+  const handleToggleRowDetails = () => {
+    if (isFile && collapsed && !detailsVisible) {
+      onToggleCollapsed(row.id);
+    }
+
+    onToggleDetails(row.id);
+  };
+
   return (
     <Container
       ref={rowRef}
@@ -1185,13 +1195,19 @@ const TreeEntryRow = memo(function TreeEntryRow({
             <div className="tree-title-row">
               <span className={badgeClassName}>{badge}</span>
               <h3>{title}</h3>
+              {showIdentifier ? (
+                <span className="tree-identifier-inline">
+                  <span className="tree-identifier-label">{identifierLabel}</span>
+                  <code>{identifier}</code>
+                </span>
+              ) : null}
             </div>
             <div className="tree-heading-actions">
               <div className="node-action-row">
                 <button
                   type="button"
                   className="inline-action-button"
-                  onClick={() => onToggleDetails(row.id)}
+                  onClick={handleToggleRowDetails}
                 >
                   {detailsVisible ? 'Hide details' : 'Show details'}
                 </button>
@@ -1209,7 +1225,6 @@ const TreeEntryRow = memo(function TreeEntryRow({
               </div>
             </div>
           </div>
-          <code className="tree-identifier-line">{identifier}</code>
           {!bodyCollapsed ? <PrimaryFieldRow fields={primaryFields} /> : null}
           {!bodyCollapsed && detailsVisible ? <MetadataList fields={details} /> : null}
           {issues.length ? (
@@ -1687,12 +1702,18 @@ function PrimaryFieldRow({ fields }) {
 
   return (
     <div className="primary-row">
-      {fields.map((field, index) => (
-        <div key={`${field.label}:${index}`} className="primary-pill">
-          <span>{field.label}</span>
-          <FieldValue field={field} />
-        </div>
-      ))}
+      {fields.map((field, index) =>
+        field.kind === 'tags' ? (
+          <div key={`${field.label}:${index}`} className="primary-tags">
+            <FieldValue field={field} />
+          </div>
+        ) : (
+          <div key={`${field.label}:${index}`} className="primary-pill">
+            <span>{field.label}</span>
+            <FieldValue field={field} />
+          </div>
+        ),
+      )}
     </div>
   );
 }

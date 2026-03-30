@@ -788,15 +788,6 @@ button:hover {
   gap: 0.45rem;
 }
 
-.tree-identifier-line {
-  display: block;
-  margin: -0.1rem 0 0.8rem;
-  color: var(--muted);
-  font-family: 'IBM Plex Mono', monospace;
-  font-size: 0.92rem;
-  word-break: break-word;
-}
-
 .inline-action-button {
   padding: 0.55rem 0.9rem;
   border-radius: 999px;
@@ -833,8 +824,35 @@ button:hover {
 
 .tree-title-row {
   display: flex;
-  align-items: center;
+  align-items: baseline;
+  flex-wrap: wrap;
   gap: 0.7rem;
+  min-width: 0;
+}
+
+.tree-identifier-inline {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.tree-identifier-label {
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.78;
+}
+
+.tree-identifier-inline code {
+  max-width: 100%;
+  color: inherit;
+  font-size: 0.86rem;
+  word-break: break-word;
 }
 
 .node-badge {
@@ -887,6 +905,12 @@ button:hover {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--accent-strong);
+}
+
+.primary-tags {
+  display: flex;
+  align-items: center;
+  min-width: 0;
 }
 
 .metadata-list {
@@ -1084,8 +1108,8 @@ button:hover {
     justify-content: start;
   }
 
-  .tree-identifier-line {
-    margin-top: 0;
+  .tree-identifier-inline {
+    width: 100%;
   }
 
   .catalog-count {
