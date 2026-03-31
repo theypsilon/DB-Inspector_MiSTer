@@ -1061,7 +1061,7 @@ export default function App() {
                 ) : null}
               </div>
               <p className="helper-copy">
-                Filter Downloader databases with terms like <code>console</code>, <code>arcade</code>,
+                Filter Downloader databases with terms (a.k.a. tags) like <code>console</code>, <code>arcade</code>,
                 or <code>!cheats</code>. Positive terms keep matching tagged items, negative terms
                 remove them, untagged items remain visible, and <code>essential</code> stays
                 included unless you exclude it.{' '}
@@ -1869,8 +1869,6 @@ const TreeSection = memo(function TreeSection({
       defaultOpen
       actions={
         <SectionControls
-          detailed={detailed}
-          onDetailedChange={onDetailedChange}
           onExpandAll={handleExpandAll}
           onCollapseAll={handleCollapseAll}
         />
@@ -3369,14 +3367,11 @@ function EmptyState({ message }) {
 }
 
 function SectionControls({
-  detailed,
-  onDetailedChange,
   onExpandAll,
   onCollapseAll,
 }) {
   return (
     <div className="section-controls">
-      <DetailedToggle detailed={detailed} onDetailedChange={onDetailedChange} />
       <div className="button-row">
         <button type="button" onClick={onExpandAll}>
           Open all
