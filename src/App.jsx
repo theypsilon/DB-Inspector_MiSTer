@@ -3238,7 +3238,7 @@ function TagChip({ tag }) {
   return (
     <span
       className="tag-chip"
-      data-tooltip={tag.rawLabel ? `Raw tag: ${tag.rawLabel}` : undefined}
+      data-tooltip={tag.rawLabel ? `Tag: ${tag.rawLabel}` : undefined}
     >
       {tag.label}
     </span>
