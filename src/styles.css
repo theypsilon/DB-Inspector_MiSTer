@@ -640,6 +640,20 @@ button:hover {
   gap: 1rem;
 }
 
+.github-repo-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  text-decoration: none;
+  margin-top: 0.15rem;
+}
+
+.github-repo-link:hover {
+  color: var(--text-primary);
+}
+
 .overview-side {
   display: grid;
   gap: 0.85rem;
