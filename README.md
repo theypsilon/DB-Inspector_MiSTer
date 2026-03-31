@@ -33,6 +33,10 @@ GitHub Actions deploys the app to GitHub Pages on every push to the `main` branc
 
 ## Code Quality
 
-This project has been vibe coded from start to end. It's finished, self-contained and does its job. It's not expected to be maintainable. Without this compromise, this tool could not exist.
+This project was vibe-coded from start to finish. It is finished, self-contained, and does its job. It is not expected to be maintainable. Without that compromise, this tool could not exist.
 
-Some bugs around the virtualization of the tree could arise (scroll stuttering), but as long as the overall UX is preserved, it's not a priority to fix them.
+## Issues
+
+Some bugs related to tree virtualization may occur, such as scroll stuttering, but as long as the overall UX is preserved, fixing them is not a priority.
+
+You can use this alternative version instead. It is more robust because it is DOM-only, at the cost of performance: https://theypsilon.github.io/DB-Inspector_MiSTer/dom/
