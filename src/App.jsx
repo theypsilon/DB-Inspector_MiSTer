@@ -1175,6 +1175,8 @@ export default function App() {
           onDecline={() => handleFilterOverrideDecision(false)}
         />
       ) : null}
+
+      <p className="app-footer">© 2026 José Barroso (theypsilon)</p>
     </main>
   );
 }
