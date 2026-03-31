@@ -447,8 +447,7 @@ button:hover {
   user-select: none;
 }
 
-.info-hint::after {
-  content: attr(data-tip);
+.info-hint .info-tip {
   display: none;
   position: absolute;
   bottom: calc(100% + 0.5rem);
@@ -460,14 +459,17 @@ button:hover {
   background: var(--ink);
   color: #f9f8f3;
   font-size: 0.8rem;
+  font-weight: 400;
   line-height: 1.45;
-  white-space: normal;
+  white-space: pre-line;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
   z-index: 10;
   pointer-events: none;
+  text-transform: none;
+  letter-spacing: normal;
 }
 
-.info-hint[data-open]::after {
+.info-hint[data-open] .info-tip {
   display: block;
 }
 

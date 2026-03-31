@@ -2223,7 +2223,7 @@ function buildRawByteHoverCopy(storageSummary) {
       } no declared size and ${storageSummary.unsizedFileCount === 1 ? 'is' : 'are'} excluded.`
     : '';
 
-  return `Raw file sizes: ${formatBytes(storageSummary.rawBytes)} (${storageSummary.rawBytes.toLocaleString()} bytes).${suffix}`;
+  return `Raw file sizes: ${formatBytes(storageSummary.rawBytes)}\n${storageSummary.rawBytes.toLocaleString()} bytes${suffix}`;
 }
 
 function getLoadedSourceUrl(loadedSource) {
