@@ -207,8 +207,57 @@ filter=arcade [mister]
     ),
   });
 
+  await expect(page.getByRole('heading', { name: 'Replace the current filter?' })).toBeVisible();
+  await expect(page.getByText('manual !keep')).toBeVisible();
+  await expect(page.getByText('arcade ini-list-default')).toBeVisible();
+  await page.getByRole('button', { name: 'Replace filter' }).click();
+
   await expect(page.getByRole('heading', { name: 'filter_smoke' })).toBeVisible();
   await expect(filterInput).toHaveValue('arcade ini-list-default');
+});
+
+test('INI filter override confirmation can keep the current FILTER instead', async ({ page }) => {
+  const iniRemoteUrl = 'https://example.com/filter-preserve-ini-keep.json';
+
+  await page.route(iniRemoteUrl, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(buildFilterDatabase({ defaultFilter: 'ini-default' })),
+    });
+  });
+
+  await page.goto('/');
+
+  await page.locator('#database-file-input').setInputFiles({
+    name: 'filter-smoke.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(buildFilterDatabase()), 'utf8'),
+  });
+
+  const filterInput = page.getByLabel('FILTER');
+  await filterInput.fill('manual !keep');
+
+  await page.locator('#database-file-input').setInputFiles({
+    name: 'downloader.ini',
+    mimeType: 'text/plain',
+    buffer: Buffer.from(
+      `[MiSTer]
+filter=ini-list-default
+
+[Preserved]
+db_url=${iniRemoteUrl}
+filter=arcade [mister]
+`,
+      'utf8',
+    ),
+  });
+
+  await expect(page.getByRole('heading', { name: 'Replace the current filter?' })).toBeVisible();
+  await page.getByRole('button', { name: 'Keep current' }).click();
+
+  await expect(page.getByRole('heading', { name: 'filter_smoke' })).toBeVisible();
+  await expect(filterInput).toHaveValue('manual !keep');
 });
 
 function buildFilterDatabase({ defaultFilter = '' } = {}) {

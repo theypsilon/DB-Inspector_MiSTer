@@ -45,6 +45,7 @@ export default function App() {
   const autoLoadHandledRef = useRef(false);
   const inspectionRef = useRef(null);
   const iniSourceRef = useRef(null);
+  const filterOverrideDecisionRef = useRef({ onAccept: null, onDecline: null });
   const uploadCatalogUrlsRef = useRef(new Set());
   const dropzoneDragDepthRef = useRef(0);
   const dropzoneDropPulseTimeoutRef = useRef(0);
@@ -68,6 +69,7 @@ export default function App() {
   const [catalogError, setCatalogError] = useState('');
   const [catalogModalOpen, setCatalogModalOpen] = useState(false);
   const [iniPickerOpen, setIniPickerOpen] = useState(false);
+  const [filterOverridePrompt, setFilterOverridePrompt] = useState(null);
   const [dropzoneActive, setDropzoneActive] = useState(false);
   const [dropzoneDropPulse, setDropzoneDropPulse] = useState(false);
   const catalogOptions = useMemo(
@@ -217,7 +219,7 @@ export default function App() {
   }, [iniSource]);
 
   useEffect(() => {
-    if (!catalogModalOpen && !iniPickerOpen) {
+    if (!catalogModalOpen && !iniPickerOpen && !filterOverridePrompt) {
       return undefined;
     }
 
@@ -228,6 +230,7 @@ export default function App() {
       if (event.key === 'Escape') {
         setCatalogModalOpen(false);
         setIniPickerOpen(false);
+        handleFilterOverrideDecision(false);
       }
     }
 
@@ -236,7 +239,7 @@ export default function App() {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [catalogModalOpen, iniPickerOpen]);
+  }, [catalogModalOpen, iniPickerOpen, filterOverridePrompt]);
 
   useEffect(
     () => () => {
@@ -297,6 +300,40 @@ export default function App() {
     const activeFilterInput = String(filterInput).trim() ? filterInput : null;
     pendingPreservedFilterRef.current =
       preserveCurrentFilter && activeFilterInput !== null ? activeFilterInput : null;
+  }
+
+  function handleFilterOverrideDecision(acceptOverride) {
+    const { onAccept, onDecline } = filterOverrideDecisionRef.current;
+    filterOverrideDecisionRef.current = {
+      onAccept: null,
+      onDecline: null,
+    };
+    setFilterOverridePrompt(null);
+
+    if (acceptOverride) {
+      onAccept?.();
+      return;
+    }
+
+    onDecline?.();
+  }
+
+  function maybeConfirmFilterOverride({ nextFilter, nextFilterPresent, onAccept, onDecline }) {
+    const currentFilter = String(filterInput);
+    if (!String(currentFilter).trim() || !nextFilterPresent) {
+      return false;
+    }
+
+    if (normalizeFilterPromptValue(currentFilter) === normalizeFilterPromptValue(nextFilter)) {
+      return false;
+    }
+
+    filterOverrideDecisionRef.current = { onAccept, onDecline };
+    setFilterOverridePrompt({
+      currentFilter,
+      nextFilter,
+    });
+    return true;
   }
 
   function startRemoteDatabaseLoad(
@@ -385,9 +422,33 @@ export default function App() {
       const [entry] = loadedSource.entries;
       const shouldPreserveCurrentFilter =
         preserveCurrentFilter && !entry.defaultFilterPresent;
+      const loadSelectedEntry = (preserveSelectedFilter) => {
+        queueCurrentFilterForPreservedLoad(preserveSelectedFilter);
+        void loadRemoteSource(entry.dbUrl, {
+          syncSearchParam: origin === 'url' ? syncSearchParam : true,
+          visitedUrls,
+          registerInCatalog: false,
+          sourceDefaultFilter: entry.defaultFilter || '',
+          sourceDefaultFilterPresent: entry.defaultFilterPresent,
+          preserveCurrentFilter: preserveSelectedFilter,
+        });
+      };
+
+      if (
+        maybeConfirmFilterOverride({
+          nextFilter: entry.defaultFilter || '',
+          nextFilterPresent: entry.defaultFilterPresent,
+          onAccept: () => loadSelectedEntry(false),
+          onDecline: () => loadSelectedEntry(true),
+        })
+      ) {
+        return;
+      }
+
       setIniSource(null);
       setIniPickerOpen(false);
       setDatabaseUrl(entry.dbUrl);
+      queueCurrentFilterForPreservedLoad(shouldPreserveCurrentFilter);
       await loadRemoteSource(entry.dbUrl, {
         syncSearchParam: origin === 'url' ? syncSearchParam : true,
         visitedUrls,
@@ -526,6 +587,29 @@ export default function App() {
 
   function loadIniEntry(entry) {
     if (!entry?.dbUrl) {
+      return;
+    }
+
+    if (
+      maybeConfirmFilterOverride({
+        nextFilter: entry.defaultFilter || '',
+        nextFilterPresent: entry.defaultFilterPresent,
+        onAccept: () =>
+          startRemoteDatabaseLoad(entry.dbUrl, {
+            registerInCatalog: false,
+            sourceDefaultFilter: entry.defaultFilter || '',
+            sourceDefaultFilterPresent: entry.defaultFilterPresent,
+            preserveCurrentFilter: false,
+          }),
+        onDecline: () =>
+          startRemoteDatabaseLoad(entry.dbUrl, {
+            registerInCatalog: false,
+            sourceDefaultFilter: entry.defaultFilter || '',
+            sourceDefaultFilterPresent: entry.defaultFilterPresent,
+            preserveCurrentFilter: true,
+          }),
+      })
+    ) {
       return;
     }
 
@@ -1012,6 +1096,15 @@ export default function App() {
           }}
         />
       ) : null}
+
+      {filterOverridePrompt ? (
+        <FilterOverrideModal
+          currentFilter={filterOverridePrompt.currentFilter}
+          nextFilter={filterOverridePrompt.nextFilter}
+          onAccept={() => handleFilterOverrideDecision(true)}
+          onDecline={() => handleFilterOverrideDecision(false)}
+        />
+      ) : null}
     </main>
   );
 }
@@ -1268,6 +1361,46 @@ const IniPickerModal = memo(function IniPickerModal({ iniSource, onClose, onOpen
       ) : (
         <EmptyState message="No entries match the current search." />
       )}
+    </ModalFrame>
+  );
+});
+
+const FilterOverrideModal = memo(function FilterOverrideModal({
+  currentFilter,
+  nextFilter,
+  onAccept,
+  onDecline,
+}) {
+  return (
+    <ModalFrame
+      label="FILTER"
+      title="Replace the current filter?"
+      onClose={onDecline}
+      footer={
+        <>
+          <button type="button" className="secondary-button" onClick={onDecline}>
+            Keep current
+          </button>
+          <button type="button" onClick={onAccept}>
+            Replace filter
+          </button>
+        </>
+      }
+    >
+      <p className="helper-copy">
+        This database provides its own filter. Choose whether to keep the current filter or replace
+        it with the incoming one.
+      </p>
+      <div className="filter-override-grid">
+        <div>
+          <span className="catalog-meta-label">Current FILTER</span>
+          <code>{formatFilterPromptValue(currentFilter)}</code>
+        </div>
+        <div>
+          <span className="catalog-meta-label">Incoming FILTER</span>
+          <code>{formatFilterPromptValue(nextFilter)}</code>
+        </div>
+      </div>
     </ModalFrame>
   );
 });
@@ -1541,6 +1674,15 @@ async function triggerFileDownload(url, fileName) {
     const fallbackFrame = ensureBackgroundDownloadFrame();
     triggerBrowserDownload(url, fileName, fallbackFrame?.name || '');
   }
+}
+
+function normalizeFilterPromptValue(value) {
+  return String(value).trim().replace(/\s+/g, ' ');
+}
+
+function formatFilterPromptValue(value) {
+  const normalizedValue = normalizeFilterPromptValue(value);
+  return normalizedValue || 'Empty filter';
 }
 
 function readDatabaseUrlSearchParam() {
