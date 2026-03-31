@@ -1089,8 +1089,19 @@ export default function App() {
                       <>
                         <span>Size:</span>
                         <span
-                          className="disk-usage-value"
-                          title={buildRawByteHoverCopy(storageSummary)}
+                          className="disk-usage-value info-hint"
+                          tabIndex={0}
+                          role="button"
+                          data-tip={buildRawByteHoverCopy(storageSummary)}
+                          onClick={(event) => {
+                            event.currentTarget.toggleAttribute('data-open');
+                          }}
+                          onMouseLeave={(event) => {
+                            event.currentTarget.removeAttribute('data-open');
+                          }}
+                          onBlur={(event) => {
+                            event.currentTarget.removeAttribute('data-open');
+                          }}
                         >
                           {formatBytes(storageSummary.clusteredBytes)}
                         </span>
