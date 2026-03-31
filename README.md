@@ -20,4 +20,4 @@ This project was vibe-coded from start to finish. It is finished, self-contained
 
 Some bugs related to tree virtualization may occur, such as scroll stuttering, but as long as the overall UX is preserved, fixing them is not a priority.
 
-You can use this alternative version instead. It is more robust because it is DOM-only, at the cost of performance: https://theypsilon.github.io/DB-Inspector_MiSTer/dom/
+You can use this alternative version instead. It is more robust because it is DOM-only, at the cost of runtime performance: https://theypsilon.github.io/DB-Inspector_MiSTer/dom/
