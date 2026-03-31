@@ -237,6 +237,7 @@ async function buildLoadedSource(decoded, source) {
     source,
     entries: decoded.entries,
     defaultFilter: decoded.defaultFilter || '',
+    defaultFilterPresent: Boolean(decoded.defaultFilterPresent),
   };
 }
 
@@ -412,6 +413,7 @@ function parseSupportedSourceText(text, sourceName, { containerType, entryName, 
         documentType: 'ini',
         entries: parsedIni.entries,
         defaultFilter: parsedIni.defaultFilter,
+        defaultFilterPresent: parsedIni.defaultFilterPresent,
         containerType: inferredIniContainerType,
         entryName,
       };
@@ -474,6 +476,7 @@ function parseDatabaseListIni(source, sourceName, { baseUrl = null } = {}) {
   let ignoredSectionActive = false;
   let ignoredSectionName = '';
   let defaultFilter = '';
+  let defaultFilterPresent = false;
 
   function finalizeEntry() {
     if (!currentEntry) {
@@ -489,12 +492,13 @@ function parseDatabaseListIni(source, sourceName, { baseUrl = null } = {}) {
     }
 
     entries.push({
-      key: `${entries.length}:${currentEntry.dbId}`,
       dbId: currentEntry.dbId,
       dbUrl: normalizeReferencedDatabaseUrl(currentEntry.dbUrl, {
         baseUrl,
         dbId: currentEntry.dbId,
       }),
+      defaultFilter: currentEntry.defaultFilter,
+      defaultFilterPresent: currentEntry.defaultFilterPresent,
     });
   }
 
@@ -517,6 +521,8 @@ function parseDatabaseListIni(source, sourceName, { baseUrl = null } = {}) {
         : {
             dbId: sectionName,
             dbUrl: '',
+            defaultFilter: '',
+            defaultFilterPresent: false,
             line: index + 1,
           };
       continue;
@@ -536,6 +542,7 @@ function parseDatabaseListIni(source, sourceName, { baseUrl = null } = {}) {
       if (ignoredSectionActive) {
         if (ignoredSectionName === 'mister' && key === 'filter') {
           defaultFilter = value;
+          defaultFilterPresent = true;
         }
         continue;
       }
@@ -545,6 +552,9 @@ function parseDatabaseListIni(source, sourceName, { baseUrl = null } = {}) {
 
     if (key === 'db_url') {
       currentEntry.dbUrl = value;
+    } else if (key === 'filter') {
+      currentEntry.defaultFilter = value;
+      currentEntry.defaultFilterPresent = true;
     }
   }
 
@@ -554,14 +564,31 @@ function parseDatabaseListIni(source, sourceName, { baseUrl = null } = {}) {
     throw new Error('No database entries with a URL were found.');
   }
 
+  const resolvedEntries = entries.map((entry, index) => ({
+    key: `${index}:${entry.dbId}`,
+    dbId: entry.dbId,
+    dbUrl: entry.dbUrl,
+    defaultFilter: entry.defaultFilterPresent
+      ? resolveInheritedIniFilter(entry.defaultFilter, defaultFilterPresent ? defaultFilter : '')
+      : defaultFilter,
+    defaultFilterPresent: entry.defaultFilterPresent || defaultFilterPresent,
+  }));
+
   return {
-    entries,
+    entries: resolvedEntries,
     defaultFilter,
+    defaultFilterPresent,
   };
 }
 
 function isIgnoredDatabaseListSection(sectionName) {
   return String(sectionName).trim().toLowerCase() === 'mister';
+}
+
+function resolveInheritedIniFilter(filterValue, inheritedFilterValue) {
+  return String(filterValue || '')
+    .replaceAll(/\[\s*mister\s*\]/gi, inheritedFilterValue)
+    .trim();
 }
 
 function normalizeReferencedDatabaseUrl(input, { baseUrl = null, dbId = '' } = {}) {

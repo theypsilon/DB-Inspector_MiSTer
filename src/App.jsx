@@ -60,6 +60,7 @@ export default function App() {
   const [clusterSizeBytes, setClusterSizeBytes] = useState(DEFAULT_CLUSTER_SIZE_BYTES);
   const [iniSource, setIniSource] = useState(null);
   const [sourceDefaultFilter, setSourceDefaultFilter] = useState('');
+  const [sourceDefaultFilterPresent, setSourceDefaultFilterPresent] = useState(false);
   const [databaseDetailed, setDatabaseDetailed] = useState(false);
   const [runtimeCatalogOptions, setRuntimeCatalogOptions] = useState([]);
   const [customCatalogOptions, setCustomCatalogOptions] = useState([]);
@@ -107,11 +108,13 @@ export default function App() {
         ? preservedFilter
         : sharedFilter.isPresent
           ? sharedFilter.value
-          : sourceDefaultFilter || inspection?.overview.defaultFilter || '';
+          : sourceDefaultFilterPresent
+            ? sourceDefaultFilter
+            : inspection?.overview.defaultFilter || '';
     expectedFilterSearchParamValueRef.current = nextFilter;
     setFilterInput(nextFilter);
     setDebouncedFilterInput(nextFilter);
-  }, [inspectionKeyBase, sourceDefaultFilter]);
+  }, [inspectionKeyBase, sourceDefaultFilter, sourceDefaultFilterPresent]);
 
   useEffect(() => {
     if (filterInput === debouncedFilterInput) {
@@ -287,6 +290,7 @@ export default function App() {
     setInspection(null);
     setIniSource(null);
     setSourceDefaultFilter('');
+    setSourceDefaultFilterPresent(false);
   }
 
   function queueCurrentFilterForPreservedLoad(preserveCurrentFilter) {
@@ -297,7 +301,12 @@ export default function App() {
 
   function startRemoteDatabaseLoad(
     url,
-    { registerInCatalog = false, sourceDefaultFilter = '', preserveCurrentFilter = false } = {},
+    {
+      registerInCatalog = false,
+      sourceDefaultFilter = '',
+      sourceDefaultFilterPresent = false,
+      preserveCurrentFilter = false,
+    } = {},
   ) {
     const requestedUrl = String(url).trim();
     if (!requestedUrl) {
@@ -316,6 +325,7 @@ export default function App() {
         skipPrepare: true,
         registerInCatalog,
         sourceDefaultFilter,
+        sourceDefaultFilterPresent,
         preserveCurrentFilter,
       });
     }, 0);
@@ -330,6 +340,7 @@ export default function App() {
       visitedUrls = new Set(),
       registerInCatalog = true,
       sourceDefaultFilter: nextSourceDefaultFilter = '',
+      sourceDefaultFilterPresent: nextSourceDefaultFilterPresent = false,
       preserveCurrentFilter = false,
     } = {},
   ) {
@@ -344,6 +355,7 @@ export default function App() {
 
     if (loadedSource.kind === 'database') {
       setSourceDefaultFilter(nextSourceDefaultFilter);
+      setSourceDefaultFilterPresent(nextSourceDefaultFilterPresent);
       setInspection(loadedSource.inspection);
       setIniSource(null);
       setIniPickerOpen(false);
@@ -371,6 +383,8 @@ export default function App() {
 
     if (loadedSource.entries.length === 1) {
       const [entry] = loadedSource.entries;
+      const shouldPreserveCurrentFilter =
+        preserveCurrentFilter && !entry.defaultFilterPresent;
       setIniSource(null);
       setIniPickerOpen(false);
       setDatabaseUrl(entry.dbUrl);
@@ -378,14 +392,16 @@ export default function App() {
         syncSearchParam: origin === 'url' ? syncSearchParam : true,
         visitedUrls,
         registerInCatalog: false,
-        sourceDefaultFilter: loadedSource.defaultFilter || '',
-        preserveCurrentFilter,
+        sourceDefaultFilter: entry.defaultFilter || '',
+        sourceDefaultFilterPresent: entry.defaultFilterPresent,
+        preserveCurrentFilter: shouldPreserveCurrentFilter,
       });
       return;
     }
 
     setInspection(null);
     setSourceDefaultFilter('');
+    setSourceDefaultFilterPresent(false);
     setIniSource(loadedSource);
 
     if (origin === 'upload') {
@@ -445,6 +461,7 @@ export default function App() {
       skipPrepare = false,
       registerInCatalog = true,
       sourceDefaultFilter = '',
+      sourceDefaultFilterPresent = false,
       preserveCurrentFilter = false,
     } = {},
   ) {
@@ -491,6 +508,7 @@ export default function App() {
         visitedUrls: nextVisitedUrls,
         registerInCatalog,
         sourceDefaultFilter,
+        sourceDefaultFilterPresent,
         preserveCurrentFilter,
       });
     } catch (error) {
@@ -513,8 +531,9 @@ export default function App() {
 
     startRemoteDatabaseLoad(entry.dbUrl, {
       registerInCatalog: false,
-      sourceDefaultFilter: iniSource?.defaultFilter || '',
-      preserveCurrentFilter: true,
+      sourceDefaultFilter: entry.defaultFilter || '',
+      sourceDefaultFilterPresent: entry.defaultFilterPresent,
+      preserveCurrentFilter: !entry.defaultFilterPresent,
     });
   }
 

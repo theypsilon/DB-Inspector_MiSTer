@@ -146,9 +146,30 @@ test('manual FILTER survives direct URL fetches until it is cleared', async ({ p
   await expect.poll(() => page.url()).toContain(`filter=${encodeURIComponent('manual !keep')}`);
 });
 
-test('manual FILTER survives uploaded databases and uploaded single-entry INI lists', async ({
-  page,
-}) => {
+test('manual FILTER survives uploaded databases until it is cleared', async ({ page }) => {
+  await page.goto('/');
+
+  await page.locator('#database-file-input').setInputFiles({
+    name: 'filter-smoke.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(buildFilterDatabase()), 'utf8'),
+  });
+
+  const filterInput = page.getByLabel('FILTER');
+  await filterInput.fill('manual !keep');
+  await expect(filterInput).toHaveValue('manual !keep');
+
+  await page.locator('#database-file-input').setInputFiles({
+    name: 'next-filter-smoke.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(buildFilterDatabase({ defaultFilter: 'upload-default' })), 'utf8'),
+  });
+
+  await expect(page.getByRole('heading', { name: 'filter_smoke' })).toBeVisible();
+  await expect(filterInput).toHaveValue('manual !keep');
+});
+
+test('single-entry INI lists apply their resolved section filter to FILTER', async ({ page }) => {
   const iniRemoteUrl = 'https://example.com/filter-preserve-ini.json';
 
   await page.route(iniRemoteUrl, async (route) => {
@@ -172,15 +193,6 @@ test('manual FILTER survives uploaded databases and uploaded single-entry INI li
   await expect(filterInput).toHaveValue('manual !keep');
 
   await page.locator('#database-file-input').setInputFiles({
-    name: 'next-filter-smoke.json',
-    mimeType: 'application/json',
-    buffer: Buffer.from(JSON.stringify(buildFilterDatabase({ defaultFilter: 'upload-default' })), 'utf8'),
-  });
-
-  await expect(page.getByRole('heading', { name: 'filter_smoke' })).toBeVisible();
-  await expect(filterInput).toHaveValue('manual !keep');
-
-  await page.locator('#database-file-input').setInputFiles({
     name: 'downloader.ini',
     mimeType: 'text/plain',
     buffer: Buffer.from(
@@ -189,13 +201,14 @@ filter=ini-list-default
 
 [Preserved]
 db_url=${iniRemoteUrl}
+filter=arcade [mister]
 `,
       'utf8',
     ),
   });
 
   await expect(page.getByRole('heading', { name: 'filter_smoke' })).toBeVisible();
-  await expect(filterInput).toHaveValue('manual !keep');
+  await expect(filterInput).toHaveValue('arcade ini-list-default');
 });
 
 function buildFilterDatabase({ defaultFilter = '' } = {}) {
