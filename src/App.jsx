@@ -764,7 +764,8 @@ export default function App() {
           <h1>Custom Database Inspector</h1>
           <p className="hero-copy">
             Open a Downloader database from your computer or from a web link. Review its details,
-            browse folders and files, inspect archives, and spot warnings in one place.
+            browse folders and files, filter its content, inspect archives, and spot warnings in
+            one place.
           </p>
         </div>
         <div className="hero-note">
