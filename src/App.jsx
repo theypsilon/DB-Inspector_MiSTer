@@ -62,6 +62,10 @@ export default function App() {
   const [iniSource, setIniSource] = useState(null);
   const [sourceDefaultFilter, setSourceDefaultFilter] = useState('');
   const [sourceDefaultFilterPresent, setSourceDefaultFilterPresent] = useState(false);
+  const [sourceDefaultFilterOverridesDatabaseDefault, setSourceDefaultFilterOverridesDatabaseDefault] =
+    useState(false);
+  const [misterDefaultFilter, setMisterDefaultFilter] = useState('');
+  const [misterDefaultFilterPresent, setMisterDefaultFilterPresent] = useState(false);
   const [databaseDetailed, setDatabaseDetailed] = useState(false);
   const [runtimeCatalogOptions, setRuntimeCatalogOptions] = useState([]);
   const [customCatalogOptions, setCustomCatalogOptions] = useState([]);
@@ -92,8 +96,29 @@ export default function App() {
         : null,
     [clusterSizeBytes, displayedInspection],
   );
+  const effectiveDefaultFilter = useMemo(
+    () =>
+      resolveEffectiveDefaultFilter({
+        sourceDefaultFilter,
+        sourceDefaultFilterPresent,
+        sourceDefaultFilterOverridesDatabaseDefault,
+        misterDefaultFilter,
+        misterDefaultFilterPresent,
+        databaseDefaultFilter: inspection?.overview.defaultFilter || '',
+      }),
+    [
+      inspection,
+      misterDefaultFilter,
+      misterDefaultFilterPresent,
+      sourceDefaultFilter,
+      sourceDefaultFilterOverridesDatabaseDefault,
+      sourceDefaultFilterPresent,
+    ],
+  );
   const filterPending = filterInput !== debouncedFilterInput;
   const inspectionKey = `${inspectionKeyBase}:${String(debouncedFilterInput).trim().toLowerCase()}`;
+  const canResetFilter =
+    normalizeFilterPromptValue(filterInput) !== normalizeFilterPromptValue(effectiveDefaultFilter);
 
   useEffect(() => {
     inspectionRef.current = inspection;
@@ -110,13 +135,11 @@ export default function App() {
         ? preservedFilter
         : sharedFilter.isPresent
           ? sharedFilter.value
-          : sourceDefaultFilterPresent
-            ? sourceDefaultFilter
-            : inspection?.overview.defaultFilter || '';
+          : effectiveDefaultFilter;
     expectedFilterSearchParamValueRef.current = nextFilter;
     setFilterInput(nextFilter);
     setDebouncedFilterInput(nextFilter);
-  }, [inspectionKeyBase, sourceDefaultFilter, sourceDefaultFilterPresent]);
+  }, [effectiveDefaultFilter, inspectionKeyBase]);
 
   useEffect(() => {
     if (filterInput === debouncedFilterInput) {
@@ -157,14 +180,13 @@ export default function App() {
       return;
     }
 
-    const defaultFilter = inspection.overview.defaultFilter || '';
-    if (debouncedFilterInput === defaultFilter) {
+    if (debouncedFilterInput === effectiveDefaultFilter) {
       writeFilterSearchParam('', { isPresent: false });
       return;
     }
 
     writeFilterSearchParam(debouncedFilterInput, { isPresent: true });
-  }, [inspection, debouncedFilterInput]);
+  }, [effectiveDefaultFilter, inspection, debouncedFilterInput]);
 
   useEffect(() => {
     if (autoLoadHandledRef.current) {
@@ -294,6 +316,9 @@ export default function App() {
     setIniSource(null);
     setSourceDefaultFilter('');
     setSourceDefaultFilterPresent(false);
+    setSourceDefaultFilterOverridesDatabaseDefault(false);
+    setMisterDefaultFilter('');
+    setMisterDefaultFilterPresent(false);
   }
 
   function queueCurrentFilterForPreservedLoad(preserveCurrentFilter) {
@@ -342,6 +367,9 @@ export default function App() {
       registerInCatalog = false,
       sourceDefaultFilter = '',
       sourceDefaultFilterPresent = false,
+      sourceDefaultFilterOverridesDatabaseDefault = false,
+      misterDefaultFilter = '',
+      misterDefaultFilterPresent = false,
       preserveCurrentFilter = false,
     } = {},
   ) {
@@ -363,6 +391,9 @@ export default function App() {
         registerInCatalog,
         sourceDefaultFilter,
         sourceDefaultFilterPresent,
+        sourceDefaultFilterOverridesDatabaseDefault,
+        misterDefaultFilter,
+        misterDefaultFilterPresent,
         preserveCurrentFilter,
       });
     }, 0);
@@ -378,6 +409,10 @@ export default function App() {
       registerInCatalog = true,
       sourceDefaultFilter: nextSourceDefaultFilter = '',
       sourceDefaultFilterPresent: nextSourceDefaultFilterPresent = false,
+      sourceDefaultFilterOverridesDatabaseDefault:
+        nextSourceDefaultFilterOverridesDatabaseDefault = false,
+      misterDefaultFilter: nextMisterDefaultFilter = '',
+      misterDefaultFilterPresent: nextMisterDefaultFilterPresent = false,
       preserveCurrentFilter = false,
     } = {},
   ) {
@@ -393,6 +428,11 @@ export default function App() {
     if (loadedSource.kind === 'database') {
       setSourceDefaultFilter(nextSourceDefaultFilter);
       setSourceDefaultFilterPresent(nextSourceDefaultFilterPresent);
+      setSourceDefaultFilterOverridesDatabaseDefault(
+        nextSourceDefaultFilterOverridesDatabaseDefault,
+      );
+      setMisterDefaultFilter(nextMisterDefaultFilter);
+      setMisterDefaultFilterPresent(nextMisterDefaultFilterPresent);
       setInspection(loadedSource.inspection);
       setIniSource(null);
       setIniPickerOpen(false);
@@ -430,6 +470,9 @@ export default function App() {
           registerInCatalog: false,
           sourceDefaultFilter: entry.defaultFilter || '',
           sourceDefaultFilterPresent: entry.defaultFilterPresent,
+          sourceDefaultFilterOverridesDatabaseDefault: entry.defaultFilterPresent,
+          misterDefaultFilter: loadedSource.defaultFilter || '',
+          misterDefaultFilterPresent: loadedSource.defaultFilterPresent,
           preserveCurrentFilter: preserveSelectedFilter,
         });
       };
@@ -455,6 +498,9 @@ export default function App() {
         registerInCatalog: false,
         sourceDefaultFilter: entry.defaultFilter || '',
         sourceDefaultFilterPresent: entry.defaultFilterPresent,
+        sourceDefaultFilterOverridesDatabaseDefault: entry.defaultFilterPresent,
+        misterDefaultFilter: loadedSource.defaultFilter || '',
+        misterDefaultFilterPresent: loadedSource.defaultFilterPresent,
         preserveCurrentFilter: shouldPreserveCurrentFilter,
       });
       return;
@@ -463,6 +509,9 @@ export default function App() {
     setInspection(null);
     setSourceDefaultFilter('');
     setSourceDefaultFilterPresent(false);
+    setSourceDefaultFilterOverridesDatabaseDefault(false);
+    setMisterDefaultFilter(loadedSource.defaultFilter || '');
+    setMisterDefaultFilterPresent(loadedSource.defaultFilterPresent);
     setIniSource(loadedSource);
 
     if (origin === 'upload') {
@@ -523,6 +572,9 @@ export default function App() {
       registerInCatalog = true,
       sourceDefaultFilter = '',
       sourceDefaultFilterPresent = false,
+      sourceDefaultFilterOverridesDatabaseDefault = false,
+      misterDefaultFilter = '',
+      misterDefaultFilterPresent = false,
       preserveCurrentFilter = false,
     } = {},
   ) {
@@ -570,6 +622,9 @@ export default function App() {
         registerInCatalog,
         sourceDefaultFilter,
         sourceDefaultFilterPresent,
+        sourceDefaultFilterOverridesDatabaseDefault,
+        misterDefaultFilter,
+        misterDefaultFilterPresent,
         preserveCurrentFilter,
       });
     } catch (error) {
@@ -599,6 +654,9 @@ export default function App() {
             registerInCatalog: false,
             sourceDefaultFilter: entry.defaultFilter || '',
             sourceDefaultFilterPresent: entry.defaultFilterPresent,
+            sourceDefaultFilterOverridesDatabaseDefault: entry.defaultFilterPresent,
+            misterDefaultFilter: iniSource?.defaultFilter || '',
+            misterDefaultFilterPresent: iniSource?.defaultFilterPresent,
             preserveCurrentFilter: false,
           }),
         onDecline: () =>
@@ -606,6 +664,9 @@ export default function App() {
             registerInCatalog: false,
             sourceDefaultFilter: entry.defaultFilter || '',
             sourceDefaultFilterPresent: entry.defaultFilterPresent,
+            sourceDefaultFilterOverridesDatabaseDefault: entry.defaultFilterPresent,
+            misterDefaultFilter: iniSource?.defaultFilter || '',
+            misterDefaultFilterPresent: iniSource?.defaultFilterPresent,
             preserveCurrentFilter: true,
           }),
       })
@@ -617,6 +678,9 @@ export default function App() {
       registerInCatalog: false,
       sourceDefaultFilter: entry.defaultFilter || '',
       sourceDefaultFilterPresent: entry.defaultFilterPresent,
+      sourceDefaultFilterOverridesDatabaseDefault: entry.defaultFilterPresent,
+      misterDefaultFilter: iniSource?.defaultFilter || '',
+      misterDefaultFilterPresent: iniSource?.defaultFilterPresent,
       preserveCurrentFilter: !entry.defaultFilterPresent,
     });
   }
@@ -941,11 +1005,11 @@ export default function App() {
                     spellCheck={false}
                   />
                 </div>
-                {filterInput ? (
+                {canResetFilter ? (
                   <button
                     type="button"
                     className="secondary-button"
-                    onClick={() => setFilterInput('')}
+                    onClick={() => setFilterInput(effectiveDefaultFilter)}
                   >
                     Clear
                   </button>
@@ -1683,6 +1747,43 @@ function normalizeFilterPromptValue(value) {
 function formatFilterPromptValue(value) {
   const normalizedValue = normalizeFilterPromptValue(value);
   return normalizedValue || 'Empty filter';
+}
+
+function resolveEffectiveDefaultFilter({
+  sourceDefaultFilter,
+  sourceDefaultFilterPresent,
+  sourceDefaultFilterOverridesDatabaseDefault,
+  misterDefaultFilter,
+  misterDefaultFilterPresent,
+  databaseDefaultFilter,
+}) {
+  if (sourceDefaultFilterPresent && sourceDefaultFilterOverridesDatabaseDefault) {
+    return sourceDefaultFilter;
+  }
+
+  const hasDatabaseDefaultFilter = Boolean(String(databaseDefaultFilter).trim());
+  if (hasDatabaseDefaultFilter) {
+    return resolveInheritedFilterValue(
+      databaseDefaultFilter,
+      misterDefaultFilterPresent ? misterDefaultFilter : '',
+    );
+  }
+
+  if (misterDefaultFilterPresent) {
+    return misterDefaultFilter;
+  }
+
+  if (sourceDefaultFilterPresent) {
+    return sourceDefaultFilter;
+  }
+
+  return '';
+}
+
+function resolveInheritedFilterValue(filterValue, inheritedFilterValue) {
+  return String(filterValue || '')
+    .replaceAll(/\[\s*mister\s*\]/gi, inheritedFilterValue)
+    .trim();
 }
 
 function readDatabaseUrlSearchParam() {

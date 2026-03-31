@@ -90,7 +90,7 @@ test('FILTER syncs with the URL for shared remote databases', async ({ page }) =
   await expect.poll(() => page.url()).toContain(`filter=${encodeURIComponent('b')}`);
 });
 
-test('missing FILTER param uses the database default, while explicit empty FILTER overrides it', async ({
+test('missing FILTER param uses the database default, clear returns to that default, and explicit empty FILTER still overrides it', async ({
   page,
 }) => {
   const remoteUrl = 'https://example.com/filter-default.json';
@@ -109,7 +109,12 @@ test('missing FILTER param uses the database default, while explicit empty FILTE
   await expect(page.getByLabel('FILTER')).toHaveValue('a');
   await expect.poll(() => page.url()).not.toContain('filter=');
 
+  await page.getByLabel('FILTER').fill('b');
   await page.getByRole('button', { name: 'Clear' }).click();
+  await expect(page.getByLabel('FILTER')).toHaveValue('a');
+  await expect.poll(() => page.url()).not.toContain('filter=');
+
+  await page.getByLabel('FILTER').fill('');
   await expect(page.getByLabel('FILTER')).toHaveValue('');
   await expect(page.getByText('Showing the full database: 7 files, 7 folders, 1 archives.')).toBeVisible();
   await expect.poll(() => page.url()).toContain('filter=');
@@ -258,6 +263,39 @@ filter=arcade [mister]
 
   await expect(page.getByRole('heading', { name: 'filter_smoke' })).toBeVisible();
   await expect(filterInput).toHaveValue('manual !keep');
+});
+
+test('database default FILTER takes precedence over [mister] when the INI entry has no filter', async ({
+  page,
+}) => {
+  const iniRemoteUrl = 'https://example.com/filter-db-precedence.json';
+
+  await page.route(iniRemoteUrl, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(buildFilterDatabase({ defaultFilter: 'arcade [mister]' })),
+    });
+  });
+
+  await page.goto('/');
+
+  await page.locator('#database-file-input').setInputFiles({
+    name: 'downloader.ini',
+    mimeType: 'text/plain',
+    buffer: Buffer.from(
+      `[MiSTer]
+filter=console !cheats
+
+[Preserved]
+db_url=${iniRemoteUrl}
+`,
+      'utf8',
+    ),
+  });
+
+  await expect(page.getByRole('heading', { name: 'filter_smoke' })).toBeVisible();
+  await expect(page.getByLabel('FILTER')).toHaveValue('arcade console !cheats');
 });
 
 function buildFilterDatabase({ defaultFilter = '' } = {}) {
