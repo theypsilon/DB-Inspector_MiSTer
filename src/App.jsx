@@ -10,6 +10,7 @@ import {
   useState,
 } from 'react';
 import { flushSync } from 'react-dom';
+import { strToU8, zipSync } from 'fflate';
 import {
   applyInspectionFilter,
   formatBytes,
@@ -79,6 +80,7 @@ export default function App() {
   const [catalogStatus, setCatalogStatus] = useState('loading');
   const [catalogError, setCatalogError] = useState('');
   const [catalogModalOpen, setCatalogModalOpen] = useState(false);
+  const [installModalOpen, setInstallModalOpen] = useState(false);
   const [iniPickerOpen, setIniPickerOpen] = useState(false);
   const [filterOverridePrompt, setFilterOverridePrompt] = useState(null);
   const [dropzoneActive, setDropzoneActive] = useState(false);
@@ -130,6 +132,17 @@ export default function App() {
   useEffect(() => {
     inspectionRef.current = inspection;
   }, [inspection]);
+
+  useEffect(() => {
+    if (
+      inspection &&
+      inspection.source.sourceKind === 'url' &&
+      inspection.source.requestedUrl &&
+      window.location.hash === '#install'
+    ) {
+      setInstallModalOpen(true);
+    }
+  }, [inspectionKeyBase]);
 
   useEffect(() => {
     filterSearchParamReadyRef.current = false;
@@ -945,6 +958,18 @@ export default function App() {
                       detailed={databaseDetailed}
                       onDetailedChange={handleDatabaseDetailedChange}
                     />
+                    {displayedInspection.source.sourceKind === 'url' && displayedInspection.source.requestedUrl ? (
+                      <button
+                        type="button"
+                        className="install-button"
+                        onClick={() => {
+                          setInstallModalOpen(true);
+                          history.replaceState(null, '', '#install');
+                        }}
+                      >
+                        Install
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -1191,6 +1216,20 @@ export default function App() {
           nextFilter={filterOverridePrompt.nextFilter}
           onAccept={() => handleFilterOverrideDecision(true)}
           onDecline={() => handleFilterOverrideDecision(false)}
+        />
+      ) : null}
+
+      {installModalOpen && displayedInspection ? (
+        <InstallModal
+          dbId={displayedInspection.overview.dbId}
+          dbUrl={displayedInspection.source.requestedUrl}
+          activeFilter={debouncedFilterInput}
+          onClose={() => {
+            setInstallModalOpen(false);
+            if (window.location.hash === '#install') {
+              history.replaceState(null, '', window.location.pathname + window.location.search);
+            }
+          }}
         />
       ) : null}
 
@@ -1494,6 +1533,53 @@ const FilterOverrideModal = memo(function FilterOverrideModal({
     </ModalFrame>
   );
 });
+
+function InstallModal({ dbId, dbUrl, activeFilter, onClose }) {
+  const [includeFilter, setIncludeFilter] = useState(false);
+  const trimmedFilter = String(activeFilter || '').trim();
+  const hasFilter = trimmedFilter.length > 0;
+  const iniFileName = `downloader_${dbId}.ini`;
+
+  const handleDownload = () => {
+    let content = `[${dbId}]\ndb_url=${dbUrl}\n`;
+    if (includeFilter && hasFilter) {
+      content += `filter=${trimmedFilter}\n`;
+    }
+
+    const zipped = zipSync({ [iniFileName]: strToU8(content) });
+    const blob = new Blob([zipped], { type: 'application/zip' });
+    const url = URL.createObjectURL(blob);
+    triggerBrowserDownload(url, `downloader_${dbId}.zip`);
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  };
+
+  return (
+    <ModalFrame label="Install" title={`Install ${dbId} on MiSTer`} onClose={onClose}>
+      <p className="helper-copy">
+        To install this database on your MiSTer, download the ZIP below, extract{' '}
+        <strong>{iniFileName}</strong>, and copy it to the root of your SD card. The next time MiSTer
+        Downloader or Update All runs, it will pick up this database automatically.
+      </p>
+      {hasFilter ? (
+        <label className="install-filter-option">
+          <input
+            type="checkbox"
+            checked={includeFilter}
+            onChange={(event) => setIncludeFilter(event.target.checked)}
+          />
+          <span>
+            Include the current filter in the INI file: <code>{trimmedFilter}</code>
+          </span>
+        </label>
+      ) : null}
+      <div className="install-download-row">
+        <button type="button" className="install-button" onClick={handleDownload}>
+          Download {dbId} database
+        </button>
+      </div>
+    </ModalFrame>
+  );
+}
 
 const FilesystemSection = memo(function FilesystemSection({ tree, emptyMessage, detailed, onDetailedChange }) {
   const index = useMemo(() => buildFlatNodeIndex(tree.children), [tree]);
