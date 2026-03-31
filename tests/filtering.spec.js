@@ -265,6 +265,55 @@ filter=arcade [mister]
   await expect(filterInput).toHaveValue('manual !keep');
 });
 
+test('fresh INI list loads do not prompt for a filter override when FILTER is empty', async ({
+  page,
+}) => {
+  const firstRemoteUrl = 'https://example.com/filter-fresh-ini-first.json';
+  const secondRemoteUrl = 'https://example.com/filter-fresh-ini-second.json';
+
+  await page.route(firstRemoteUrl, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(buildFilterDatabase({ defaultFilter: 'arcade [mister]' })),
+    });
+  });
+
+  await page.route(secondRemoteUrl, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(buildFilterDatabase({ defaultFilter: 'console' })),
+    });
+  });
+
+  await page.goto('/');
+
+  await page.locator('#database-file-input').setInputFiles({
+    name: 'downloader.ini',
+    mimeType: 'text/plain',
+    buffer: Buffer.from(
+      `[MiSTer]
+filter=!cheats
+
+[First]
+db_url=${firstRemoteUrl}
+filter=arcade [mister]
+
+[Second]
+db_url=${secondRemoteUrl}
+`,
+      'utf8',
+    ),
+  });
+
+  await page.getByRole('button', { name: 'Open selected database' }).click();
+
+  await expect(page.getByRole('heading', { name: 'Replace the current filter?' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'filter_smoke' })).toBeVisible();
+  await expect(page.getByLabel('FILTER')).toHaveValue('arcade !cheats');
+});
+
 test('database default FILTER takes precedence over [mister] when the INI entry has no filter', async ({
   page,
 }) => {

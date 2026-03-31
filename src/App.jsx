@@ -127,9 +127,14 @@ export default function App() {
   useEffect(() => {
     filterSearchParamReadyRef.current = false;
 
-    const preservedFilter = pendingPreservedFilterRef.current;
-    pendingPreservedFilterRef.current = null;
     const sharedFilter = readFilterSearchParam();
+    const preservedFilter = pendingPreservedFilterRef.current;
+    if (preservedFilter === null && !sharedFilter.isPresent && !inspection) {
+      expectedFilterSearchParamValueRef.current = '';
+      return;
+    }
+
+    pendingPreservedFilterRef.current = null;
     const nextFilter =
       preservedFilter !== null
         ? preservedFilter
