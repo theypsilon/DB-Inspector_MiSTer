@@ -879,6 +879,7 @@ button:hover {
 .archive-list {
   position: relative;
   min-height: 1px;
+  overflow-anchor: none;
 }
 
 .archive-card {
@@ -991,8 +992,6 @@ button:hover {
 .archive-surface {
   padding: 1rem;
   background: rgba(255, 255, 255, 0.6);
-  content-visibility: auto;
-  contain-intrinsic-size: 260px;
 }
 
 .tree-heading {
