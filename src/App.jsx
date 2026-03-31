@@ -1513,32 +1513,53 @@ const TreeSection = memo(function TreeSection({
   index,
 }) {
   const containerRef = useRef(null);
+  const pendingMeasuredHeightsRef = useRef(new Map());
+  const measuredHeightsRef = useRef(new Map());
+  const heightFlushFrameRef = useRef(0);
+  const scrollIdleTimeoutRef = useRef(0);
+  const scrollingRef = useRef(false);
   const [detailed, setDetailed] = useState(false);
   const [collapsedIds, setCollapsedIds] = useState(() => new Set());
   const [detailOverrides, setDetailOverrides] = useState(() => new Map());
   const [measuredHeights, setMeasuredHeights] = useState(() => new Map());
+  const [containerTop, setContainerTop] = useState(0);
   const visibleRowIds = useMemo(
     () => collectVisibleRowIds(index.rootIds, index.rowsById, collapsedIds),
     [index, collapsedIds],
   );
   const viewport = useWindowViewport();
-  const containerTop = containerRef.current
-    ? containerRef.current.getBoundingClientRect().top + viewport.scrollY
-    : 0;
-  const virtualRows = useMemo(
+  const virtualLayout = useMemo(
     () =>
-      buildVirtualRows({
+      buildVirtualRowLayout({
         rowIds: visibleRowIds,
         rowsById: index.rowsById,
         collapsedIds,
         detailOverrides,
         defaultDetailed: detailed,
         measuredHeights,
-        containerTop,
-        viewport,
       }),
-    [visibleRowIds, index, collapsedIds, detailOverrides, detailed, measuredHeights, containerTop, viewport],
+    [visibleRowIds, index.rowsById, collapsedIds, detailOverrides, detailed, measuredHeights],
   );
+  const virtualRows = useMemo(
+    () =>
+      buildVirtualRows({
+        layout: virtualLayout,
+        rowsById: index.rowsById,
+        containerTop,
+        scrollY: viewport.scrollY,
+        viewportHeight: viewport.height,
+      }),
+    [virtualLayout, index.rowsById, containerTop, viewport.scrollY, viewport.height],
+  );
+  const resetMeasuredHeights = useCallback(() => {
+    pendingMeasuredHeightsRef.current.clear();
+    measuredHeightsRef.current = new Map();
+    if (heightFlushFrameRef.current && typeof window !== 'undefined') {
+      window.cancelAnimationFrame(heightFlushFrameRef.current);
+      heightFlushFrameRef.current = 0;
+    }
+    setMeasuredHeights(new Map());
+  }, []);
 
   const handleDetailedChange = useCallback((nextDetailed) => {
     startTransition(() => {
@@ -1559,36 +1580,173 @@ const TreeSection = memo(function TreeSection({
   }, [index]);
 
   const handleToggleCollapsed = useCallback((rowId) => {
-    startTransition(() => {
+    flushSync(() => {
       setCollapsedIds((current) => toggleSetMembership(current, rowId));
     });
   }, []);
 
   const handleToggleDetails = useCallback(
     (rowId) => {
-      startTransition(() => {
+      flushSync(() => {
         setDetailOverrides((current) => toggleDetailOverride(current, rowId, detailed));
       });
     },
     [detailed],
   );
 
-  const handleRowHeightChange = useCallback((rowId, height) => {
-    setMeasuredHeights((current) => {
-      const previous = current.get(rowId);
-      if (previous === height) {
-        return current;
+  const handleSetRowState = useCallback(
+    (rowId, { collapsed, detailsVisible }) => {
+      flushSync(() => {
+        if (typeof collapsed === 'boolean') {
+          setCollapsedIds((current) => setSetMembership(current, rowId, collapsed));
+        }
+
+        if (typeof detailsVisible === 'boolean') {
+          setDetailOverrides((current) =>
+            setDetailVisibilityOverride(current, rowId, detailsVisible, detailed),
+          );
+        }
+      });
+    },
+    [detailed],
+  );
+
+  const flushMeasuredHeights = useCallback(() => {
+    heightFlushFrameRef.current = 0;
+    const pendingEntries = Array.from(pendingMeasuredHeightsRef.current.entries());
+    pendingMeasuredHeightsRef.current.clear();
+    if (!pendingEntries.length) {
+      return;
+    }
+
+    let changed = false;
+    const currentMeasuredHeights = measuredHeightsRef.current;
+    const nextMeasuredHeights = new Map(currentMeasuredHeights);
+    for (const [rowId, height] of pendingEntries) {
+      if (nextMeasuredHeights.get(rowId) === height) {
+        continue;
       }
 
-      const next = new Map(current);
-      next.set(rowId, height);
-      return next;
+      nextMeasuredHeights.set(rowId, height);
+      changed = true;
+    }
+
+    if (!changed) {
+      return;
+    }
+
+    let scrollAnchorDelta = 0;
+    if (typeof window !== 'undefined' && visibleRowIds.length) {
+      const currentLayout = buildVirtualRowLayout({
+        rowIds: visibleRowIds,
+        rowsById: index.rowsById,
+        collapsedIds,
+        detailOverrides,
+        defaultDetailed: detailed,
+        measuredHeights: currentMeasuredHeights,
+      });
+      const nextLayout = buildVirtualRowLayout({
+        rowIds: visibleRowIds,
+        rowsById: index.rowsById,
+        collapsedIds,
+        detailOverrides,
+        defaultDetailed: detailed,
+        measuredHeights: nextMeasuredHeights,
+      });
+      scrollAnchorDelta = getViewportAnchorOffsetDelta({
+        currentLayout,
+        nextLayout,
+        viewportTop: Math.max(0, viewport.scrollY - containerTop),
+      });
+    }
+
+    measuredHeightsRef.current = nextMeasuredHeights;
+    flushSync(() => {
+      setMeasuredHeights(nextMeasuredHeights);
     });
-  }, []);
+
+    if (typeof window !== 'undefined' && scrollAnchorDelta) {
+      window.scrollBy(0, scrollAnchorDelta);
+    }
+  }, [
+    collapsedIds,
+    containerTop,
+    detailOverrides,
+    detailed,
+    index.rowsById,
+    viewport.scrollY,
+    visibleRowIds,
+  ]);
+
+  const handleRowHeightChange = useCallback((rowId, height, { immediate = false } = {}) => {
+    const hadMeasuredHeight = measuredHeightsRef.current.has(rowId);
+    pendingMeasuredHeightsRef.current.set(rowId, height);
+
+    if (typeof window === 'undefined' || immediate) {
+      if (heightFlushFrameRef.current && typeof window !== 'undefined') {
+        window.cancelAnimationFrame(heightFlushFrameRef.current);
+        heightFlushFrameRef.current = 0;
+      }
+      flushMeasuredHeights();
+      return;
+    }
+
+    if (scrollingRef.current && hadMeasuredHeight) {
+      return;
+    }
+
+    if (!heightFlushFrameRef.current) {
+      heightFlushFrameRef.current = window.requestAnimationFrame(() => {
+        flushMeasuredHeights();
+      });
+    }
+  }, [flushMeasuredHeights]);
 
   useEffect(() => {
-    setMeasuredHeights(new Map());
-  }, [index]);
+    resetMeasuredHeights();
+  }, [index, resetMeasuredHeights]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined;
+    }
+
+    scrollingRef.current = true;
+    if (scrollIdleTimeoutRef.current) {
+      window.clearTimeout(scrollIdleTimeoutRef.current);
+    }
+
+    scrollIdleTimeoutRef.current = window.setTimeout(() => {
+      scrollIdleTimeoutRef.current = 0;
+      scrollingRef.current = false;
+      flushMeasuredHeights();
+    }, 120);
+
+    return undefined;
+  }, [viewport.scrollY, flushMeasuredHeights]);
+
+  useEffect(
+    () => () => {
+      if (heightFlushFrameRef.current && typeof window !== 'undefined') {
+        window.cancelAnimationFrame(heightFlushFrameRef.current);
+      }
+      if (scrollIdleTimeoutRef.current && typeof window !== 'undefined') {
+        window.clearTimeout(scrollIdleTimeoutRef.current);
+      }
+    },
+    [],
+  );
+
+  useLayoutEffect(() => {
+    const element = containerRef.current;
+    if (!element || typeof window === 'undefined') {
+      setContainerTop(0);
+      return;
+    }
+
+    const nextTop = Math.round(element.getBoundingClientRect().top + window.scrollY);
+    setContainerTop((current) => (current === nextTop ? current : nextTop));
+  }, [index, viewport.layoutVersion]);
 
   return (
     <CollapsibleSection
@@ -1620,11 +1778,11 @@ const TreeSection = memo(function TreeSection({
                 detailsVisible={detailOverrides.get(row.id) ?? detailed}
                 onToggleCollapsed={handleToggleCollapsed}
                 onToggleDetails={handleToggleDetails}
+                onSetRowState={handleSetRowState}
                 onHeightChange={handleRowHeightChange}
-                virtualStyle={buildVirtualRowStyle(top, {
-                  trimTopGuide,
-                  trimBottomGuide,
-                })}
+                virtualTop={top}
+                trimTopGuide={trimTopGuide}
+                trimBottomGuide={trimBottomGuide}
               />
             );
           })}
@@ -2122,10 +2280,22 @@ const TreeEntryRow = memo(function TreeEntryRow({
   detailsVisible,
   onToggleCollapsed,
   onToggleDetails,
+  onSetRowState,
   onHeightChange,
-  virtualStyle,
+  virtualTop,
+  trimTopGuide,
+  trimBottomGuide,
 }) {
   const rowRef = useRef(null);
+  const previousMeasurementSignatureRef = useRef(null);
+  const virtualStyle = useMemo(
+    () =>
+      buildVirtualRowStyle(virtualTop, {
+        trimTopGuide,
+        trimBottomGuide,
+      }),
+    [trimBottomGuide, trimTopGuide, virtualTop],
+  );
   const isArchive = row.type === 'archive';
   const childIds = row.childIds;
   const showCollapseControl = isArchive || childIds.length > 0;
@@ -2160,11 +2330,18 @@ const TreeEntryRow = memo(function TreeEntryRow({
       return undefined;
     }
 
-    const reportHeight = () => {
-      onHeightChange(row.id, Math.ceil(element.getBoundingClientRect().height));
+    const measurementSignature = `${collapsed ? '1' : '0'}:${detailsVisible ? '1' : '0'}`;
+    const measurementKey = getRowMeasurementKey(row.id, { collapsed, detailsVisible });
+    const previousMeasurementSignature = previousMeasurementSignatureRef.current;
+    const shouldFlushImmediately =
+      previousMeasurementSignature !== null && previousMeasurementSignature !== measurementSignature;
+    previousMeasurementSignatureRef.current = measurementSignature;
+
+    const reportHeight = (immediate = false) => {
+      onHeightChange(measurementKey, Math.ceil(element.getBoundingClientRect().height), { immediate });
     };
 
-    reportHeight();
+    reportHeight(shouldFlushImmediately);
 
     if (typeof ResizeObserver === 'undefined') {
       return undefined;
@@ -2181,7 +2358,11 @@ const TreeEntryRow = memo(function TreeEntryRow({
 
   const handleToggleRowDetails = () => {
     if (isFile && collapsed && !detailsVisible) {
-      onToggleCollapsed(row.id);
+      onSetRowState(row.id, {
+        collapsed: false,
+        detailsVisible: true,
+      });
+      return;
     }
 
     onToggleDetails(row.id);
@@ -2189,7 +2370,11 @@ const TreeEntryRow = memo(function TreeEntryRow({
 
   const handleToggleRowCollapsed = () => {
     if (isFile && !collapsed && detailsVisible) {
-      onToggleDetails(row.id);
+      onSetRowState(row.id, {
+        collapsed: true,
+        detailsVisible: false,
+      });
+      return;
     }
 
     onToggleCollapsed(row.id);
@@ -2478,11 +2663,43 @@ function toggleSetMembership(currentSet, value) {
   return next;
 }
 
+function setSetMembership(currentSet, value, shouldHave) {
+  const hasValue = currentSet.has(value);
+  if (hasValue === shouldHave) {
+    return currentSet;
+  }
+
+  const next = new Set(currentSet);
+  if (shouldHave) {
+    next.add(value);
+  } else {
+    next.delete(value);
+  }
+
+  return next;
+}
+
 function toggleDetailOverride(currentMap, rowId, defaultDetailed) {
   const currentVisible = currentMap.get(rowId) ?? defaultDetailed;
   const nextVisible = !currentVisible;
   const next = new Map(currentMap);
 
+  if (nextVisible === defaultDetailed) {
+    next.delete(rowId);
+  } else {
+    next.set(rowId, nextVisible);
+  }
+
+  return next;
+}
+
+function setDetailVisibilityOverride(currentMap, rowId, nextVisible, defaultDetailed) {
+  const currentVisible = currentMap.get(rowId) ?? defaultDetailed;
+  if (currentVisible === nextVisible) {
+    return currentMap;
+  }
+
+  const next = new Map(currentMap);
   if (nextVisible === defaultDetailed) {
     next.delete(rowId);
   } else {
@@ -2509,6 +2726,10 @@ function buildVirtualRowStyle(top, { trimTopGuide = false, trimBottomGuide = fal
     '--tree-guide-top-overlap': trimTopGuide ? '0px' : 'var(--tree-guide-overlap)',
     '--tree-guide-bottom-overlap': trimBottomGuide ? '0px' : 'var(--tree-guide-overlap)',
   };
+}
+
+function getRowMeasurementKey(rowId, { collapsed, detailsVisible }) {
+  return `${rowId}:${collapsed ? '1' : '0'}:${detailsVisible ? '1' : '0'}`;
 }
 
 function useWindowViewport() {
@@ -2592,33 +2813,38 @@ function useWindowViewport() {
   return viewport;
 }
 
-function buildVirtualRows({
+function buildVirtualRowLayout({
   rowIds,
   rowsById,
   collapsedIds,
   detailOverrides,
   defaultDetailed,
   measuredHeights,
-  containerTop,
-  viewport,
 }) {
   if (!rowIds.length) {
     return {
+      rowIds: [],
+      rowIndexById: new Map(),
+      offsets: [],
+      bottoms: [],
       totalHeight: 0,
-      items: [],
     };
   }
 
   const offsets = new Array(rowIds.length);
   const bottoms = new Array(rowIds.length);
+  const rowIndexById = new Map();
   let totalHeight = 0;
 
   for (let index = 0; index < rowIds.length; index += 1) {
     const rowId = rowIds[index];
     const row = rowsById.get(rowId);
+    rowIndexById.set(rowId, index);
     const collapsed = collapsedIds.has(rowId);
     const detailsVisible = detailOverrides.get(rowId) ?? defaultDetailed;
-    const measuredHeight = measuredHeights.get(rowId);
+    const measuredHeight = measuredHeights.get(
+      getRowMeasurementKey(rowId, { collapsed, detailsVisible }),
+    );
     const rowHeight =
       measuredHeight ?? estimateRowHeight(row, { collapsed, detailsVisible });
 
@@ -2631,14 +2857,34 @@ function buildVirtualRows({
     }
   }
 
-  const viewportTop = viewport.scrollY - containerTop - TREE_OVERSCAN_PX;
-  const viewportBottom = viewport.scrollY + viewport.height - containerTop + TREE_OVERSCAN_PX;
+  return {
+    rowIds,
+    rowIndexById,
+    offsets,
+    bottoms,
+    totalHeight,
+  };
+}
+
+function buildVirtualRows({
+  layout,
+  rowsById,
+  containerTop,
+  scrollY,
+  viewportHeight,
+}) {
+  if (!layout.rowIds.length) {
+    return {
+      totalHeight: 0,
+      items: [],
+    };
+  }
+
+  const { rowIds, rowIndexById, offsets, bottoms, totalHeight } = layout;
+  const viewportTop = scrollY - containerTop - TREE_OVERSCAN_PX;
+  const viewportBottom = scrollY + viewportHeight - containerTop + TREE_OVERSCAN_PX;
   const startIndex = lowerBound(bottoms, viewportTop);
   const endIndex = Math.min(rowIds.length, upperBound(offsets, viewportBottom));
-  const rowIndexById = new Map();
-  for (let index = 0; index < rowIds.length; index += 1) {
-    rowIndexById.set(rowIds[index], index);
-  }
 
   const renderedIndexes = new Set();
   for (let index = startIndex; index < endIndex; index += 1) {
@@ -2679,6 +2925,25 @@ function buildVirtualRows({
     totalHeight,
     items,
   };
+}
+
+function getViewportAnchorOffsetDelta({ currentLayout, nextLayout, viewportTop }) {
+  if (!currentLayout.rowIds.length || !nextLayout.rowIds.length) {
+    return 0;
+  }
+
+  const anchorIndex = Math.min(
+    currentLayout.rowIds.length - 1,
+    lowerBound(currentLayout.bottoms, viewportTop),
+  );
+  const anchorRowId = currentLayout.rowIds[anchorIndex];
+  const nextAnchorIndex = nextLayout.rowIndexById.get(anchorRowId);
+
+  if (nextAnchorIndex == null) {
+    return 0;
+  }
+
+  return nextLayout.offsets[nextAnchorIndex] - currentLayout.offsets[anchorIndex];
 }
 
 function estimateRowHeight(row, { collapsed, detailsVisible }) {

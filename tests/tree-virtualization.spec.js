@@ -14,7 +14,8 @@ test('virtualized filesystem and archive trees still behave correctly', async ({
 
   await expect(page.getByRole('heading', { name: 'virtualization_smoke' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Files and folders' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Archive summaries' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Archives' })).toBeVisible();
+  await scrollVirtualListBy(page, '.tree-root', 220);
 
   const filesystemRowCount = await page.locator('.tree-root .tree-entry').count();
   expect(filesystemRowCount).toBeGreaterThan(0);
@@ -29,16 +30,25 @@ test('virtualized filesystem and archive trees still behave correctly', async ({
   await expect(firstFileRow.locator('.collapse-button')).toHaveCount(0);
   await firstFileRow.getByRole('button', { name: 'Show details' }).click();
   await expect(firstFileRow.getByText('MD5 HASH', { exact: true })).toBeVisible();
+  await expect
+    .poll(async () => Math.abs(Math.round(await measureReservedGap(firstFileRow)) - 13))
+    .toBeLessThanOrEqual(1);
   await firstFileRow.getByRole('button', { name: 'Hide details' }).click();
   await expect(firstFileRow.getByText('MD5 HASH', { exact: true })).toHaveCount(0);
+  await expect
+    .poll(async () => Math.abs(Math.round(await measureReservedGap(firstFileRow)) - 13))
+    .toBeLessThanOrEqual(1);
   await firstFileRow.getByRole('button', { name: 'Show details' }).click();
   await expect(firstFileRow.getByText('MD5 HASH', { exact: true })).toBeVisible();
+  await expect
+    .poll(async () => Math.abs(Math.round(await measureReservedGap(firstFileRow)) - 13))
+    .toBeLessThanOrEqual(1);
 
   await scrollVirtualListNearBottom(page, '.tree-root');
   await expect(page.getByRole('heading', { name: `file_${pad(FILE_COUNT - 1)}.rbf` })).toBeVisible();
 
   const archiveSection = page.locator('details', {
-    has: page.getByRole('heading', { name: 'Archive summaries' }),
+    has: page.getByRole('heading', { name: 'Archives' }),
   });
 
   await scrollElementToViewportTop(page, archiveSection);
@@ -48,10 +58,10 @@ test('virtualized filesystem and archive trees still behave correctly', async ({
   expect(archiveRowCount).toBeGreaterThan(0);
   expect(archiveRowCount).toBeLessThan(ARCHIVE_COUNT + 1);
 
-  await archiveSection.getByRole('button', { name: /^Collapse all$/ }).click();
+  await archiveSection.getByRole('button', { name: /^Close all$/ }).click();
   await expect(page.getByRole('heading', { name: 'rom_000.bin' })).toHaveCount(0);
 
-  await archiveSection.getByRole('button', { name: /^Uncollapse all$/ }).click();
+  await archiveSection.getByRole('button', { name: /^Open all$/ }).click();
   await expect(page.getByRole('heading', { name: 'rom_000.bin' })).toBeVisible();
 
   const filesystemSection = page.locator('details', {
@@ -128,9 +138,29 @@ async function scrollVirtualListNearBottom(page, selector) {
   });
 }
 
+async function scrollVirtualListBy(page, selector, offset) {
+  await page.locator(selector).evaluate((element, nextOffset) => {
+    const top = element.getBoundingClientRect().top + window.scrollY;
+    window.scrollTo(0, top + nextOffset);
+  }, offset);
+}
+
 async function scrollElementToViewportTop(page, locator) {
   await locator.evaluate((element) => {
     const top = element.getBoundingClientRect().top + window.scrollY;
     window.scrollTo(0, Math.max(0, top - 120));
+  });
+}
+
+async function measureReservedGap(rowLocator) {
+  return rowLocator.evaluate((element) => {
+    const next = element.nextElementSibling;
+    if (!(next instanceof HTMLElement)) {
+      return Number.NaN;
+    }
+
+    const top = parseFloat(element.style.top || '0');
+    const nextTop = parseFloat(next.style.top || '0');
+    return nextTop - top - element.getBoundingClientRect().height;
   });
 }
