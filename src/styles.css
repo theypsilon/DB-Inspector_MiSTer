@@ -440,6 +440,16 @@ button:hover {
   outline-offset: 2px;
 }
 
+.info-hint {
+  cursor: help;
+  opacity: 0.5;
+  font-size: 0.95em;
+}
+
+.info-hint:hover {
+  opacity: 0.8;
+}
+
 .catalog-selected {
   margin-top: 1rem;
   padding: 1rem;

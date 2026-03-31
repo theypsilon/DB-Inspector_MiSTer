@@ -1108,6 +1108,12 @@ export default function App() {
                           ))}
                         </select>
                         <span>clusters.</span>
+                        <span
+                          className="info-hint"
+                          title="SD cards over 32 GB are usually formatted with 128 KB clusters (exFAT default). Cards of 32 GB or smaller typically use 32 KB clusters (FAT32 default)."
+                        >
+                          &#9432;
+                        </span>
                       </>
                     ) : null}
                   </>
