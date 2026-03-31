@@ -477,6 +477,9 @@ button:hover {
 .install-button {
   background: linear-gradient(135deg, #6a4c93, #4a3572);
   color: #f9f8f3;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .install-filter-option {
