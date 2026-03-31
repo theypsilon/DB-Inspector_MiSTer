@@ -1092,7 +1092,6 @@ export default function App() {
                           className="disk-usage-value info-hint"
                           tabIndex={0}
                           role="button"
-                          data-tip={buildRawByteHoverCopy(storageSummary)}
                           onClick={(event) => {
                             event.currentTarget.toggleAttribute('data-open');
                           }}
@@ -1104,6 +1103,7 @@ export default function App() {
                           }}
                         >
                           {formatBytes(storageSummary.clusteredBytes)}
+                          <span className="info-tip">{buildRawByteHoverCopy(storageSummary)}</span>
                         </span>
                         <span>at</span>
                         <select
@@ -1124,7 +1124,6 @@ export default function App() {
                           tabIndex={0}
                           role="button"
                           aria-label="Cluster size info"
-                          data-tip="SD cards over 32 GB are usually formatted with 128 KB clusters (exFAT default). Cards of 32 GB or smaller typically use 32 KB clusters (FAT32 default)."
                           onClick={(event) => {
                             event.currentTarget.toggleAttribute('data-open');
                           }}
@@ -1136,6 +1135,10 @@ export default function App() {
                           }}
                         >
                           &#9432;
+                          <span className="info-tip">
+                            SD cards over 32 GB are usually formatted with 128 KB clusters (exFAT default).
+                            Cards of 32 GB or smaller typically use 32 KB clusters (FAT32 default).
+                          </span>
                         </span>
                       </>
                     ) : null}
