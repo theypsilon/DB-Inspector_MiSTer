@@ -28,7 +28,6 @@ const DETAILED_URL_PARAM = 'detailed';
 const FILTER_INPUT_DEBOUNCE_MS = 600;
 const TREE_LIST_GAP_PX = 13;
 const TREE_OVERSCAN_PX = 900;
-const BACKGROUND_DOWNLOAD_FRAME_NAME = 'background-download-frame';
 const DEFAULT_CLUSTER_SIZE_BYTES = 128 * 1024;
 const CLUSTER_SIZE_OPTIONS = [
   4 * 1024,
@@ -41,8 +40,6 @@ const CLUSTER_SIZE_OPTIONS = [
   512 * 1024,
   1024 * 1024,
 ];
-
-let backgroundDownloadFrame = null;
 
 export default function App() {
   const fileInputRef = useRef(null);
@@ -88,12 +85,16 @@ export default function App() {
       history.replaceState(null, '', url.pathname + url.search + url.hash);
     }
   }, []);
+  const handleDownloadError = useCallback((error) => {
+    setDownloadErrorUrl(error);
+  }, []);
   const [runtimeCatalogOptions, setRuntimeCatalogOptions] = useState([]);
   const [customCatalogOptions, setCustomCatalogOptions] = useState([]);
   const [catalogStatus, setCatalogStatus] = useState('loading');
   const [catalogError, setCatalogError] = useState('');
   const [catalogModalOpen, setCatalogModalOpen] = useState(false);
   const [installModalOpen, setInstallModalOpen] = useState(false);
+  const [downloadErrorUrl, setDownloadErrorUrl] = useState(null);
   const [iniPickerOpen, setIniPickerOpen] = useState(false);
   const [filterOverridePrompt, setFilterOverridePrompt] = useState(null);
   const [dropzoneActive, setDropzoneActive] = useState(false);
@@ -1304,6 +1305,7 @@ export default function App() {
               onAnchorHandled={() => setNodeAnchor(null)}
               searchMatch={globalSearch.currentMatch?.section === 'filesystem' ? globalSearch.currentMatch : null}
               searchQuery={globalSearch.activeQuery}
+              onDownloadError={handleDownloadError}
             />
 
             {displayedInspection.archiveViews.length ? (
@@ -1322,6 +1324,7 @@ export default function App() {
                 onAnchorHandled={() => setNodeAnchor(null)}
                 searchMatch={globalSearch.currentMatch?.section === 'archives' ? globalSearch.currentMatch : null}
                 searchQuery={globalSearch.activeQuery}
+                onDownloadError={handleDownloadError}
               />
             ) : null}
 
@@ -1419,6 +1422,13 @@ export default function App() {
               history.replaceState(null, '', window.location.pathname + window.location.search);
             }
           }}
+        />
+      ) : null}
+
+      {downloadErrorUrl ? (
+        <DownloadErrorModal
+          error={downloadErrorUrl}
+          onClose={() => setDownloadErrorUrl(null)}
         />
       ) : null}
 
@@ -1741,6 +1751,9 @@ function InstallModal({ dbId, dbUrl, activeFilter, onClose }) {
   const trimmedFilter = String(activeFilter || '').trim();
   const hasFilter = trimmedFilter.length > 0;
   const iniFileName = `downloader_${dbId}.ini`;
+  const installUrl = typeof window !== 'undefined'
+    ? window.location.origin + window.location.pathname + window.location.search + '#install'
+    : '';
 
   const handleDownload = () => {
     let content = `[${dbId}]\ndb_url=${dbUrl}\n`;
@@ -1756,7 +1769,12 @@ function InstallModal({ dbId, dbUrl, activeFilter, onClose }) {
   };
 
   return (
-    <ModalFrame label="Install" title={`Install \u201C${dbId}\u201D on MiSTer`} onClose={onClose}>
+    <ModalFrame
+      label="Install"
+      title={`Install \u201C${dbId}\u201D on MiSTer`}
+      onClose={onClose}
+      headerActions={<CopyLinkButton url={installUrl} tooltip="Copy install link to clipboard" />}
+    >
       <p className="helper-copy">
         To install this database on your MiSTer, download the ZIP below, extract{' '}
         <strong>{iniFileName}</strong>, and copy it to the root of your SD card. The next time MiSTer
@@ -1783,7 +1801,129 @@ function InstallModal({ dbId, dbUrl, activeFilter, onClose }) {
   );
 }
 
-const FilesystemSection = memo(function FilesystemSection({ index, emptyMessage, detailed, onDetailedChange, anchorRowId, altAnchorRowId, onAnchorHandled, searchMatch, searchQuery }) {
+function CopyLinkButton({ url, tooltip }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(url).then(() => {
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 2000);
+      });
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      className={`copy-link-button-icon${copied ? ' copy-link-button-copied' : ''}`}
+      onClick={handleCopy}
+      aria-label={tooltip}
+    >
+      <span className="copy-link-button-svg" aria-hidden="true">
+        {copied ? (
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="3.5 8.5 6.5 11.5 12.5 4.5" />
+          </svg>
+        ) : (
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" />
+            <path d="M10.5 5.5V3.5a1.5 1.5 0 0 0-1.5-1.5H3.5A1.5 1.5 0 0 0 2 3.5V9a1.5 1.5 0 0 0 1.5 1.5h2" />
+          </svg>
+        )}
+      </span>
+      <span className="copy-link-button-tooltip">
+        {copied ? 'Copied!' : tooltip}
+      </span>
+    </button>
+  );
+}
+
+function describeDownloadError(error) {
+  const reason = error?.reason;
+  const status = error?.status;
+
+  if (reason === 'http' && status === 401) {
+    return { message: 'Authentication required. This file is not publicly accessible.', code: 401, copyable: true };
+  }
+  if (reason === 'http' && status === 403) {
+    return { message: 'Access denied by the server. The file may require authentication.', code: 403, copyable: true };
+  }
+  if (reason === 'http' && status === 404) {
+    return { message: 'File not found. It may have been moved or removed.', code: 404, copyable: false };
+  }
+  if (reason === 'http' && status === 408) {
+    return { message: 'The request timed out. The server took too long to respond \u2014 try again later.', code: 408, copyable: false };
+  }
+  if (reason === 'http' && status === 410) {
+    return { message: 'This file has been permanently removed.', code: 410, copyable: false };
+  }
+  if (reason === 'http' && status === 429) {
+    return { message: 'Too many requests. Try again later.', code: 429, copyable: false };
+  }
+  if (reason === 'http' && status >= 500) {
+    return { message: 'This is usually temporary \u2014 try again later.', code: status, copyable: false };
+  }
+  if (reason === 'http') {
+    return { message: 'Unexpected server response.', code: status, copyable: false };
+  }
+  if (reason === 'html') {
+    return { message: 'The server returned a web page instead of the file. The file may live inside a remote archive that does not support direct downloads.', code: null, copyable: true };
+  }
+  if (reason === 'network') {
+    return { message: 'The request could not reach the server. The host may not allow browser downloads, or there may be a network issue.', code: null, copyable: true };
+  }
+  return { message: 'This file could not be downloaded directly in the browser.', code: null, copyable: true };
+}
+
+function DownloadErrorModal({ error, onClose }) {
+  const [copied, setCopied] = useState(false);
+  const url = error?.url || '';
+  const fileName = error?.fileName || 'file';
+  const { message, code, copyable } = describeDownloadError(error);
+
+  const handleCopy = () => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(url).then(() => {
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 2000);
+      });
+    }
+  };
+
+  return (
+    <div
+      className="modal-overlay"
+      role="presentation"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <div className="download-error-card" role="alertdialog" aria-label="Download error">
+        <p className="section-label download-error-label">Download failed</p>
+        <strong className="download-error-title">{fileName}</strong>
+        <div className="download-error-text">
+          <span>{code ? <><code className="download-error-code">{code}</code> </> : null}{message}</span>
+          {copyable ? <span>You can copy the URL and try it in another tab or tool.</span> : null}
+        </div>
+        <div className="download-error-footer">
+          {copyable ? (
+            <button type="button" className="copy-url-button" onClick={handleCopy}>
+              {copied ? 'Copied' : 'Copy URL'}
+            </button>
+          ) : null}
+          <button type="button" className="download-error-dismiss" onClick={onClose}>
+            Dismiss
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const FilesystemSection = memo(function FilesystemSection({ index, emptyMessage, detailed, onDetailedChange, anchorRowId, altAnchorRowId, onAnchorHandled, searchMatch, searchQuery, onDownloadError }) {
   return (
     <TreeSection
       label="Content"
@@ -1799,11 +1939,12 @@ const FilesystemSection = memo(function FilesystemSection({ index, emptyMessage,
       searchMatch={searchMatch}
       searchQuery={searchQuery}
       anchor="files"
+      onDownloadError={onDownloadError}
     />
   );
 });
 
-const ArchiveSummariesSection = memo(function ArchiveSummariesSection({ index, emptyMessage, detailed, onDetailedChange, anchorRowId, altAnchorRowId, onAnchorHandled, searchMatch, searchQuery }) {
+const ArchiveSummariesSection = memo(function ArchiveSummariesSection({ index, emptyMessage, detailed, onDetailedChange, anchorRowId, altAnchorRowId, onAnchorHandled, searchMatch, searchQuery, onDownloadError }) {
   return (
     <TreeSection
       label="Content"
@@ -1819,6 +1960,7 @@ const ArchiveSummariesSection = memo(function ArchiveSummariesSection({ index, e
       searchMatch={searchMatch}
       searchQuery={searchQuery}
       anchor="archives"
+      onDownloadError={onDownloadError}
     />
   );
 });
@@ -1837,6 +1979,7 @@ const TreeSection = memo(function TreeSection({
   searchMatch,
   searchQuery,
   anchor,
+  onDownloadError,
 }) {
   const [searchAnchorRowId, setSearchAnchorRowId] = useState(null);
   const searchMatchPartRef = useRef('name');
@@ -2512,6 +2655,7 @@ const TreeSection = memo(function TreeSection({
                   onToggleDetails={handleToggleDetails}
                   onSetRowState={handleSetRowState}
                   onAnchorRow={handleAnchorRow}
+                  onDownloadError={onDownloadError}
 
                   onHeightChange={handleRowHeightChange}
                   virtualTop={top}
@@ -2540,6 +2684,7 @@ const TreeSection = memo(function TreeSection({
                   onToggleDetails={handleToggleDetails}
                   onSetRowState={handleSetRowState}
                   onAnchorRow={handleAnchorRow}
+                  onDownloadError={onDownloadError}
 
                 />
               );
@@ -2597,35 +2742,7 @@ function resolveDownloadFileName(fileName, url) {
   }
 }
 
-function ensureBackgroundDownloadFrame() {
-  if (typeof document === 'undefined') {
-    return null;
-  }
-
-  if (backgroundDownloadFrame?.isConnected) {
-    return backgroundDownloadFrame;
-  }
-
-  const existingFrame = document.querySelector(
-    `iframe[data-download-target="${BACKGROUND_DOWNLOAD_FRAME_NAME}"]`,
-  );
-  if (existingFrame instanceof HTMLIFrameElement) {
-    backgroundDownloadFrame = existingFrame;
-    return backgroundDownloadFrame;
-  }
-
-  const iframe = document.createElement('iframe');
-  iframe.name = BACKGROUND_DOWNLOAD_FRAME_NAME;
-  iframe.dataset.downloadTarget = BACKGROUND_DOWNLOAD_FRAME_NAME;
-  iframe.tabIndex = -1;
-  iframe.setAttribute('aria-hidden', 'true');
-  iframe.style.display = 'none';
-  document.body.append(iframe);
-  backgroundDownloadFrame = iframe;
-  return backgroundDownloadFrame;
-}
-
-function triggerBrowserDownload(href, fileName, target = '') {
+function triggerBrowserDownload(href, fileName) {
   if (typeof document === 'undefined') {
     return;
   }
@@ -2634,9 +2751,6 @@ function triggerBrowserDownload(href, fileName, target = '') {
   link.href = href;
   link.download = resolveDownloadFileName(fileName, href);
   link.rel = 'noreferrer';
-  if (target) {
-    link.target = target;
-  }
   link.style.display = 'none';
   document.body.append(link);
   link.click();
@@ -2648,22 +2762,28 @@ async function triggerFileDownload(url, fileName) {
     return;
   }
 
+  let response;
   try {
-    const response = await fetch(url, { redirect: 'follow' });
-    if (!response.ok) {
-      throw new Error(`Could not download ${url}.`);
-    }
-
-    const blob = await response.blob();
-    const objectUrl = URL.createObjectURL(blob);
-    triggerBrowserDownload(objectUrl, fileName);
-    window.setTimeout(() => {
-      URL.revokeObjectURL(objectUrl);
-    }, 60_000);
+    response = await fetch(url, { redirect: 'follow' });
   } catch {
-    const fallbackFrame = ensureBackgroundDownloadFrame();
-    triggerBrowserDownload(url, fileName, fallbackFrame?.name || '');
+    throw { reason: 'network', url, fileName };
   }
+
+  if (!response.ok) {
+    throw { reason: 'http', status: response.status, url, fileName };
+  }
+
+  const contentType = (response.headers.get('content-type') || '').toLowerCase();
+  if (contentType.includes('text/html')) {
+    throw { reason: 'html', url, fileName };
+  }
+
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  triggerBrowserDownload(objectUrl, fileName);
+  window.setTimeout(() => {
+    URL.revokeObjectURL(objectUrl);
+  }, 60_000);
 }
 
 function normalizeFilterPromptValue(value) {
@@ -3077,7 +3197,7 @@ function runAfterNextPaint(callback) {
   });
 }
 
-function ModalFrame({ label, title, onClose, footer, children }) {
+function ModalFrame({ label, title, onClose, footer, headerActions, children }) {
   return (
     <div
       className="modal-overlay"
@@ -3092,7 +3212,10 @@ function ModalFrame({ label, title, onClose, footer, children }) {
         <div className="modal-header">
           <div>
             <p className="section-label">{label}</p>
-            <h2>{title}</h2>
+            <div className="modal-title-row">
+              <h2>{title}</h2>
+              {headerActions ?? null}
+            </div>
           </div>
         </div>
         <div className="modal-body">{children}</div>
@@ -3111,6 +3234,7 @@ const TreeEntryRow = memo(function TreeEntryRow({
   onToggleDetails,
   onSetRowState,
   onAnchorRow,
+  onDownloadError,
   onHeightChange,
   virtualTop,
   trimTopGuide,
@@ -3221,7 +3345,9 @@ const TreeEntryRow = memo(function TreeEntryRow({
   };
 
   const handleDownload = () => {
-    void triggerFileDownload(downloadUrl, row.node.name);
+    triggerFileDownload(downloadUrl, row.node.name).catch((error) => {
+      onDownloadError?.({ url: downloadUrl, ...(error && typeof error === 'object' ? error : {}) });
+    });
   };
 
   return (

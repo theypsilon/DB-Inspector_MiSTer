@@ -607,6 +607,162 @@ button:hover {
   margin-top: 1.2rem;
 }
 
+.copy-link-button-icon {
+  position: relative;
+  overflow: visible;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border: 1px solid rgba(22, 33, 47, 0.18);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  flex-shrink: 0;
+}
+
+.copy-link-button-icon:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(15, 111, 145, 0.06);
+}
+
+.copy-link-button-copied {
+  color: var(--success);
+  border-color: var(--success);
+}
+
+.copy-link-button-copied:hover {
+  color: var(--success);
+  border-color: var(--success);
+  background: rgba(61, 135, 81, 0.06);
+}
+
+.copy-link-button-svg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.copy-link-button-tooltip {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.35rem 0.65rem;
+  border-radius: 6px;
+  background: var(--ink);
+  color: #f5efe2;
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.copy-link-button-icon:hover .copy-link-button-tooltip,
+.copy-link-button-copied .copy-link-button-tooltip {
+  opacity: 1;
+}
+
+.copy-link-button-tooltip::before {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-bottom-color: var(--ink);
+}
+
+.download-error-card {
+  width: min(440px, calc(100% - 2rem));
+  padding: 1.25rem;
+  border-radius: var(--radius-md);
+  background: rgba(255, 250, 240, 0.97);
+  border: 1px solid rgba(22, 33, 47, 0.12);
+  box-shadow: 0 20px 50px rgba(22, 33, 47, 0.22);
+}
+
+.download-error-label {
+  margin-bottom: 0.35rem;
+}
+
+.download-error-title {
+  display: block;
+  font-size: 0.95rem;
+  margin-bottom: 0.6rem;
+}
+
+.download-error-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.download-error-code {
+  display: inline-block;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-family: var(--mono);
+  color: var(--danger);
+  background: rgba(160, 54, 45, 0.08);
+  border-radius: 4px;
+  vertical-align: baseline;
+}
+
+.download-error-footer {
+  display: flex;
+  justify-content: end;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.copy-url-button {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.copy-url-button:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+.download-error-dismiss {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid rgba(22, 33, 47, 0.18);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.download-error-dismiss:hover {
+  background: rgba(22, 33, 47, 0.06);
+}
+
+
 .catalog-selected-url {
   grid-column: 1 / -1;
 }
@@ -699,6 +855,12 @@ button:hover {
   justify-content: flex-start;
   align-items: start;
   gap: 1rem;
+}
+
+.modal-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
 }
 
 .modal-body {
