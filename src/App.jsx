@@ -2172,10 +2172,10 @@ const TreeSection = memo(function TreeSection({
     }
   }, [__VIRTUALIZE__ ? viewport?.scrollY : null, resolveGhostFromCursor]);
 
-  const scrollToRow = useCallback((rowId) => {
+  const scrollToRow = useCallback((rowId, { smooth = false } = {}) => {
     const el = document.getElementById(`row-${rowId}`);
     if (el) {
-      el.scrollIntoView({ block: 'start' });
+      el.scrollIntoView({ block: 'start', behavior: smooth ? 'smooth' : 'instant' });
     }
   }, []);
 
@@ -2186,7 +2186,7 @@ const TreeSection = memo(function TreeSection({
     }
 
     setHighlightedRowId(rowId);
-    scrollToRow(rowId);
+    scrollToRow(rowId, { smooth: true });
     window.setTimeout(() => setHighlightedRowId(null), 3000);
   }, [index.rowsById, scrollToRow]);
 
