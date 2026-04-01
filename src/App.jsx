@@ -4293,7 +4293,7 @@ function ScrollToSectionTopButton({ anchor }) {
       const section = document.getElementById(`section-${anchor}`);
       if (!section) { setVisible(false); return; }
       const rect = section.getBoundingClientRect();
-      setVisible(rect.top < 0 && rect.height > window.innerHeight);
+      setVisible(rect.top < -120 && rect.height > window.innerHeight);
     };
 
     update();
