@@ -133,14 +133,41 @@ export default function App() {
     inspectionRef.current = inspection;
   }, [inspection]);
 
+  const [nodeAnchor, setNodeAnchor] = useState(null);
+
   useEffect(() => {
+    if (!inspection) {
+      return;
+    }
+
     if (
-      inspection &&
       inspection.source.sourceKind === 'url' &&
       inspection.source.requestedUrl &&
       window.location.hash === '#install'
     ) {
       setInstallModalOpen(true);
+      return;
+    }
+
+    const anchor = parseNodeAnchor();
+    if (anchor) {
+      setNodeAnchor(anchor);
+    } else {
+      const sectionHash = window.location.hash.slice(1);
+      if (sectionHash) {
+        runAfterNextPaint(() => {
+          const target = document.getElementById(`section-${sectionHash}`);
+          if (!target) return;
+
+          document.querySelectorAll('details[id^="section-"][open]').forEach((el) => {
+            if (el !== target) {
+              el.open = false;
+            }
+          });
+
+          target.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        });
+      }
     }
   }, [inspectionKeyBase]);
 
@@ -932,11 +959,14 @@ export default function App() {
 
         {displayedInspection ? (
           <>
-            <section className="panel overview-panel">
+            <section id="section-database" className="panel overview-panel">
               <div className="overview-header">
                 <div>
                   <p className="section-label">Database</p>
-                  <h2>{displayedInspection.overview.dbId}</h2>
+                  <h2>
+                    <SectionAnchor anchor="database" />
+                    {displayedInspection.overview.dbId}
+                  </h2>
                   <GitHubRepoLink source={displayedInspection.source} dbId={displayedInspection.overview.dbId} />
                 </div>
                 <div className="overview-side">
@@ -1029,6 +1059,7 @@ export default function App() {
               title="Enter terms to filter by"
               defaultOpen
               className="filter-panel"
+              anchor="filter"
             >
               <div className="filter-toolbar">
                 <div className="catalog-search">
@@ -1157,6 +1188,9 @@ export default function App() {
               }
               detailed={databaseDetailed}
               onDetailedChange={handleDatabaseDetailedChange}
+              anchorRowId={nodeAnchor?.section === 'filesystem' ? nodeAnchor.rowId : null}
+              altAnchorRowId={nodeAnchor?.section === 'filesystem' ? nodeAnchor.altRowId : null}
+              onAnchorHandled={() => setNodeAnchor(null)}
             />
 
             {displayedInspection.archiveViews.length ? (
@@ -1170,6 +1204,9 @@ export default function App() {
                 }
                 detailed={databaseDetailed}
                 onDetailedChange={handleDatabaseDetailedChange}
+                anchorRowId={nodeAnchor?.section === 'archives' ? nodeAnchor.rowId : null}
+                altAnchorRowId={nodeAnchor?.section === 'archives' ? nodeAnchor.altRowId : null}
+                onAnchorHandled={() => setNodeAnchor(null)}
               />
             ) : null}
 
@@ -1177,6 +1214,7 @@ export default function App() {
               label="Diagnostics"
               title="Issues and warnings"
               defaultOpen
+              anchor="issues"
             >
               {displayedInspection.issues.length ? (
                 <ul className="issue-list">
@@ -1613,7 +1651,7 @@ function InstallModal({ dbId, dbUrl, activeFilter, onClose }) {
   );
 }
 
-const FilesystemSection = memo(function FilesystemSection({ tree, emptyMessage, detailed, onDetailedChange }) {
+const FilesystemSection = memo(function FilesystemSection({ tree, emptyMessage, detailed, onDetailedChange, anchorRowId, altAnchorRowId, onAnchorHandled }) {
   const index = useMemo(() => buildFlatNodeIndex(tree.children), [tree]);
 
   return (
@@ -1625,11 +1663,15 @@ const FilesystemSection = memo(function FilesystemSection({ tree, emptyMessage, 
       index={index}
       detailed={detailed}
       onDetailedChange={onDetailedChange}
+      anchorRowId={anchorRowId}
+      altAnchorRowId={altAnchorRowId}
+      onAnchorHandled={onAnchorHandled}
+      anchor="files"
     />
   );
 });
 
-const ArchiveSummariesSection = memo(function ArchiveSummariesSection({ archiveViews, emptyMessage, detailed, onDetailedChange }) {
+const ArchiveSummariesSection = memo(function ArchiveSummariesSection({ archiveViews, emptyMessage, detailed, onDetailedChange, anchorRowId, altAnchorRowId, onAnchorHandled }) {
   const index = useMemo(() => buildFlatArchiveIndex(archiveViews), [archiveViews]);
 
   return (
@@ -1641,6 +1683,10 @@ const ArchiveSummariesSection = memo(function ArchiveSummariesSection({ archiveV
       index={index}
       detailed={detailed}
       onDetailedChange={onDetailedChange}
+      anchorRowId={anchorRowId}
+      altAnchorRowId={altAnchorRowId}
+      onAnchorHandled={onAnchorHandled}
+      anchor="archives"
     />
   );
 });
@@ -1653,13 +1699,118 @@ const TreeSection = memo(function TreeSection({
   index,
   detailed,
   onDetailedChange,
+  anchorRowId: anchorRowIdProp,
+  altAnchorRowId,
+  onAnchorHandled,
+  anchor,
 }) {
+  const anchorRowId = anchorRowIdProp && index.rowsById.has(anchorRowIdProp)
+    ? anchorRowIdProp
+    : altAnchorRowId && index.rowsById.has(altAnchorRowId)
+      ? altAnchorRowId
+      : anchorRowIdProp;
   const [collapsedIds, setCollapsedIds] = useState(() => new Set());
   const [detailOverrides, setDetailOverrides] = useState(() => new Map());
+  const [highlightedRowId, setHighlightedRowId] = useState(null);
+  const suppressAnchoringRef = useRef(false);
   const visibleRowIds = useMemo(
     () => collectVisibleRowIds(index.rootIds, index.rowsById, collapsedIds),
     [index, collapsedIds],
   );
+
+  useEffect(() => {
+    if (!anchorRowId) {
+      return;
+    }
+
+    if (!index.rowsById.has(anchorRowId)) {
+      return;
+    }
+
+    const ancestorsToExpand = [];
+    let parentId = index.rowsById.get(anchorRowId)?.parentId;
+    while (parentId) {
+      ancestorsToExpand.push(parentId);
+      parentId = index.rowsById.get(parentId)?.parentId;
+    }
+
+    if (ancestorsToExpand.length) {
+      setCollapsedIds((current) => {
+        const next = new Set(current);
+        for (const id of ancestorsToExpand) {
+          next.delete(id);
+        }
+        return next;
+      });
+    }
+
+    setHighlightedRowId(anchorRowId);
+    onAnchorHandled?.();
+
+    const scrollToAnchor = () => {
+      const element = document.getElementById(`row-${anchorRowId}`);
+      if (element) {
+        suppressAnchoringRef.current = true;
+        element.scrollIntoView({ block: 'start' });
+        window.setTimeout(() => {
+          element.scrollIntoView({ block: 'start' });
+          suppressAnchoringRef.current = false;
+        }, 500);
+        return;
+      }
+
+      if (__VIRTUALIZE__) {
+        const rowIndex = visibleRowIds.indexOf(anchorRowId);
+        if (rowIndex >= 0 && virtualLayout) {
+          const offset = virtualLayout.offsets[rowIndex];
+          if (offset != null) {
+            const viewportHalf = (typeof window !== 'undefined' ? window.innerHeight : 0) / 2;
+            suppressAnchoringRef.current = true;
+            window.scrollTo(0, containerTop + offset - viewportHalf);
+            runAfterNextPaint(() => {
+              const el = document.getElementById(`row-${anchorRowId}`);
+              if (el) {
+                el.scrollIntoView({ block: 'start' });
+              } else {
+                console.log('[DB Inspector] Anchor fallback: navigating via first child of', anchorRowId);
+                const row = index.rowsById.get(anchorRowId);
+                const firstChildId = row?.childIds?.[0];
+                if (firstChildId) {
+                  const childIndex = visibleRowIds.indexOf(firstChildId);
+                  if (childIndex >= 0) {
+                    const childOffset = virtualLayout.offsets[childIndex];
+                    if (childOffset != null) {
+                      window.scrollTo(0, containerTop + childOffset - viewportHalf);
+                      runAfterNextPaint(() => {
+                        const childEl = document.getElementById(`row-${firstChildId}`);
+                        if (childEl) {
+                          childEl.scrollIntoView({ block: 'center' });
+                        }
+                        runAfterNextPaint(() => {
+                          const target = document.getElementById(`row-${anchorRowId}`);
+                          if (target) {
+                            target.scrollIntoView({ block: 'start' });
+                          }
+                        });
+                      });
+                    }
+                  }
+                }
+              }
+              window.setTimeout(() => {
+                suppressAnchoringRef.current = false;
+              }, 500);
+            });
+          }
+        }
+      }
+    };
+
+    runAfterNextPaint(scrollToAnchor);
+
+    const clearTimer = window.setTimeout(() => setHighlightedRowId(null), 3000);
+    return () => window.clearTimeout(clearTimer);
+  }, [anchorRowId, index]);
 
   // --- virtualization-only state and machinery ---
   if (__VIRTUALIZE__) {
@@ -1809,7 +1960,7 @@ const TreeSection = memo(function TreeSection({
         setMeasuredHeights(nextMeasuredHeights);
       });
 
-      if (typeof window !== 'undefined' && scrollAnchorDelta) {
+      if (typeof window !== 'undefined' && scrollAnchorDelta && !suppressAnchoringRef.current) {
         window.scrollBy(0, scrollAnchorDelta);
       }
     }, [
@@ -1894,11 +2045,28 @@ const TreeSection = memo(function TreeSection({
     /* eslint-enable react-hooks/rules-of-hooks */
   }
 
+  const handleAnchorRow = useCallback((rowId) => {
+    const hash = buildNodeAnchorHash(index.rowsById.get(rowId));
+    if (hash) {
+      history.replaceState(null, '', hash);
+    }
+
+    setHighlightedRowId(rowId);
+    runAfterNextPaint(() => {
+      const element = document.getElementById(`row-${rowId}`);
+      if (element) {
+        element.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      }
+    });
+    window.setTimeout(() => setHighlightedRowId(null), 3000);
+  }, [index.rowsById]);
+
   return (
     <CollapsibleSection
       label={label}
       title={title}
       defaultOpen
+      anchor={anchor}
       actions={
         <SectionControls
           onExpandAll={handleExpandAll}
@@ -1921,9 +2089,11 @@ const TreeSection = memo(function TreeSection({
                   row={row}
                   collapsed={collapsedIds.has(row.id)}
                   detailsVisible={detailOverrides.get(row.id) ?? detailed}
+                  highlighted={row.id === highlightedRowId}
                   onToggleCollapsed={handleToggleCollapsed}
                   onToggleDetails={handleToggleDetails}
                   onSetRowState={handleSetRowState}
+                  onAnchorRow={handleAnchorRow}
                   onHeightChange={handleRowHeightChange}
                   virtualTop={top}
                   trimTopGuide={trimTopGuide}
@@ -1946,9 +2116,11 @@ const TreeSection = memo(function TreeSection({
                   row={row}
                   collapsed={collapsedIds.has(row.id)}
                   detailsVisible={detailOverrides.get(row.id) ?? detailed}
+                  highlighted={row.id === highlightedRowId}
                   onToggleCollapsed={handleToggleCollapsed}
                   onToggleDetails={handleToggleDetails}
                   onSetRowState={handleSetRowState}
+                  onAnchorRow={handleAnchorRow}
                 />
               );
             })}
@@ -2117,6 +2289,74 @@ function resolveInheritedFilterValue(filterValue, inheritedFilterValue) {
   return String(filterValue || '')
     .replaceAll(/\[\s*mister\s*\]/gi, inheritedFilterValue)
     .trim();
+}
+
+function parseNodeAnchor() {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const hash = decodeURIComponent(window.location.hash.slice(1));
+  if (!hash || hash === 'install') {
+    return null;
+  }
+
+  const filesMatch = hash.match(/^files:(.+)/);
+  if (filesMatch) {
+    return { section: 'filesystem', rowId: `database:file:${filesMatch[1]}` };
+  }
+
+  const foldersMatch = hash.match(/^folders:(.+)/);
+  if (foldersMatch) {
+    return { section: 'filesystem', rowId: `database:folder:${foldersMatch[1]}`, altRowId: `database:branch:${foldersMatch[1]}` };
+  }
+
+  const archiveFileMatch = hash.match(/^archives:([^:]+):files:(.+)/);
+  if (archiveFileMatch) {
+    return { section: 'archives', rowId: `archive:${archiveFileMatch[1]}:file:${archiveFileMatch[2]}` };
+  }
+
+  const archiveFolderMatch = hash.match(/^archives:([^:]+):folders:(.+)/);
+  if (archiveFolderMatch) {
+    return { section: 'archives', rowId: `archive:${archiveFolderMatch[1]}:folder:${archiveFolderMatch[2]}`, altRowId: `archive:${archiveFolderMatch[1]}:branch:${archiveFolderMatch[2]}` };
+  }
+
+  const archiveMatch = hash.match(/^archives:(.+)/);
+  if (archiveMatch) {
+    return { section: 'archives', rowId: `archive:${archiveMatch[1]}` };
+  }
+
+  return null;
+}
+
+function buildNodeAnchorHash(row) {
+  const id = row.id;
+  if (row.type === 'archive') {
+    const archiveId = id.replace(/^archive:/, '');
+    return `#archives:${encodeURIComponent(archiveId)}`;
+  }
+
+  const archiveFileMatch = id.match(/^archive:([^:]+):file:(.+)/);
+  if (archiveFileMatch) {
+    return `#archives:${encodeURIComponent(archiveFileMatch[1])}:files:${encodeURIComponent(archiveFileMatch[2])}`;
+  }
+
+  const archiveFolderMatch = id.match(/^archive:([^:]+):(?:folder|branch):(.+)/);
+  if (archiveFolderMatch) {
+    return `#archives:${encodeURIComponent(archiveFolderMatch[1])}:folders:${encodeURIComponent(archiveFolderMatch[2])}`;
+  }
+
+  const fileMatch = id.match(/^database:file:(.+)/);
+  if (fileMatch) {
+    return `#files:${encodeURIComponent(fileMatch[1])}`;
+  }
+
+  const folderMatch = id.match(/^database:(?:folder|branch):(.+)/);
+  if (folderMatch) {
+    return `#folders:${encodeURIComponent(folderMatch[1])}`;
+  }
+
+  return null;
 }
 
 function readDatabaseUrlSearchParam() {
@@ -2445,9 +2685,11 @@ const TreeEntryRow = memo(function TreeEntryRow({
   row,
   collapsed,
   detailsVisible,
+  highlighted,
   onToggleCollapsed,
   onToggleDetails,
   onSetRowState,
+  onAnchorRow,
   onHeightChange,
   virtualTop,
   trimTopGuide,
@@ -2490,6 +2732,7 @@ const TreeEntryRow = memo(function TreeEntryRow({
     'tree-entry',
     row.depth ? 'tree-entry-indented' : '',
     isArchive ? 'archive-card' : '',
+    highlighted ? 'tree-entry-highlighted' : '',
   ]
     .filter(Boolean)
     .join(' ');
@@ -2561,6 +2804,7 @@ const TreeEntryRow = memo(function TreeEntryRow({
 
   return (
     <Container
+      id={`row-${row.id}`}
       ref={__VIRTUALIZE__ ? rowRef : undefined}
       className={containerClassName}
       style={__VIRTUALIZE__ ? { ...buildTreeDepthStyle(row.depth), ...virtualStyle } : buildTreeDepthStyle(row.depth)}
@@ -2597,6 +2841,13 @@ const TreeEntryRow = memo(function TreeEntryRow({
           <div className="tree-heading">
             <div className="tree-title-row">
               <span className={badgeClassName}>{badge}</span>
+              <button
+                type="button"
+                className="copy-link-button"
+                onClick={() => onAnchorRow(row.id)}
+              >
+                <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"/></svg>
+              </button>
               <h3 title={title}>{title}</h3>
               {showIdentifier ? (
                 <span className="tree-identifier-inline">
@@ -3235,10 +3486,11 @@ function TagDictionary({ tags }) {
   return (
     <CollapsibleSection
       label="Tags"
-      title="Tag dictionary"
+      title="Filter terms"
       className="tag-dictionary"
       open={open}
       onToggle={setOpen}
+      anchor="tags"
     >
       <p className="dictionary-meta">{tags.length} entries</p>
       {tags.length ? (
@@ -3257,6 +3509,29 @@ function TagDictionary({ tags }) {
   );
 }
 
+function SectionAnchor({ anchor }) {
+  return (
+    <button
+      type="button"
+      className="section-anchor-button"
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        history.replaceState(null, '', `#${anchor}`);
+        const section = event.currentTarget.closest('.panel, .overview-panel');
+        if (section) {
+          if (section.tagName === 'DETAILS' && !section.open) {
+            section.open = true;
+          }
+          section.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        }
+      }}
+    >
+      <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"/></svg>
+    </button>
+  );
+}
+
 function CollapsibleSection({
   label,
   title,
@@ -3267,9 +3542,11 @@ function CollapsibleSection({
   open,
   onToggle,
   summaryAside = null,
+  anchor,
 }) {
   return (
     <details
+      id={anchor ? `section-${anchor}` : undefined}
       className={className ? `panel collapsible-panel ${className}` : 'panel collapsible-panel'}
       open={open ?? defaultOpen}
       onToggle={(event) => onToggle?.(event.currentTarget.open)}
@@ -3277,7 +3554,12 @@ function CollapsibleSection({
       <summary className="section-summary">
         <div>
           <p className="section-label">{label}</p>
-          <h2>{title}</h2>
+          <h2>
+            {anchor ? (
+              <SectionAnchor anchor={anchor} />
+            ) : null}
+            {title}
+          </h2>
         </div>
         <div className="section-summary-side">
           {summaryAside}

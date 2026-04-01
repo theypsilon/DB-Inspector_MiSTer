@@ -137,6 +137,23 @@ code {
   color: var(--warm);
 }
 
+.section-anchor-button {
+  all: unset;
+  cursor: pointer;
+  color: #000;
+  margin-left: -1.2rem;
+  width: 1.2rem;
+  display: inline-flex;
+  align-items: center;
+  opacity: 0;
+}
+
+.section-anchor-button:hover,
+.section-anchor-button:focus-visible,
+h2:hover > .section-anchor-button {
+  opacity: 1;
+}
+
 .hero-copy,
 .helper-copy,
 .empty-screen p,
@@ -975,6 +992,23 @@ button:hover {
   --tree-guide-top-overlap: var(--tree-guide-overlap);
   --tree-guide-bottom-overlap: var(--tree-guide-overlap);
   padding-left: calc(var(--tree-depth, 0) * var(--tree-indent-step));
+}
+
+
+.copy-link-button {
+  all: unset;
+  cursor: pointer;
+  font-size: 0.7em;
+  line-height: 1;
+  color: #000;
+  opacity: 1;
+  margin-inline: -0.35rem;
+  visibility: hidden;
+}
+
+.tree-entry:hover .copy-link-button,
+.copy-link-button:focus-visible {
+  visibility: visible;
 }
 
 .tree-row {

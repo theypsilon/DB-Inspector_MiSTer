@@ -898,6 +898,16 @@ async function inspectDatabase(rawDatabase, source) {
     ),
   );
 
+  const missingFolders = findMissingParentFolders(files, folders);
+  for (const missingPath of missingFolders) {
+    addIssue(
+      issues,
+      'warning',
+      'folders',
+      `Folder \`${missingPath}/\` is not declared in \`folders\` but is needed as a parent directory.`,
+    );
+  }
+
   const filesystemTree = buildTreeFromRecords(filesystemRecords, 'database');
   const allTagNames = Object.entries(tagDictionary)
     .map(([tagName, tagIndex]) => ({
@@ -1071,6 +1081,22 @@ async function buildArchiveView({
       }),
     ),
   ].filter(Boolean);
+
+  const missingArchiveFolders = findMissingParentFolders(summaryFiles, summaryFolders);
+  for (const missingPath of missingArchiveFolders) {
+    addIssue(
+      localIssues,
+      'warning',
+      archiveId || 'archive',
+      `Folder \`${missingPath}/\` is not declared in the archive summary \`folders\` but is needed as a parent directory.`,
+    );
+    addIssue(
+      issues,
+      'warning',
+      archiveId || 'archive',
+      `Folder \`${missingPath}/\` is not declared in the archive summary \`folders\` but is needed as a parent directory.`,
+    );
+  }
 
   return {
     id: archiveId || '(empty archive id)',
@@ -2030,6 +2056,37 @@ function leafName(path, kind) {
   }
 
   return name || normalized;
+}
+
+function findMissingParentFolders(files, folders) {
+  const declaredFolders = new Set(
+    Object.keys(folders).map((path) => trimTrailingSlash(path)),
+  );
+
+  const requiredParents = new Set();
+
+  for (const filePath of Object.keys(files)) {
+    const segments = trimTrailingSlash(filePath).split('/').filter(Boolean);
+    for (let depth = 1; depth < segments.length; depth += 1) {
+      requiredParents.add(segments.slice(0, depth).join('/'));
+    }
+  }
+
+  for (const folderPath of Object.keys(folders)) {
+    const segments = trimTrailingSlash(folderPath).split('/').filter(Boolean);
+    for (let depth = 1; depth < segments.length; depth += 1) {
+      requiredParents.add(segments.slice(0, depth).join('/'));
+    }
+  }
+
+  const missing = [];
+  for (const parent of [...requiredParents].sort()) {
+    if (!declaredFolders.has(parent)) {
+      missing.push(parent);
+    }
+  }
+
+  return missing;
 }
 
 function trimTrailingSlash(path) {
