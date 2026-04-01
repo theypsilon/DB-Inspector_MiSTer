@@ -1798,4 +1798,9 @@ button:hover {
   body::before {
     display: none;
   }
+
+  .panel,
+  .modal-panel {
+    backdrop-filter: none;
+  }
 }
