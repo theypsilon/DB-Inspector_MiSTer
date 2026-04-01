@@ -1759,6 +1759,10 @@ button:hover {
 }
 
 @media (max-width: 720px) {
+  html {
+    background-attachment: scroll;
+  }
+
   .app-shell {
     width: min(100% - 1rem, 1380px);
     padding-top: 0.8rem;
