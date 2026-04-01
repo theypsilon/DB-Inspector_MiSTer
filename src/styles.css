@@ -163,6 +163,14 @@ h2:hover > .section-anchor-button {
   line-height: 1.55;
 }
 
+.clickable-code {
+  cursor: pointer;
+}
+
+.clickable-code:hover {
+  text-decoration: underline;
+}
+
 .hero-note {
   align-self: end;
   padding: 1rem;
@@ -1046,6 +1054,7 @@ button:hover {
   pointer-events: none;
 }
 
+::highlight(search-match-all-filter),
 ::highlight(search-match-all-files),
 ::highlight(search-match-all-archives),
 ::highlight(search-match-all-tags) {

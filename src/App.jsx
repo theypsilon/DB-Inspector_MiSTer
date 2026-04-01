@@ -153,7 +153,68 @@ export default function App() {
   const canResetFilter =
     normalizeFilterPromptValue(filterInput) !== normalizeFilterPromptValue(effectiveDefaultFilter);
   const tagDictionary = displayedInspection?.overview.tagDictionary ?? [];
-  const globalSearch = useGlobalSearch({ filesystemIndex, archivesIndex, tagDictionary, hasInspection: !!displayedInspection });
+  const hasEssentialHint = tagDictionary.some((t) => t.name === 'essential');
+  const hasUntaggedItems = useMemo(() => {
+    if (!filesystemIndex) return false;
+    for (const [, row] of filesystemIndex.rowsById) {
+      const tags = row.node?.primaryFields?.find((f) => f.kind === 'tags');
+      if (!tags || !Array.isArray(tags.value) || tags.value.length === 0) return true;
+    }
+    return false;
+  }, [filesystemIndex]);
+  const globalSearch = useGlobalSearch({ filesystemIndex, archivesIndex, tagDictionary, hasEssentialHint, hasInspection: !!displayedInspection });
+
+  useEffect(() => {
+    const match = globalSearch.currentMatch;
+    if (match?.section !== 'filter') return;
+    const el = document.getElementById(match.rowId);
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    if (rect.top < 0 || rect.bottom > window.innerHeight) {
+      el.scrollIntoView({ block: 'center' });
+    }
+    if (!CSS.highlights) return;
+    CSS.highlights.delete('search-match');
+    const query = globalSearch.activeQuery.toLowerCase();
+    if (!query) return;
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    const ranges = [];
+    let textNode = walker.nextNode();
+    while (textNode) {
+      const idx = textNode.textContent.toLowerCase().indexOf(query);
+      if (idx !== -1) {
+        const range = new Range();
+        range.setStart(textNode, idx);
+        range.setEnd(textNode, idx + query.length);
+        ranges.push(range);
+      }
+      textNode = walker.nextNode();
+    }
+    if (ranges.length) CSS.highlights.set('search-match', new Highlight(...ranges));
+  }, [globalSearch.currentMatch?.token]);
+
+  useEffect(() => {
+    if (!CSS.highlights) return;
+    const query = globalSearch.activeQuery.toLowerCase();
+    const el = document.getElementById('filter-essential-hint');
+    if (!query || !el) { CSS.highlights.delete('search-match-all-filter'); return; }
+    if (globalSearch.currentMatch?.rowId === 'filter-essential-hint') { CSS.highlights.delete('search-match-all-filter'); return; }
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    const ranges = [];
+    let textNode = walker.nextNode();
+    while (textNode) {
+      const idx = textNode.textContent.toLowerCase().indexOf(query);
+      if (idx !== -1) {
+        const range = new Range();
+        range.setStart(textNode, idx);
+        range.setEnd(textNode, idx + query.length);
+        ranges.push(range);
+      }
+      textNode = walker.nextNode();
+    }
+    if (ranges.length) CSS.highlights.set('search-match-all-filter', new Highlight(...ranges));
+    else CSS.highlights.delete('search-match-all-filter');
+  }, [globalSearch.activeQuery, globalSearch.currentMatch]);
 
   useEffect(() => {
     inspectionRef.current = inspection;
@@ -1137,14 +1198,17 @@ export default function App() {
                 ) : null}
               </div>
               <p className="helper-copy">
-                Filter Downloader databases with terms (a.k.a. tags) like <code>console</code>, <code>arcade</code>,
+                Filter content with terms (a.k.a. tags) like <code>console</code>, <code>arcade</code>,
                 or <code>!cheats</code>. Positive terms keep matching tagged items, negative terms
-                remove them, untagged items remain visible, and <code>essential</code> stays
-                included unless you exclude it.{' '}
+                remove them{hasEssentialHint
+                  ? <>{hasUntaggedItems ? <>, untagged items remain visible,</> : null} and <code id="filter-essential-hint" className="clickable-code" role="button" tabIndex={0} onClick={() => { globalSearch.setQuery('essential'); globalSearch.openSearch(); }} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); globalSearch.setQuery('essential'); globalSearch.openSearch(); } }}>essential</code> stays
+                included unless you exclude it</>
+                  : hasUntaggedItems ? <>, and untagged items remain visible</> : null}.{' '}
                 <a
                   href="https://github.com/MiSTer-devel/Downloader_MiSTer/blob/main/docs/download-filters.md"
                   target="_blank"
                   rel="noreferrer"
+                  style={{ whiteSpace: 'nowrap' }}
                 >
                   Read the official guide
                 </a>
@@ -3573,7 +3637,7 @@ function getRowMeasurementKey(rowId, { collapsed, detailsVisible }) {
   return `${rowId}:${collapsed ? '1' : '0'}:${detailsVisible ? '1' : '0'}`;
 }
 
-function useGlobalSearch({ filesystemIndex, archivesIndex, tagDictionary, hasInspection }) {
+function useGlobalSearch({ filesystemIndex, archivesIndex, tagDictionary, hasEssentialHint, hasInspection }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
@@ -3605,6 +3669,10 @@ function useGlobalSearch({ filesystemIndex, archivesIndex, tagDictionary, hasIns
       }
     };
 
+    if (hasEssentialHint && 'essential'.includes(trimmed)) {
+      result.push({ rowId: 'filter-essential-hint', section: 'filter', matchPart: 'name' });
+    }
+
     searchIndex(filesystemIndex, 'filesystem');
     searchIndex(archivesIndex, 'archives');
 
@@ -3617,7 +3685,7 @@ function useGlobalSearch({ filesystemIndex, archivesIndex, tagDictionary, hasIns
     }
 
     return result;
-  }, [query, filesystemIndex, archivesIndex, tagDictionary]);
+  }, [query, filesystemIndex, archivesIndex, tagDictionary, hasEssentialHint]);
 
   const clampedIndex = matches.length ? currentMatchIndex % matches.length : 0;
   const trimmedQuery = query.trim();
@@ -3649,6 +3717,7 @@ function useGlobalSearch({ filesystemIndex, archivesIndex, tagDictionary, hasIns
     setOpen(false);
     setQuery('');
     CSS.highlights?.delete('search-match');
+    CSS.highlights?.delete('search-match-all-filter');
     CSS.highlights?.delete('search-match-all-files');
     CSS.highlights?.delete('search-match-all-archives');
     CSS.highlights?.delete('search-match-all-tags');
