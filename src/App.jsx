@@ -9,7 +9,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { flushSync } from 'react-dom';
+import { createPortal, flushSync } from 'react-dom';
 import { strToU8, zipSync } from 'fflate';
 import {
   applyInspectionFilter,
@@ -24,6 +24,7 @@ console.log('[DB Inspector] Tree virtualization:', __VIRTUALIZE__ ? 'enabled' : 
 
 const DATABASE_URL_PARAM = 'database-url';
 const FILTER_URL_PARAM = 'filter';
+const DETAILED_URL_PARAM = 'detailed';
 const FILTER_INPUT_DEBOUNCE_MS = 600;
 const TREE_LIST_GAP_PX = 13;
 const TREE_OVERSCAN_PX = 900;
@@ -69,11 +70,23 @@ export default function App() {
     useState(false);
   const [misterDefaultFilter, setMisterDefaultFilter] = useState('');
   const [misterDefaultFilterPresent, setMisterDefaultFilterPresent] = useState(false);
-  const [databaseDetailed, setDatabaseDetailed] = useState(false);
+  const [databaseDetailed, setDatabaseDetailed] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return new URLSearchParams(window.location.search).has(DETAILED_URL_PARAM);
+  });
   const handleDatabaseDetailedChange = useCallback((next) => {
     startTransition(() => {
       setDatabaseDetailed(next);
     });
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      if (next) {
+        url.searchParams.set(DETAILED_URL_PARAM, '');
+      } else {
+        url.searchParams.delete(DETAILED_URL_PARAM);
+      }
+      history.replaceState(null, '', url.pathname + url.search + url.hash);
+    }
   }, []);
   const [runtimeCatalogOptions, setRuntimeCatalogOptions] = useState([]);
   const [customCatalogOptions, setCustomCatalogOptions] = useState([]);
@@ -159,13 +172,14 @@ export default function App() {
           const target = document.getElementById(`section-${sectionHash}`);
           if (!target) return;
 
-          document.querySelectorAll('details[id^="section-"][open]').forEach((el) => {
-            if (el !== target) {
-              el.open = false;
-            }
-          });
+          if (target.tagName === 'DETAILS' && !target.open) {
+            target.open = true;
+          }
 
-          target.scrollIntoView({ block: 'start', behavior: 'smooth' });
+          target.scrollIntoView({ block: 'start' });
+          window.setTimeout(() => {
+            target.scrollIntoView({ block: 'start' });
+          }, 300);
         });
       }
     }
@@ -1712,6 +1726,10 @@ const TreeSection = memo(function TreeSection({
   const [collapsedIds, setCollapsedIds] = useState(() => new Set());
   const [detailOverrides, setDetailOverrides] = useState(() => new Map());
   const [highlightedRowId, setHighlightedRowId] = useState(null);
+  const [ghostParentId, setGhostParentId] = useState(null);
+  const [hoveredColumnDepth, setHoveredColumnDepth] = useState(-1);
+  const [columnLineBottom, setColumnLineBottom] = useState(null);
+  const lastCursorRef = useRef(null);
   const suppressAnchoringRef = useRef(false);
   const visibleRowIds = useMemo(
     () => collectVisibleRowIds(index.rootIds, index.rowsById, collapsedIds),
@@ -1719,11 +1737,7 @@ const TreeSection = memo(function TreeSection({
   );
 
   useEffect(() => {
-    if (!anchorRowId) {
-      return;
-    }
-
-    if (!index.rowsById.has(anchorRowId)) {
+    if (!anchorRowId || !index.rowsById.has(anchorRowId)) {
       return;
     }
 
@@ -1760,47 +1774,46 @@ const TreeSection = memo(function TreeSection({
       }
 
       if (__VIRTUALIZE__) {
+        const readContainerTop = () =>
+          containerRef?.current
+            ? Math.round(containerRef.current.getBoundingClientRect().top + window.scrollY)
+            : containerTop;
         const rowIndex = visibleRowIds.indexOf(anchorRowId);
         if (rowIndex >= 0 && virtualLayout) {
           const offset = virtualLayout.offsets[rowIndex];
           if (offset != null) {
             const viewportHalf = (typeof window !== 'undefined' ? window.innerHeight : 0) / 2;
             suppressAnchoringRef.current = true;
-            window.scrollTo(0, containerTop + offset - viewportHalf);
-            runAfterNextPaint(() => {
+            window.scrollTo(0, readContainerTop() + offset - viewportHalf);
+
+            const correctScroll = (attemptsLeft) => {
               const el = document.getElementById(`row-${anchorRowId}`);
               if (el) {
                 el.scrollIntoView({ block: 'start' });
-              } else {
-                console.log('[DB Inspector] Anchor fallback: navigating via first child of', anchorRowId);
-                const row = index.rowsById.get(anchorRowId);
-                const firstChildId = row?.childIds?.[0];
-                if (firstChildId) {
-                  const childIndex = visibleRowIds.indexOf(firstChildId);
-                  if (childIndex >= 0) {
-                    const childOffset = virtualLayout.offsets[childIndex];
-                    if (childOffset != null) {
-                      window.scrollTo(0, containerTop + childOffset - viewportHalf);
-                      runAfterNextPaint(() => {
-                        const childEl = document.getElementById(`row-${firstChildId}`);
-                        if (childEl) {
-                          childEl.scrollIntoView({ block: 'center' });
-                        }
-                        runAfterNextPaint(() => {
-                          const target = document.getElementById(`row-${anchorRowId}`);
-                          if (target) {
-                            target.scrollIntoView({ block: 'start' });
-                          }
-                        });
-                      });
-                    }
+                window.setTimeout(() => {
+                  const target = document.getElementById(`row-${anchorRowId}`);
+                  if (target) {
+                    target.scrollIntoView({ block: 'start' });
                   }
-                }
+                  suppressAnchoringRef.current = false;
+                }, 300);
+                return;
               }
-              window.setTimeout(() => {
-                suppressAnchoringRef.current = false;
-              }, 500);
-            });
+
+              if (attemptsLeft > 0) {
+                const freshLayout = virtualLayoutRef?.current ?? virtualLayout;
+                const freshOffset = freshLayout.offsets[rowIndex];
+                if (freshOffset != null) {
+                  window.scrollTo(0, readContainerTop() + freshOffset - viewportHalf);
+                }
+                window.setTimeout(() => correctScroll(attemptsLeft - 1), 200);
+                return;
+              }
+
+              suppressAnchoringRef.current = false;
+            };
+
+            window.setTimeout(() => correctScroll(3), 200);
           }
         }
       }
@@ -1836,6 +1849,8 @@ const TreeSection = memo(function TreeSection({
         }),
       [visibleRowIds, index.rowsById, collapsedIds, detailOverrides, detailed, measuredHeights],
     );
+    var virtualLayoutRef = useRef(virtualLayout);
+    virtualLayoutRef.current = virtualLayout;
     var virtualRows = useMemo(
       () =>
         buildVirtualRows({
@@ -2045,6 +2060,125 @@ const TreeSection = memo(function TreeSection({
     /* eslint-enable react-hooks/rules-of-hooks */
   }
 
+  const resolveGhostFromCursor = useCallback((clientX, clientY) => {
+    if (!__VIRTUALIZE__ || !containerRef?.current) {
+      setGhostParentId(null);
+      return;
+    }
+
+    const containerRect = containerRef.current.getBoundingClientRect();
+    const mouseX = clientX - containerRect.left;
+    const rootFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
+    const indentStepPx = 1.55 * rootFontSize;
+    const hoveredDepth = Math.floor(mouseX / indentStepPx);
+
+    if (mouseX < 0 || mouseX > (hoveredDepth + 1) * indentStepPx + 2.25 * rootFontSize) {
+      setGhostParentId(null);
+      setHoveredColumnDepth(-1);
+      setColumnLineBottom(null);
+      return;
+    }
+
+    let targetRow = null;
+    let bestDistance = Infinity;
+    for (const item of virtualRows.items) {
+      const el = document.getElementById(`row-${item.rowId}`);
+      if (!el) continue;
+      const rect = el.getBoundingClientRect();
+      if (rect.bottom < 0) continue;
+      const distance = clientY < rect.top ? rect.top - clientY : clientY > rect.bottom ? clientY - rect.bottom : 0;
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        targetRow = index.rowsById.get(item.rowId);
+        if (distance === 0) break;
+      }
+    }
+
+    if (!targetRow || targetRow.depth < hoveredDepth) {
+      setGhostParentId(null);
+      setHoveredColumnDepth(-1);
+      setColumnLineBottom(null);
+      return;
+    }
+
+    let ancestor = targetRow;
+    while (ancestor && ancestor.depth > hoveredDepth) {
+      ancestor = index.rowsById.get(ancestor.parentId);
+    }
+
+    if (!ancestor || ancestor.depth !== hoveredDepth) {
+      setGhostParentId(null);
+      return;
+    }
+
+    const ancestorEl = document.getElementById(`row-${ancestor.id}`);
+    const ancestorTop = ancestorEl?.getBoundingClientRect().top ?? -100;
+    if (ancestorTop < -120) {
+      setGhostParentId(ancestor.id);
+      const isInnermostGhost = targetRow.depth <= hoveredDepth + 1;
+      setHoveredColumnDepth(isInnermostGhost ? -1 : hoveredDepth);
+
+      if (__VIRTUALIZE__ && virtualLayout) {
+        const ancestorIndex = visibleRowIds.indexOf(ancestor.id);
+        if (ancestorIndex >= 0) {
+          let lastDescendantIndex = ancestorIndex;
+          for (let i = ancestorIndex + 1; i < visibleRowIds.length; i++) {
+            const r = index.rowsById.get(visibleRowIds[i]);
+            if (!r || r.depth <= ancestor.depth) break;
+            lastDescendantIndex = i;
+          }
+          setColumnLineBottom(virtualLayout.bottoms[lastDescendantIndex]);
+        }
+      }
+    } else {
+      setGhostParentId(null);
+      setHoveredColumnDepth(-1);
+      setColumnLineBottom(null);
+    }
+  }, [virtualRows, index.rowsById]);
+
+  const handleTreeMouseMove = useCallback((event) => {
+    lastCursorRef.current = { x: event.clientX, y: event.clientY };
+    resolveGhostFromCursor(event.clientX, event.clientY);
+  }, [resolveGhostFromCursor]);
+
+  const handleTreeMouseLeave = useCallback(() => {
+    if (!ghostParentId) {
+      lastCursorRef.current = null;
+      setHoveredColumnDepth(-1);
+    }
+  }, [ghostParentId]);
+
+  useEffect(() => {
+    if (!ghostParentId || typeof document === 'undefined') {
+      return undefined;
+    }
+
+    const onDocMouseMove = (event) => {
+      lastCursorRef.current = { x: event.clientX, y: event.clientY };
+      resolveGhostFromCursor(event.clientX, event.clientY);
+    };
+
+    document.addEventListener('mousemove', onDocMouseMove, { passive: true });
+    return () => {
+      document.removeEventListener('mousemove', onDocMouseMove);
+    };
+  }, [ghostParentId, resolveGhostFromCursor]);
+
+  useEffect(() => {
+    const cursor = lastCursorRef.current;
+    if (cursor) {
+      resolveGhostFromCursor(cursor.x, cursor.y);
+    }
+  }, [__VIRTUALIZE__ ? viewport?.scrollY : null, resolveGhostFromCursor]);
+
+  const scrollToRow = useCallback((rowId) => {
+    const el = document.getElementById(`row-${rowId}`);
+    if (el) {
+      el.scrollIntoView({ block: 'start' });
+    }
+  }, []);
+
   const handleAnchorRow = useCallback((rowId) => {
     const hash = buildNodeAnchorHash(index.rowsById.get(rowId));
     if (hash) {
@@ -2052,14 +2186,9 @@ const TreeSection = memo(function TreeSection({
     }
 
     setHighlightedRowId(rowId);
-    runAfterNextPaint(() => {
-      const element = document.getElementById(`row-${rowId}`);
-      if (element) {
-        element.scrollIntoView({ block: 'start', behavior: 'smooth' });
-      }
-    });
+    scrollToRow(rowId);
     window.setTimeout(() => setHighlightedRowId(null), 3000);
-  }, [index.rowsById]);
+  }, [index.rowsById, scrollToRow]);
 
   return (
     <CollapsibleSection
@@ -2074,9 +2203,32 @@ const TreeSection = memo(function TreeSection({
         />
       }
     >
+      {ghostParentId && typeof document !== 'undefined'
+        ? createPortal(
+            <GhostParentRow
+              row={index.rowsById.get(ghostParentId)}
+              containerLeft={__VIRTUALIZE__ && containerRef?.current ? containerRef.current.getBoundingClientRect().left : 0}
+              onNavigate={() => {
+                const targetId = ghostParentId;
+                setGhostParentId(null);
+                setHoveredColumnDepth(-1);
+                setColumnLineBottom(null);
+                lastCursorRef.current = null;
+                scrollToRow(targetId);
+              }}
+            />,
+            document.body,
+          )
+        : null}
       {visibleRowIds.length ? (
         __VIRTUALIZE__ ? (
-          <div className={listClassName} ref={containerRef} style={{ height: `${virtualRows.totalHeight}px` }}>
+          <div
+            className={`${listClassName}${hoveredColumnDepth >= 0 ? ' tree-column-hovered' : ''}`}
+            ref={containerRef}
+            style={{ height: `${virtualRows.totalHeight}px`, '--hovered-column-x': `calc(${hoveredColumnDepth} * var(--tree-indent-step, 1.55rem) + var(--tree-control-center, 1.125rem))`, '--hovered-column-bottom': columnLineBottom != null ? `${virtualRows.totalHeight - columnLineBottom}px` : '0px' }}
+            onMouseMove={handleTreeMouseMove}
+            onMouseLeave={handleTreeMouseLeave}
+          >
             {virtualRows.items.map(({ rowId, top, trimTopGuide, trimBottomGuide }) => {
               const row = index.rowsById.get(rowId);
               if (!row) {
@@ -2094,6 +2246,7 @@ const TreeSection = memo(function TreeSection({
                   onToggleDetails={handleToggleDetails}
                   onSetRowState={handleSetRowState}
                   onAnchorRow={handleAnchorRow}
+
                   onHeightChange={handleRowHeightChange}
                   virtualTop={top}
                   trimTopGuide={trimTopGuide}
@@ -2121,6 +2274,7 @@ const TreeSection = memo(function TreeSection({
                   onToggleDetails={handleToggleDetails}
                   onSetRowState={handleSetRowState}
                   onAnchorRow={handleAnchorRow}
+
                 />
               );
             })}
@@ -2129,6 +2283,7 @@ const TreeSection = memo(function TreeSection({
       ) : (
         <EmptyState message={emptyMessage} />
       )}
+      {visibleRowIds.length > 0 ? <ScrollToSectionTopButton anchor={anchor} /> : null}
     </CollapsibleSection>
   );
 });
@@ -2308,7 +2463,7 @@ function parseNodeAnchor() {
 
   const foldersMatch = hash.match(/^folders:(.+)/);
   if (foldersMatch) {
-    return { section: 'filesystem', rowId: `database:folder:${foldersMatch[1]}`, altRowId: `database:branch:${foldersMatch[1]}` };
+    return { section: 'filesystem', rowId: `database:folder:${foldersMatch[1]}`, altRowId: `database:missingfolder:${foldersMatch[1]}` };
   }
 
   const archiveFileMatch = hash.match(/^archives:([^:]+):files:(.+)/);
@@ -2318,7 +2473,7 @@ function parseNodeAnchor() {
 
   const archiveFolderMatch = hash.match(/^archives:([^:]+):folders:(.+)/);
   if (archiveFolderMatch) {
-    return { section: 'archives', rowId: `archive:${archiveFolderMatch[1]}:folder:${archiveFolderMatch[2]}`, altRowId: `archive:${archiveFolderMatch[1]}:branch:${archiveFolderMatch[2]}` };
+    return { section: 'archives', rowId: `archive:${archiveFolderMatch[1]}:folder:${archiveFolderMatch[2]}`, altRowId: `archive:${archiveFolderMatch[1]}:missingfolder:${archiveFolderMatch[2]}` };
   }
 
   const archiveMatch = hash.match(/^archives:(.+)/);
@@ -2341,7 +2496,7 @@ function buildNodeAnchorHash(row) {
     return `#archives:${encodeURIComponent(archiveFileMatch[1])}:files:${encodeURIComponent(archiveFileMatch[2])}`;
   }
 
-  const archiveFolderMatch = id.match(/^archive:([^:]+):(?:folder|branch):(.+)/);
+  const archiveFolderMatch = id.match(/^archive:([^:]+):(?:folder|missingfolder):(.+)/);
   if (archiveFolderMatch) {
     return `#archives:${encodeURIComponent(archiveFolderMatch[1])}:folders:${encodeURIComponent(archiveFolderMatch[2])}`;
   }
@@ -2351,7 +2506,7 @@ function buildNodeAnchorHash(row) {
     return `#files:${encodeURIComponent(fileMatch[1])}`;
   }
 
-  const folderMatch = id.match(/^database:(?:folder|branch):(.+)/);
+  const folderMatch = id.match(/^database:(?:folder|missingfolder):(.+)/);
   if (folderMatch) {
     return `#folders:${encodeURIComponent(folderMatch[1])}`;
   }
@@ -2913,6 +3068,39 @@ const TreeEntryRow = memo(function TreeEntryRow({
     </Container>
   );
 });
+
+function GhostParentRow({ row, containerLeft, onNavigate }) {
+  if (!row) return null;
+  const isArchive = row.type === 'archive';
+  const title = isArchive ? row.archive.title : row.node.name;
+  const badge = isArchive ? 'ZIP' : row.node.badge;
+  const badgeClassName = isArchive
+    ? 'node-badge archive-badge'
+    : `node-badge ${row.node.kind === 'file' ? 'file-badge' : 'folder-badge'}`;
+
+  const rootFontSize = typeof document !== 'undefined'
+    ? parseFloat(getComputedStyle(document.documentElement).fontSize)
+    : 16;
+  const indentPx = row.depth * 1.55 * rootFontSize;
+  const controlCenterPx = (2.25 / 2) * rootFontSize;
+  const linePx = (containerLeft || 0) + indentPx + controlCenterPx;
+
+  return (
+    <div
+      className="ghost-parent-row"
+      style={{ '--ghost-line-x': `${linePx}px` }}
+      onClick={onNavigate}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') onNavigate();
+      }}
+    >
+      <span className={badgeClassName}>{badge}</span>
+      <span className="ghost-parent-name">{title}</span>
+    </div>
+  );
+}
 
 function buildFlatNodeIndex(nodes) {
   const rowsById = new Map();
@@ -3506,6 +3694,48 @@ function TagDictionary({ tags }) {
         <EmptyState message="No tag dictionary was provided." />
       )}
     </CollapsibleSection>
+  );
+}
+
+function ScrollToSectionTopButton({ anchor }) {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+
+    const update = () => {
+      const section = document.getElementById(`section-${anchor}`);
+      if (!section) { setVisible(false); return; }
+      const rect = section.getBoundingClientRect();
+      setVisible(rect.top < 0 && rect.height > window.innerHeight);
+    };
+
+    update();
+    window.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+    };
+  }, [anchor]);
+
+  if (!visible) return null;
+
+  return (
+    <div className="scroll-to-section-top-track">
+      <button
+        type="button"
+        className="scroll-to-section-top"
+        aria-label="Scroll to top of section"
+        onClick={() => {
+          document.getElementById(`section-${anchor}`)?.scrollIntoView({ block: 'start' });
+        }}
+      >
+        <svg viewBox="0 0 16 16" width="18" height="18" fill="currentColor">
+          <path d="M3.22 9.78a.749.749 0 0 1 0-1.06l4.25-4.25a.749.749 0 0 1 1.06 0l4.25 4.25a.749.749 0 1 1-1.06 1.06L8 6.06 4.28 9.78a.749.749 0 0 1-1.06 0Z" />
+        </svg>
+      </button>
+    </div>
   );
 }
 

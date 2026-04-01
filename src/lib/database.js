@@ -1516,7 +1516,7 @@ function buildTreeFromRecords(records, scope) {
     insertRecord(root, record, scope);
   }
 
-  return finalizeBranch(root);
+  return finalizeTreeNode(root);
 }
 
 function insertRecord(root, record, scope) {
@@ -1532,7 +1532,7 @@ function insertRecord(root, record, scope) {
   for (let index = 0; index < segments.length; index += 1) {
     const segment = segments[index];
     const isLast = index === segments.length - 1;
-    const branchPath = segments.slice(0, index + 1).join('/');
+    const missingFolderPath = segments.slice(0, index + 1).join('/');
 
     if (record.kind === 'file' && isLast) {
       current.childrenMap.set(segment, {
@@ -1551,15 +1551,15 @@ function insertRecord(root, record, scope) {
     let child = current.childrenMap.get(segment);
     if (!child) {
       child = {
-        id: `${scope}:branch:${branchPath}`,
+        id: `${scope}:missingfolder:${missingFolderPath}`,
         kind: 'folder',
         name: segment,
-        path: `${branchPath}/`,
+        path: `${missingFolderPath}/`,
         badge: 'DIR',
         downloadUrl: null,
         primaryFields: [],
         details: [
-          { label: 'Destination', value: `${branchPath}/`, kind: 'code' },
+          { label: 'Destination', value: `${missingFolderPath}/`, kind: 'code' },
           { label: 'Role', value: 'Implicit parent folder' },
         ],
         childrenMap: new Map(),
@@ -1580,13 +1580,13 @@ function insertRecord(root, record, scope) {
   }
 }
 
-function finalizeBranch(branch) {
-  const children = [...branch.childrenMap.values()]
+function finalizeTreeNode(node) {
+  const children = [...node.childrenMap.values()]
     .map((child) =>
       child.childrenMap
         ? {
             ...child,
-            children: finalizeBranch(child).children,
+            children: finalizeTreeNode(child).children,
           }
         : child,
     )
@@ -1599,7 +1599,7 @@ function finalizeBranch(branch) {
     });
 
   return {
-    id: branch.id,
+    id: node.id,
     children,
   };
 }
