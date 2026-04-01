@@ -504,13 +504,35 @@ button:hover {
   white-space: pre-line;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
   z-index: 10;
-  pointer-events: none;
+  cursor: text;
+  user-select: text;
   text-transform: none;
   letter-spacing: normal;
 }
 
-.info-hint[data-open] .info-tip {
+.info-tip::after {
+  content: '';
+  position: absolute;
+  left: -2rem;
+  right: -2rem;
+  top: 100%;
+  height: 1rem;
+}
+
+.info-hint[data-open] .info-tip,
+.info-tip:hover,
+.info-tip[data-selecting] {
   display: block;
+}
+
+.tooltip-below .info-tip {
+  bottom: auto;
+  top: calc(100% + 0.5rem);
+}
+
+.tooltip-below .info-tip::after {
+  top: auto;
+  bottom: 100%;
 }
 
 .catalog-selected {
@@ -1321,6 +1343,7 @@ button:hover {
 }
 
 .tree-heading {
+  position: relative;
   display: flex;
   justify-content: space-between;
   align-items: start;
@@ -1405,24 +1428,95 @@ button:hover {
   flex: 1 1 auto;
   gap: 0.7rem;
   min-width: 0;
+  overflow: hidden;
+}
+
+.tree-title-tooltip {
+  display: none;
+  position: absolute;
+  left: var(--tooltip-x, 0px);
+  transform: translateX(-50%);
+  bottom: calc(100% + 0.35rem);
+  z-index: 100;
+  width: max-content;
+  max-width: calc(100vw - 4rem);
+  padding: 0.45rem 0.6rem;
+  border-radius: 10px;
+  background: rgba(22, 33, 47, 0.96);
+  color: #fff;
+  font-size: 0.76rem;
+  white-space: normal;
+  word-break: break-all;
+  cursor: text;
+  user-select: text;
+  box-shadow: 0 10px 24px rgba(22, 33, 47, 0.24);
+}
+
+.tree-title-tooltip code {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.tree-title-tooltip-path {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.62rem;
+}
+
+.tree-title-tooltip-path .tree-identifier-label {
+  font-size: inherit;
+}
+
+.tree-title-tooltip::before {
+  content: '';
+  position: absolute;
+  left: -2rem;
+  right: -2rem;
+  top: 100%;
+  height: 1rem;
+}
+
+.tooltip-below > .tree-title-tooltip {
+  bottom: auto;
+  top: calc(100% + 0.35rem);
+}
+
+.tooltip-below > .tree-title-tooltip::before {
+  top: auto;
+  bottom: 100%;
+}
+
+.tree-heading:not(.tooltip-hidden):has(.tree-title-row h3:hover) > .tree-title-tooltip,
+.tree-title-tooltip:hover,
+.tree-title-tooltip[data-selecting] {
+  display: block;
+}
+
+.tree-heading.tooltip-name-hidden > .tree-title-tooltip > span:first-child {
+  display: none;
+}
+
+.tree-heading.tooltip-name-hidden > .tree-title-tooltip > .tree-title-tooltip-path {
+  margin-top: 0;
 }
 
 .tree-title-row h3 {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   min-width: 0;
-  overflow: visible;
-  text-overflow: clip;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .tree-identifier-inline {
   display: inline-flex;
   align-items: baseline;
-  flex: 1 1 auto;
+  flex: 1 1 0px;
   flex-wrap: nowrap;
   gap: 0.35rem;
   min-width: 0;
   overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--muted);
   font-size: 0.82rem;
 }
@@ -1557,27 +1651,47 @@ button:hover {
   background: rgba(15, 111, 145, 0.08);
 }
 
-.tag-chip[data-tooltip]::after {
-  content: attr(data-tooltip);
+.chip-tooltip {
+  display: none;
   position: absolute;
   left: 50%;
   bottom: calc(100% + 0.45rem);
-  transform: translateX(-50%) translateY(0.15rem);
+  transform: translateX(-50%);
   padding: 0.45rem 0.6rem;
   border-radius: 10px;
   background: rgba(22, 33, 47, 0.96);
   color: #fff;
   white-space: nowrap;
   font-size: 0.76rem;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 120ms ease, transform 120ms ease;
+  cursor: text;
+  user-select: text;
   box-shadow: 0 10px 24px rgba(22, 33, 47, 0.24);
+  z-index: 100;
 }
 
-.tag-chip[data-tooltip]:hover::after {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
+.chip-tooltip::after {
+  content: '';
+  position: absolute;
+  left: -2rem;
+  right: -2rem;
+  top: 100%;
+  height: 1rem;
+}
+
+.tag-chip.has-tooltip:hover > .chip-tooltip,
+.chip-tooltip:hover,
+.chip-tooltip[data-selecting] {
+  display: block;
+}
+
+.tooltip-below > .chip-tooltip {
+  bottom: auto;
+  top: calc(100% + 0.45rem);
+}
+
+.tooltip-below > .chip-tooltip::after {
+  top: auto;
+  bottom: 100%;
 }
 
 .inline-issues,

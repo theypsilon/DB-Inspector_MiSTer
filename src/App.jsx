@@ -159,6 +159,24 @@ export default function App() {
     inspectionRef.current = inspection;
   }, [inspection]);
 
+  useEffect(() => {
+    const onMouseDown = (event) => {
+      const tooltip = event.target.closest('.tree-title-tooltip, .chip-tooltip, .info-tip');
+      if (tooltip) tooltip.setAttribute('data-selecting', '');
+    };
+    const onMouseUp = () => {
+      for (const el of document.querySelectorAll('[data-selecting]')) {
+        el.removeAttribute('data-selecting');
+      }
+    };
+    window.addEventListener('mousedown', onMouseDown);
+    window.addEventListener('mouseup', onMouseUp);
+    return () => {
+      window.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, []);
+
   const [nodeAnchor, setNodeAnchor] = useState(null);
 
   useEffect(() => {
@@ -1151,6 +1169,7 @@ export default function App() {
                           tabIndex={0}
                           role="button"
                           onClick={(event) => {
+                            event.currentTarget.classList.toggle('tooltip-below', event.currentTarget.getBoundingClientRect().top < 80);
                             event.currentTarget.toggleAttribute('data-open');
                           }}
                           onMouseLeave={(event) => {
@@ -1183,6 +1202,7 @@ export default function App() {
                           role="button"
                           aria-label="Cluster size info"
                           onClick={(event) => {
+                            event.currentTarget.classList.toggle('tooltip-below', event.currentTarget.getBoundingClientRect().top < 80);
                             event.currentTarget.toggleAttribute('data-open');
                           }}
                           onMouseLeave={(event) => {
@@ -3057,6 +3077,7 @@ const TreeEntryRow = memo(function TreeEntryRow({
   const identifier = isArchive ? row.archive.id : row.node.path;
   const identifierLabel = isArchive ? 'Archive' : 'Path';
   const showIdentifier = isArchive || identifier !== title;
+  const titleTooltip = showIdentifier ? `${title}\n${identifierLabel}: ${identifier}` : title;
   const primaryFields = isArchive ? row.archive.primaryFields : row.node.primaryFields;
   const details = isArchive ? row.archive.details : row.node.details;
   const issues = isArchive ? row.archive.issues : [];
@@ -3185,11 +3206,25 @@ const TreeEntryRow = memo(function TreeEntryRow({
               >
                 <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="m7.775 3.275 1.25-1.25a3.5 3.5 0 1 1 4.95 4.95l-2.5 2.5a3.5 3.5 0 0 1-4.95 0 .751.751 0 0 1 .018-1.042.751.751 0 0 1 1.042-.018 1.998 1.998 0 0 0 2.83 0l2.5-2.5a2.002 2.002 0 0 0-2.83-2.83l-1.25 1.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042Zm-4.69 9.64a1.998 1.998 0 0 0 2.83 0l1.25-1.25a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042l-1.25 1.25a3.5 3.5 0 1 1-4.95-4.95l2.5-2.5a3.5 3.5 0 0 1 4.95 0 .751.751 0 0 1-.018 1.042.751.751 0 0 1-1.042.018 1.998 1.998 0 0 0-2.83 0l-2.5 2.5a1.998 1.998 0 0 0 0 2.83Z"/></svg>
               </button>
-              <h3 title={title}>{title}</h3>
+              <h3 onMouseEnter={(e) => {
+                const h3 = e.currentTarget;
+                const heading = h3.closest('.tree-heading');
+                const row = h3.closest('.tree-title-row');
+                const nameTruncated = h3.scrollWidth > h3.clientWidth;
+                const idCode = row.querySelector('.tree-identifier-inline code');
+                const pathTruncated = idCode ? idCode.scrollWidth > idCode.clientWidth : false;
+                heading.classList.toggle('tooltip-hidden', !nameTruncated && !pathTruncated);
+                heading.classList.toggle('tooltip-name-hidden', !nameTruncated && pathTruncated);
+                if (nameTruncated || pathTruncated) {
+                  const rect = heading.getBoundingClientRect();
+                  heading.style.setProperty('--tooltip-x', `${e.clientX - rect.left}px`);
+                  heading.classList.toggle('tooltip-below', rect.top < 80);
+                }
+              }}>{title}</h3>
               {showIdentifier ? (
                 <span className="tree-identifier-inline">
                   <span className="tree-identifier-label">{identifierLabel}</span>
-                  <code title={identifier}>{identifier}</code>
+                  <code>{identifier}</code>
                 </span>
               ) : null}
             </div>
@@ -3227,6 +3262,16 @@ const TreeEntryRow = memo(function TreeEntryRow({
                 ) : null}
               </div>
             </div>
+            <span className="tree-title-tooltip">
+              <span>{title}</span>
+              {showIdentifier ? (
+                <span className="tree-title-tooltip-path">
+                  <span className="tree-identifier-label">{identifierLabel}</span>
+                  {' '}
+                  <code>{identifier}</code>
+                </span>
+              ) : null}
+            </span>
           </div>
           {!bodyCollapsed ? <PrimaryFieldRow fields={primaryFields} /> : null}
           {!bodyCollapsed && detailsVisible ? <MetadataList fields={details} /> : null}
@@ -4439,10 +4484,13 @@ function FieldValue({ field }) {
 function TagChip({ tag }) {
   return (
     <span
-      className="tag-chip"
-      data-tooltip={tag.rawLabel ? `Tag ${tag.rawLabel}` : undefined}
+      className={tag.rawLabel ? 'tag-chip has-tooltip' : 'tag-chip'}
+      onMouseEnter={tag.rawLabel ? (e) => {
+        e.currentTarget.classList.toggle('tooltip-below', e.currentTarget.getBoundingClientRect().top < 80);
+      } : undefined}
     >
       {tag.label}
+      {tag.rawLabel ? <span className="chip-tooltip">Tag {tag.rawLabel}</span> : null}
     </span>
   );
 }
