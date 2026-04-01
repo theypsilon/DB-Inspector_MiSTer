@@ -111,6 +111,17 @@ export default function App() {
     () => (inspection ? applyInspectionFilter(inspection, debouncedFilterInput) : null),
     [inspection, debouncedFilterInput],
   );
+  const filesystemIndex = useMemo(
+    () => (displayedInspection ? buildFlatNodeIndex(displayedInspection.filesystemTree.children) : null),
+    [displayedInspection],
+  );
+  const archivesIndex = useMemo(
+    () =>
+      displayedInspection?.archiveViews.length
+        ? buildFlatArchiveIndex(displayedInspection.archiveViews)
+        : null,
+    [displayedInspection],
+  );
   const storageSummary = useMemo(
     () =>
       displayedInspection
@@ -141,6 +152,8 @@ export default function App() {
   const inspectionKey = `${inspectionKeyBase}:${String(debouncedFilterInput).trim().toLowerCase()}`;
   const canResetFilter =
     normalizeFilterPromptValue(filterInput) !== normalizeFilterPromptValue(effectiveDefaultFilter);
+  const tagDictionary = displayedInspection?.overview.tagDictionary ?? [];
+  const globalSearch = useGlobalSearch({ filesystemIndex, archivesIndex, tagDictionary, hasInspection: !!displayedInspection });
 
   useEffect(() => {
     inspectionRef.current = inspection;
@@ -1194,7 +1207,7 @@ export default function App() {
 
             <FilesystemSection
               key={`filesystem:${inspectionKey}`}
-              tree={displayedInspection.filesystemTree}
+              index={filesystemIndex}
               emptyMessage={
                 displayedInspection.activeFilter.isFiltering
                   ? 'No files or folders match the current filter.'
@@ -1205,12 +1218,14 @@ export default function App() {
               anchorRowId={nodeAnchor?.section === 'filesystem' ? nodeAnchor.rowId : null}
               altAnchorRowId={nodeAnchor?.section === 'filesystem' ? nodeAnchor.altRowId : null}
               onAnchorHandled={() => setNodeAnchor(null)}
+              searchMatch={globalSearch.currentMatch?.section === 'filesystem' ? globalSearch.currentMatch : null}
+              searchQuery={globalSearch.activeQuery}
             />
 
             {displayedInspection.archiveViews.length ? (
               <ArchiveSummariesSection
                 key={`archives:${inspectionKey}`}
-                archiveViews={displayedInspection.archiveViews}
+                index={archivesIndex}
                 emptyMessage={
                   displayedInspection.activeFilter.isFiltering
                     ? 'No archive summary entries match the current filter.'
@@ -1221,6 +1236,8 @@ export default function App() {
                 anchorRowId={nodeAnchor?.section === 'archives' ? nodeAnchor.rowId : null}
                 altAnchorRowId={nodeAnchor?.section === 'archives' ? nodeAnchor.altRowId : null}
                 onAnchorHandled={() => setNodeAnchor(null)}
+                searchMatch={globalSearch.currentMatch?.section === 'archives' ? globalSearch.currentMatch : null}
+                searchQuery={globalSearch.activeQuery}
               />
             ) : null}
 
@@ -1246,7 +1263,11 @@ export default function App() {
             </CollapsibleSection>
 
             {displayedInspection.overview.tagDictionary.length ? (
-              <TagDictionary tags={displayedInspection.overview.tagDictionary} />
+              <TagDictionary
+                tags={displayedInspection.overview.tagDictionary}
+                searchQuery={globalSearch.activeQuery}
+                searchMatch={globalSearch.currentMatch?.section === 'tags' ? globalSearch.currentMatch : null}
+              />
             ) : null}
           </>
         ) : loadingMessage ? (
@@ -1317,7 +1338,20 @@ export default function App() {
         />
       ) : null}
 
-      <p className="app-footer">© 2026 José Barroso (theypsilon)</p>
+      <p className="app-footer"><a className="stealth-link" href="https://github.com/theypsilon" target="_blank" rel="noopener noreferrer">© 2026 José Barroso (theypsilon)</a><span>Press <kbd>{typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘F' : 'Ctrl+F'}</kbd> to search</span></p>
+      {globalSearch.open ? (
+        <FindBar
+          query={globalSearch.query}
+          onQueryChange={globalSearch.setQuery}
+          focusToken={globalSearch.focusToken}
+          currentIndex={globalSearch.currentMatchIndex}
+          totalMatches={globalSearch.totalMatches}
+          onNext={globalSearch.goToNextMatch}
+          onPrev={globalSearch.goToPrevMatch}
+          onJumpTo={globalSearch.jumpToMatch}
+          onClose={globalSearch.closeSearch}
+        />
+      ) : null}
     </main>
   );
 }
@@ -1665,9 +1699,7 @@ function InstallModal({ dbId, dbUrl, activeFilter, onClose }) {
   );
 }
 
-const FilesystemSection = memo(function FilesystemSection({ tree, emptyMessage, detailed, onDetailedChange, anchorRowId, altAnchorRowId, onAnchorHandled }) {
-  const index = useMemo(() => buildFlatNodeIndex(tree.children), [tree]);
-
+const FilesystemSection = memo(function FilesystemSection({ index, emptyMessage, detailed, onDetailedChange, anchorRowId, altAnchorRowId, onAnchorHandled, searchMatch, searchQuery }) {
   return (
     <TreeSection
       label="Content"
@@ -1680,14 +1712,14 @@ const FilesystemSection = memo(function FilesystemSection({ tree, emptyMessage, 
       anchorRowId={anchorRowId}
       altAnchorRowId={altAnchorRowId}
       onAnchorHandled={onAnchorHandled}
+      searchMatch={searchMatch}
+      searchQuery={searchQuery}
       anchor="files"
     />
   );
 });
 
-const ArchiveSummariesSection = memo(function ArchiveSummariesSection({ archiveViews, emptyMessage, detailed, onDetailedChange, anchorRowId, altAnchorRowId, onAnchorHandled }) {
-  const index = useMemo(() => buildFlatArchiveIndex(archiveViews), [archiveViews]);
-
+const ArchiveSummariesSection = memo(function ArchiveSummariesSection({ index, emptyMessage, detailed, onDetailedChange, anchorRowId, altAnchorRowId, onAnchorHandled, searchMatch, searchQuery }) {
   return (
     <TreeSection
       label="Content"
@@ -1700,6 +1732,8 @@ const ArchiveSummariesSection = memo(function ArchiveSummariesSection({ archiveV
       anchorRowId={anchorRowId}
       altAnchorRowId={altAnchorRowId}
       onAnchorHandled={onAnchorHandled}
+      searchMatch={searchMatch}
+      searchQuery={searchQuery}
       anchor="archives"
     />
   );
@@ -1716,6 +1750,8 @@ const TreeSection = memo(function TreeSection({
   anchorRowId: anchorRowIdProp,
   altAnchorRowId,
   onAnchorHandled,
+  searchMatch,
+  searchQuery,
   anchor,
 }) {
   const [searchAnchorRowId, setSearchAnchorRowId] = useState(null);
@@ -1740,7 +1776,7 @@ const TreeSection = memo(function TreeSection({
     [index, collapsedIds],
   );
 
-  const applyHighlightToRow = useCallback((rowElement, row, matchPart) => {
+  const applyHighlightToRow = useCallback((rowElement, row, matchPart, searchTerm) => {
     if (!CSS.highlights) return;
     CSS.highlights.delete('search-match');
     if (!row) return;
@@ -1748,7 +1784,10 @@ const TreeSection = memo(function TreeSection({
     let searchRoot;
     let term;
 
-    if (matchPart === 'path') {
+    if (searchTerm) {
+      searchRoot = rowElement;
+      term = searchTerm;
+    } else if (matchPart === 'path') {
       searchRoot = rowElement.querySelector('.tree-identifier-inline code') || rowElement;
       term = row.type === 'archive' ? row.archive.id : row.node?.path || '';
     } else {
@@ -1779,6 +1818,16 @@ const TreeSection = memo(function TreeSection({
       CSS.highlights.set('search-match', new Highlight(...ranges));
     }
   }, []);
+
+  const searchQueryRef = useRef('');
+  useEffect(() => {
+    if (!searchMatch) return;
+    const section = document.getElementById(`section-${anchor}`);
+    if (section && !section.open) section.open = true;
+    searchMatchPartRef.current = searchMatch.matchPart || 'name';
+    searchQueryRef.current = searchMatch.query || '';
+    setSearchAnchorRowId(searchMatch.rowId);
+  }, [searchMatch?.token, anchor]);
 
   useEffect(() => {
     if (!anchorRowId || !index.rowsById.has(anchorRowId)) {
@@ -1816,12 +1865,18 @@ const TreeSection = memo(function TreeSection({
       if (!isSearchMatch) return;
       const row = index.rowsById.get(anchorRowId);
       const matchPart = searchMatchPartRef.current;
-      applyHighlightToRow(rowElement, row, matchPart);
+      applyHighlightToRow(rowElement, row, matchPart, searchQueryRef.current);
     };
 
     const scrollToAnchor = () => {
       const element = document.getElementById(`row-${anchorRowId}`);
       if (element) {
+        const rect = element.getBoundingClientRect();
+        const inViewport = rect.top >= 0 && rect.bottom <= window.innerHeight;
+        if (inViewport) {
+          applyRowHighlight(element);
+          return;
+        }
         suppressAnchoringRef.current = true;
         element.scrollIntoView({ block: 'start' });
         applyRowHighlight(element);
@@ -2148,6 +2203,42 @@ const TreeSection = memo(function TreeSection({
       const nextTop = Math.round(element.getBoundingClientRect().top + window.scrollY);
       setContainerTop((current) => (current === nextTop ? current : nextTop));
     }, [index, viewport.layoutVersion]);
+
+    var searchHighlightName = `search-match-all-${anchor}`;
+    useEffect(() => {
+      if (!searchQuery || !containerRef.current) {
+        CSS.highlights?.delete(searchHighlightName);
+        return;
+      }
+      const queryLower = searchQuery.toLowerCase();
+      const currentRowId = searchMatch?.rowId ?? null;
+      const ranges = [];
+      const rowElements = containerRef.current.querySelectorAll('[id^="row-"]');
+      for (const rowEl of rowElements) {
+        if (currentRowId && rowEl.id === `row-${currentRowId}`) continue;
+        const walker = document.createTreeWalker(rowEl, NodeFilter.SHOW_TEXT);
+        let textNode = walker.nextNode();
+        while (textNode) {
+          const text = textNode.textContent.toLowerCase();
+          let pos = 0;
+          while (pos < text.length) {
+            const idx = text.indexOf(queryLower, pos);
+            if (idx === -1) break;
+            const range = new Range();
+            range.setStart(textNode, idx);
+            range.setEnd(textNode, idx + queryLower.length);
+            ranges.push(range);
+            pos = idx + queryLower.length;
+          }
+          textNode = walker.nextNode();
+        }
+      }
+      if (ranges.length && CSS.highlights) {
+        CSS.highlights.set(searchHighlightName, new Highlight(...ranges));
+      } else {
+        CSS.highlights?.delete(searchHighlightName);
+      }
+    }, [searchHighlightName, searchQuery, searchMatch, virtualRows]);
     /* eslint-enable react-hooks/rules-of-hooks */
   }
 
@@ -2320,29 +2411,6 @@ const TreeSection = memo(function TreeSection({
             onMouseMove={handleTreeMouseMove}
             onMouseLeave={handleTreeMouseLeave}
           >
-            <BrowserSearchIndex
-              index={index}
-              onMatch={(rowId, matchPart) => {
-                searchMatchPartRef.current = matchPart;
-                const existing = document.getElementById(`row-${rowId}`);
-                if (existing) {
-                  const rect = existing.getBoundingClientRect();
-                  const isVisible = rect.top >= 0 && rect.bottom <= window.innerHeight;
-                  if (!isVisible) {
-                    existing.scrollIntoView({ block: 'center' });
-                  }
-                  applyHighlightToRow(existing, index.rowsById.get(rowId), matchPart);
-                  setHighlightedRowId(rowId);
-                  window.clearTimeout(highlightClearTimerRef.current);
-                  highlightClearTimerRef.current = window.setTimeout(() => {
-                    setHighlightedRowId(null);
-                    CSS.highlights?.delete('search-match');
-                  }, 3000);
-                  return;
-                }
-                setSearchAnchorRowId(rowId);
-              }}
-            />
             {virtualRows.items.map(({ rowId, top, trimTopGuide, trimBottomGuide }) => {
               const row = index.rowsById.get(rowId);
               if (!row) {
@@ -3460,6 +3528,266 @@ function getRowMeasurementKey(rowId, { collapsed, detailsVisible }) {
   return `${rowId}:${collapsed ? '1' : '0'}:${detailsVisible ? '1' : '0'}`;
 }
 
+function useGlobalSearch({ filesystemIndex, archivesIndex, tagDictionary, hasInspection }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
+  const [token, setToken] = useState(0);
+
+  const matches = useMemo(() => {
+    const trimmed = query.trim().toLowerCase();
+    if (!trimmed) return [];
+    const result = [];
+
+    const searchIndex = (index, section) => {
+      if (!index) return;
+      for (const [id, row] of index.rowsById) {
+        const name = (row.type === 'archive' ? row.archive.title : row.node.name) || '';
+        const path = row.type !== 'archive' ? row.node.path || '' : '';
+        if (name.toLowerCase().includes(trimmed)) {
+          result.push({ rowId: id, section, matchPart: 'name' });
+        } else if (path && path !== name && path.toLowerCase().includes(trimmed)) {
+          result.push({ rowId: id, section, matchPart: 'path' });
+        } else {
+          const fields = row.type === 'archive' ? row.archive.primaryFields : row.node.primaryFields;
+          const hasTagMatch = fields?.some(
+            (f) => f.kind === 'tags' && Array.isArray(f.value) && f.value.some((t) => t.label.toLowerCase().includes(trimmed)),
+          );
+          if (hasTagMatch) {
+            result.push({ rowId: id, section, matchPart: 'tags' });
+          }
+        }
+      }
+    };
+
+    searchIndex(filesystemIndex, 'filesystem');
+    searchIndex(archivesIndex, 'archives');
+
+    if (tagDictionary.length) {
+      for (const tag of tagDictionary) {
+        if (tag.name.toLowerCase().includes(trimmed)) {
+          result.push({ rowId: `tagdict-${tag.name}-${tag.index}`, section: 'tags', matchPart: 'name' });
+        }
+      }
+    }
+
+    return result;
+  }, [query, filesystemIndex, archivesIndex, tagDictionary]);
+
+  const clampedIndex = matches.length ? currentMatchIndex % matches.length : 0;
+  const trimmedQuery = query.trim();
+  const currentMatch = useMemo(
+    () =>
+      matches.length
+        ? { rowId: matches[clampedIndex].rowId, section: matches[clampedIndex].section, matchPart: matches[clampedIndex].matchPart, query: trimmedQuery, token }
+        : null,
+    [matches, clampedIndex, trimmedQuery, token],
+  );
+
+  useEffect(() => {
+    setCurrentMatchIndex(0);
+    setToken((t) => t + 1);
+  }, [matches]);
+
+  const [focusToken, setFocusToken] = useState(0);
+  const openSearch = useCallback(() => {
+    const saved = sessionStorage.getItem('findBarQuery') || '';
+    if (saved) setQuery(saved);
+    setOpen(true);
+    setFocusToken((t) => t + 1);
+  }, []);
+  const closeSearch = useCallback(() => {
+    const trimmed = query.trim();
+    if (trimmed) {
+      sessionStorage.setItem('findBarQuery', trimmed);
+    }
+    setOpen(false);
+    setQuery('');
+    CSS.highlights?.delete('search-match');
+    CSS.highlights?.delete('search-match-all-files');
+    CSS.highlights?.delete('search-match-all-archives');
+    CSS.highlights?.delete('search-match-all-tags');
+  }, [query]);
+
+  const goToNextMatch = useCallback(() => {
+    if (!matches.length) return;
+    setToken((t) => t + 1);
+    setCurrentMatchIndex((i) => (i + 1) % matches.length);
+  }, [matches.length]);
+
+  const goToPrevMatch = useCallback(() => {
+    if (!matches.length) return;
+    setToken((t) => t + 1);
+    setCurrentMatchIndex((i) => (i - 1 + matches.length) % matches.length);
+  }, [matches.length]);
+
+  const jumpToMatch = useCallback((oneBasedIndex) => {
+    if (!matches.length) return;
+    const clamped = Math.max(0, Math.min(matches.length - 1, oneBasedIndex - 1));
+    setToken((t) => t + 1);
+    setCurrentMatchIndex(clamped);
+  }, [matches.length]);
+
+  useEffect(() => {
+    if (!hasInspection) return undefined;
+
+    const onKeyDown = (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === 'f') {
+        event.preventDefault();
+        if (!open) {
+          openSearch();
+        } else {
+          setFocusToken((t) => t + 1);
+        }
+      }
+      if (event.key === 'Escape' && open) {
+        closeSearch();
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [hasInspection, open, closeSearch]);
+
+  return {
+    open,
+    query,
+    setQuery,
+    focusToken,
+    currentMatchIndex: clampedIndex,
+    totalMatches: matches.length,
+    currentMatch,
+    activeQuery: open ? trimmedQuery : '',
+    openSearch,
+    closeSearch,
+    goToNextMatch,
+    goToPrevMatch,
+    jumpToMatch,
+  };
+}
+
+const FindBar = memo(function FindBar({
+  query,
+  onQueryChange,
+  focusToken,
+  currentIndex,
+  totalMatches,
+  onNext,
+  onPrev,
+  onJumpTo,
+  onClose,
+}) {
+  const inputRef = useRef(null);
+  const [editingIndex, setEditingIndex] = useState(false);
+  const [indexDraft, setIndexDraft] = useState('');
+  const indexInputRef = useRef(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, [focusToken]);
+
+  const handleKeyDown = (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      if (event.shiftKey) {
+        onPrev();
+      } else {
+        onNext();
+      }
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      onClose();
+    }
+    if (event.key === 'F3') {
+      event.preventDefault();
+      if (event.shiftKey) {
+        onPrev();
+      } else {
+        onNext();
+      }
+    }
+  };
+
+  const commitIndexEdit = () => {
+    const parsed = parseInt(indexDraft, 10);
+    if (parsed >= 1 && parsed <= totalMatches) {
+      onJumpTo(parsed);
+    }
+    setEditingIndex(false);
+  };
+
+  const handleIndexKeyDown = (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      commitIndexEdit();
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      setEditingIndex(false);
+      inputRef.current?.focus();
+    }
+  };
+
+  const startEditingIndex = () => {
+    if (!totalMatches) return;
+    setIndexDraft(String(currentIndex + 1));
+    setEditingIndex(true);
+    requestAnimationFrame(() => {
+      indexInputRef.current?.focus();
+      indexInputRef.current?.select();
+    });
+  };
+
+  return createPortal(
+    <div className="find-bar" role="search" aria-label="Find in tree">
+      <input
+        ref={inputRef}
+        type="text"
+        className="find-bar-input"
+        placeholder="Find in tree..."
+        value={query}
+        onChange={(event) => onQueryChange(event.target.value)}
+        onKeyDown={handleKeyDown}
+        aria-label="Search text"
+      />
+      {editingIndex ? (
+        <span className="find-bar-count">
+          <input
+            ref={indexInputRef}
+            type="number"
+            className="find-bar-index-input"
+            min={1}
+            max={totalMatches}
+            value={indexDraft}
+            onChange={(event) => setIndexDraft(event.target.value)}
+            onKeyDown={handleIndexKeyDown}
+            onBlur={commitIndexEdit}
+            aria-label="Jump to match number"
+          />
+          {' of '}
+          {totalMatches}
+        </span>
+      ) : (
+        <span className="find-bar-count" aria-live="polite" onClick={startEditingIndex} role={totalMatches ? 'button' : undefined} tabIndex={totalMatches ? 0 : undefined}>
+          {query.trim() ? `${totalMatches ? currentIndex + 1 : 0} of ${totalMatches}` : ''}
+        </span>
+      )}
+      <button type="button" className="find-bar-button" onClick={onPrev} aria-label="Previous match" disabled={!totalMatches}>
+        &#x25B2;
+      </button>
+      <button type="button" className="find-bar-button" onClick={onNext} aria-label="Next match" disabled={!totalMatches}>
+        &#x25BC;
+      </button>
+      <button type="button" className="find-bar-button find-bar-close" onClick={onClose} aria-label="Close search">
+        &#x2715;
+      </button>
+    </div>,
+    document.body,
+  );
+});
+
 function useWindowViewport() {
   const [viewport, setViewport] = useState(() => ({
     scrollY: typeof window === 'undefined' ? 0 : window.scrollY,
@@ -3782,63 +4110,100 @@ function HighlightCard({ label, value, subvalue, accent }) {
   );
 }
 
-const BrowserSearchIndex = memo(function BrowserSearchIndex({ index, onMatch }) {
-  const containerRef = useRef(null);
-  const onMatchRef = useRef(onMatch);
-  onMatchRef.current = onMatch;
+
+function TagDictionary({ tags, searchQuery, searchMatch }) {
+  const [open, setOpen] = useState(true);
+  const cloudRef = useRef(null);
 
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return undefined;
-
-    const fragment = document.createDocumentFragment();
-    for (const [id, row] of index.rowsById) {
-      const name = row.type === 'archive' ? row.archive.title : row.node.name;
-      const path = row.type !== 'archive' ? row.node.path || '' : '';
-
-      const nameDiv = document.createElement('div');
-      nameDiv.setAttribute('hidden', 'until-found');
-      nameDiv.dataset.row = id;
-      nameDiv.dataset.part = 'name';
-      nameDiv.textContent = name;
-      fragment.appendChild(nameDiv);
-
-      if (path && path !== name) {
-        const pathDiv = document.createElement('div');
-        pathDiv.setAttribute('hidden', 'until-found');
-        pathDiv.dataset.row = id;
-        pathDiv.dataset.part = 'path';
-        pathDiv.textContent = path;
-        fragment.appendChild(pathDiv);
+    if (!searchQuery || !cloudRef.current) {
+      CSS.highlights?.delete('search-match-all-tags');
+      return;
+    }
+    const queryLower = searchQuery.toLowerCase();
+    const currentPillId = searchMatch?.rowId ?? null;
+    const ranges = [];
+    const pills = cloudRef.current.querySelectorAll('.dictionary-pill');
+    for (const pill of pills) {
+      if (currentPillId && pill.id === currentPillId) continue;
+      const walker = document.createTreeWalker(pill, NodeFilter.SHOW_TEXT);
+      let textNode = walker.nextNode();
+      while (textNode) {
+        const text = textNode.textContent.toLowerCase();
+        let pos = 0;
+        while (pos < text.length) {
+          const idx = text.indexOf(queryLower, pos);
+          if (idx === -1) break;
+          const range = new Range();
+          range.setStart(textNode, idx);
+          range.setEnd(textNode, idx + queryLower.length);
+          ranges.push(range);
+          pos = idx + queryLower.length;
+        }
+        textNode = walker.nextNode();
       }
     }
-    container.replaceChildren(fragment);
+    if (ranges.length && CSS.highlights) {
+      CSS.highlights.set('search-match-all-tags', new Highlight(...ranges));
+    } else {
+      CSS.highlights?.delete('search-match-all-tags');
+    }
+  }, [searchQuery, searchMatch, tags]);
 
-    const handler = (event) => {
-      const span = event.target.closest('[data-row]');
-      if (span) {
-        const matchPart = span.dataset.part || 'name';
-        requestAnimationFrame(() => {
-          onMatchRef.current(span.dataset.row, matchPart);
-          setTimeout(() => {
-            span.setAttribute('hidden', 'until-found');
-          }, 0);
-        });
+  const navigateToTagPill = useCallback((match) => {
+    requestAnimationFrame(() => {
+      const pill = document.getElementById(match.rowId);
+      if (!pill) return;
+      const rect = pill.getBoundingClientRect();
+      const inViewport = rect.top >= 0 && rect.bottom <= window.innerHeight;
+      if (!inViewport) {
+        pill.scrollIntoView({ block: 'center' });
       }
-    };
+      if (!CSS.highlights) return;
+      CSS.highlights.delete('search-match');
+      const queryLower = (match.query || '').toLowerCase();
+      if (!queryLower) return;
+      const ranges = [];
+      const walker = document.createTreeWalker(pill, NodeFilter.SHOW_TEXT);
+      let textNode = walker.nextNode();
+      while (textNode) {
+        const text = textNode.textContent.toLowerCase();
+        let pos = 0;
+        while (pos < text.length) {
+          const idx = text.indexOf(queryLower, pos);
+          if (idx === -1) break;
+          const range = new Range();
+          range.setStart(textNode, idx);
+          range.setEnd(textNode, idx + queryLower.length);
+          ranges.push(range);
+          pos = idx + queryLower.length;
+        }
+        textNode = walker.nextNode();
+      }
+      if (ranges.length) {
+        CSS.highlights.set('search-match', new Highlight(...ranges));
+      }
+    });
+  }, []);
 
-    container.addEventListener('beforematch', handler);
-    return () => {
-      container.removeEventListener('beforematch', handler);
-      container.replaceChildren();
-    };
-  }, [index]);
+  const pendingSearchMatchRef = useRef(null);
 
-  return <div ref={containerRef} className="browser-search-index" aria-hidden="true" />;
-});
+  useEffect(() => {
+    if (!searchMatch) return;
+    if (!open) {
+      pendingSearchMatchRef.current = searchMatch;
+      setOpen(true);
+      return;
+    }
+    navigateToTagPill(searchMatch);
+  }, [searchMatch?.token]);
 
-function TagDictionary({ tags }) {
-  const [open, setOpen] = useState(true);
+  useEffect(() => {
+    if (!open || !pendingSearchMatchRef.current) return;
+    const pending = pendingSearchMatchRef.current;
+    pendingSearchMatchRef.current = null;
+    requestAnimationFrame(() => navigateToTagPill(pending));
+  }, [open]);
 
   return (
     <CollapsibleSection
@@ -3851,9 +4216,9 @@ function TagDictionary({ tags }) {
     >
       <p className="dictionary-meta">{tags.length} entries</p>
       {tags.length ? (
-        <div className="tag-cloud">
+        <div className="tag-cloud" ref={cloudRef}>
           {tags.map((tag) => (
-            <span key={`${tag.name}:${tag.index}`} className="dictionary-pill">
+            <span key={`${tag.name}:${tag.index}`} id={`tagdict-${tag.name}-${tag.index}`} className="dictionary-pill">
               <strong>{tag.name}</strong>
               <span>{tag.index}</span>
             </span>
