@@ -1883,7 +1883,12 @@ const TreeSection = memo(function TreeSection({
 
   const handleCollapseAll = useCallback(() => {
     startTransition(() => {
-      setCollapsedIds(new Set(index.collapsibleIds));
+      setCollapsedIds(new Set(
+        index.collapsibleIds.filter((id) => {
+          const row = index.rowsById.get(id);
+          return row && row.type === 'node' ? row.node.kind !== 'file' : row?.childIds?.length > 0;
+        }),
+      ));
     });
   }, [index]);
 
