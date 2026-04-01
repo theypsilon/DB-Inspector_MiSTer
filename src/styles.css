@@ -385,6 +385,7 @@ button:hover {
 .stealth-link {
   color: inherit;
   text-decoration: none;
+  cursor: pointer;
 }
 
 .app-footer kbd {
@@ -1759,10 +1760,6 @@ button:hover {
 }
 
 @media (max-width: 720px) {
-  html {
-    background-attachment: scroll;
-  }
-
   .app-shell {
     width: min(100% - 1rem, 1380px);
     padding-top: 0.8rem;
@@ -1789,5 +1786,15 @@ button:hover {
 
   .tree-guide-elbow {
     width: var(--tree-indent-step);
+  }
+}
+
+@media (hover: none) {
+  html {
+    background-attachment: scroll;
+  }
+
+  body::before {
+    display: none;
   }
 }
