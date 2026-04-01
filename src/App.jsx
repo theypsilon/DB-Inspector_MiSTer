@@ -3628,26 +3628,33 @@ function useGlobalSearch({ filesystemIndex, archivesIndex, tagDictionary, hasIns
     setCurrentMatchIndex(clamped);
   }, [matches.length]);
 
+  const openRef = useRef(open);
+  openRef.current = open;
+  const closeSearchRef = useRef(closeSearch);
+  closeSearchRef.current = closeSearch;
+  const openSearchRef = useRef(openSearch);
+  openSearchRef.current = openSearch;
+
   useEffect(() => {
     if (!hasInspection) return undefined;
 
     const onKeyDown = (event) => {
       if ((event.ctrlKey || event.metaKey) && event.key === 'f') {
         event.preventDefault();
-        if (!open) {
-          openSearch();
+        if (!openRef.current) {
+          openSearchRef.current();
         } else {
           setFocusToken((t) => t + 1);
         }
       }
-      if (event.key === 'Escape' && open) {
-        closeSearch();
+      if (event.key === 'Escape' && openRef.current) {
+        closeSearchRef.current();
       }
     };
 
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [hasInspection, open, closeSearch]);
+  }, [hasInspection]);
 
   return {
     open,
