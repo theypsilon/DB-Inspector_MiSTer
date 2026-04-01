@@ -1338,7 +1338,7 @@ export default function App() {
         />
       ) : null}
 
-      <p className="app-footer"><a className="stealth-link" href="https://github.com/theypsilon" target="_blank" rel="noopener noreferrer">© 2026 José Barroso (theypsilon)</a><span>Press <kbd>{typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘F' : 'Ctrl+F'}</kbd> to search</span></p>
+      <p className="app-footer"><a className="stealth-link" href="https://github.com/theypsilon" target="_blank" rel="noopener noreferrer">© 2026 José Barroso (theypsilon)</a><span className="stealth-link" role="button" tabIndex={0} onClick={() => { if (!globalSearch.open) globalSearch.openSearch(); }} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (!globalSearch.open) globalSearch.openSearch(); } }}>Press <kbd>{typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘F' : 'Ctrl+F'}</kbd> to search</span></p>
       {globalSearch.open ? (
         <FindBar
           query={globalSearch.query}
