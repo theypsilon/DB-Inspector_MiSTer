@@ -1802,16 +1802,20 @@ const TreeSection = memo(function TreeSection({
       });
     }
 
-    setHighlightedRowId(anchorRowId);
     const isSearchMatch = !!searchAnchorRowId;
     if (searchAnchorRowId) {
       setSearchAnchorRowId(null);
     }
     onAnchorHandled?.();
 
+    if (isSearchMatch) {
+      setHighlightedRowId(anchorRowId);
+    }
+
     const applyRowHighlight = (rowElement) => {
+      if (!isSearchMatch) return;
       const row = index.rowsById.get(anchorRowId);
-      const matchPart = isSearchMatch ? searchMatchPartRef.current : 'name';
+      const matchPart = searchMatchPartRef.current;
       applyHighlightToRow(rowElement, row, matchPart);
     };
 
@@ -1876,6 +1880,10 @@ const TreeSection = memo(function TreeSection({
     };
 
     runAfterNextPaint(scrollToAnchor);
+
+    if (!isSearchMatch) {
+      return;
+    }
 
     const clearHighlight = () => {
       setHighlightedRowId(null);
@@ -2070,12 +2078,17 @@ const TreeSection = memo(function TreeSection({
       const hadMeasuredHeight = measuredHeightsRef.current.has(rowId);
       pendingMeasuredHeightsRef.current.set(rowId, height);
 
-      if (typeof window === 'undefined' || immediate) {
-        if (heightFlushFrameRef.current && typeof window !== 'undefined') {
+      if (typeof window === 'undefined') {
+        flushMeasuredHeights();
+        return;
+      }
+
+      if (immediate) {
+        if (heightFlushFrameRef.current) {
           window.cancelAnimationFrame(heightFlushFrameRef.current);
           heightFlushFrameRef.current = 0;
         }
-        flushMeasuredHeights();
+        queueMicrotask(flushMeasuredHeights);
         return;
       }
 
