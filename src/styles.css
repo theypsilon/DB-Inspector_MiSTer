@@ -1001,6 +1001,18 @@ button:hover {
   pointer-events: none;
 }
 
+::highlight(search-match) {
+  background-color: #ff9632;
+  color: #000;
+}
+
+.browser-search-index {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  user-select: none;
+}
+
 .scroll-to-section-top-track {
   position: sticky;
   bottom: 0.75rem;
@@ -1078,7 +1090,6 @@ button:hover {
   --tree-guide-bottom-overlap: var(--tree-guide-overlap);
   padding-left: calc(var(--tree-depth, 0) * var(--tree-indent-step));
 }
-
 
 .copy-link-button {
   all: unset;

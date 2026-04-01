@@ -1718,11 +1718,15 @@ const TreeSection = memo(function TreeSection({
   onAnchorHandled,
   anchor,
 }) {
-  const anchorRowId = anchorRowIdProp && index.rowsById.has(anchorRowIdProp)
+  const [searchAnchorRowId, setSearchAnchorRowId] = useState(null);
+  const searchMatchPartRef = useRef('name');
+  const highlightClearTimerRef = useRef(0);
+  const resolvedPropAnchor = anchorRowIdProp && index.rowsById.has(anchorRowIdProp)
     ? anchorRowIdProp
     : altAnchorRowId && index.rowsById.has(altAnchorRowId)
       ? altAnchorRowId
       : anchorRowIdProp;
+  const anchorRowId = resolvedPropAnchor || searchAnchorRowId;
   const [collapsedIds, setCollapsedIds] = useState(() => new Set());
   const [detailOverrides, setDetailOverrides] = useState(() => new Map());
   const [highlightedRowId, setHighlightedRowId] = useState(null);
@@ -1735,6 +1739,46 @@ const TreeSection = memo(function TreeSection({
     () => collectVisibleRowIds(index.rootIds, index.rowsById, collapsedIds),
     [index, collapsedIds],
   );
+
+  const applyHighlightToRow = useCallback((rowElement, row, matchPart) => {
+    if (!CSS.highlights) return;
+    CSS.highlights.delete('search-match');
+    if (!row) return;
+
+    let searchRoot;
+    let term;
+
+    if (matchPart === 'path') {
+      searchRoot = rowElement.querySelector('.tree-identifier-inline code') || rowElement;
+      term = row.type === 'archive' ? row.archive.id : row.node?.path || '';
+    } else {
+      searchRoot = rowElement.querySelector('h3') || rowElement;
+      term = row.type === 'archive' ? row.archive.title : row.node?.name || '';
+    }
+
+    if (!term) return;
+    const termLower = term.toLowerCase();
+    const walker = document.createTreeWalker(searchRoot, NodeFilter.SHOW_TEXT);
+    const ranges = [];
+    let textNode = walker.nextNode();
+    while (textNode) {
+      const text = textNode.textContent.toLowerCase();
+      let pos = 0;
+      while (pos < text.length) {
+        const idx = text.indexOf(termLower, pos);
+        if (idx === -1) break;
+        const range = new Range();
+        range.setStart(textNode, idx);
+        range.setEnd(textNode, idx + termLower.length);
+        ranges.push(range);
+        pos = idx + termLower.length;
+      }
+      textNode = walker.nextNode();
+    }
+    if (ranges.length) {
+      CSS.highlights.set('search-match', new Highlight(...ranges));
+    }
+  }, []);
 
   useEffect(() => {
     if (!anchorRowId || !index.rowsById.has(anchorRowId)) {
@@ -1759,13 +1803,24 @@ const TreeSection = memo(function TreeSection({
     }
 
     setHighlightedRowId(anchorRowId);
+    const isSearchMatch = !!searchAnchorRowId;
+    if (searchAnchorRowId) {
+      setSearchAnchorRowId(null);
+    }
     onAnchorHandled?.();
+
+    const applyRowHighlight = (rowElement) => {
+      const row = index.rowsById.get(anchorRowId);
+      const matchPart = isSearchMatch ? searchMatchPartRef.current : 'name';
+      applyHighlightToRow(rowElement, row, matchPart);
+    };
 
     const scrollToAnchor = () => {
       const element = document.getElementById(`row-${anchorRowId}`);
       if (element) {
         suppressAnchoringRef.current = true;
         element.scrollIntoView({ block: 'start' });
+        applyRowHighlight(element);
         window.setTimeout(() => {
           element.scrollIntoView({ block: 'start' });
           suppressAnchoringRef.current = false;
@@ -1790,6 +1845,7 @@ const TreeSection = memo(function TreeSection({
               const el = document.getElementById(`row-${anchorRowId}`);
               if (el) {
                 el.scrollIntoView({ block: 'start' });
+                applyRowHighlight(el);
                 window.setTimeout(() => {
                   const target = document.getElementById(`row-${anchorRowId}`);
                   if (target) {
@@ -1821,8 +1877,25 @@ const TreeSection = memo(function TreeSection({
 
     runAfterNextPaint(scrollToAnchor);
 
-    const clearTimer = window.setTimeout(() => setHighlightedRowId(null), 3000);
-    return () => window.clearTimeout(clearTimer);
+    const clearHighlight = () => {
+      setHighlightedRowId(null);
+      CSS.highlights?.delete('search-match');
+    };
+
+    window.clearTimeout(highlightClearTimerRef.current);
+    highlightClearTimerRef.current = window.setTimeout(clearHighlight, 3000);
+
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        clearHighlight();
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.clearTimeout(highlightClearTimerRef.current);
+      window.removeEventListener('keydown', onKeyDown);
+    };
   }, [anchorRowId, index]);
 
   // --- virtualization-only state and machinery ---
@@ -2234,6 +2307,29 @@ const TreeSection = memo(function TreeSection({
             onMouseMove={handleTreeMouseMove}
             onMouseLeave={handleTreeMouseLeave}
           >
+            <BrowserSearchIndex
+              index={index}
+              onMatch={(rowId, matchPart) => {
+                searchMatchPartRef.current = matchPart;
+                const existing = document.getElementById(`row-${rowId}`);
+                if (existing) {
+                  const rect = existing.getBoundingClientRect();
+                  const isVisible = rect.top >= 0 && rect.bottom <= window.innerHeight;
+                  if (!isVisible) {
+                    existing.scrollIntoView({ block: 'center' });
+                  }
+                  applyHighlightToRow(existing, index.rowsById.get(rowId), matchPart);
+                  setHighlightedRowId(rowId);
+                  window.clearTimeout(highlightClearTimerRef.current);
+                  highlightClearTimerRef.current = window.setTimeout(() => {
+                    setHighlightedRowId(null);
+                    CSS.highlights?.delete('search-match');
+                  }, 3000);
+                  return;
+                }
+                setSearchAnchorRowId(rowId);
+              }}
+            />
             {virtualRows.items.map(({ rowId, top, trimTopGuide, trimBottomGuide }) => {
               const row = index.rowsById.get(rowId);
               if (!row) {
@@ -3672,6 +3768,61 @@ function HighlightCard({ label, value, subvalue, accent }) {
     </div>
   );
 }
+
+const BrowserSearchIndex = memo(function BrowserSearchIndex({ index, onMatch }) {
+  const containerRef = useRef(null);
+  const onMatchRef = useRef(onMatch);
+  onMatchRef.current = onMatch;
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return undefined;
+
+    const fragment = document.createDocumentFragment();
+    for (const [id, row] of index.rowsById) {
+      const name = row.type === 'archive' ? row.archive.title : row.node.name;
+      const path = row.type !== 'archive' ? row.node.path || '' : '';
+
+      const nameDiv = document.createElement('div');
+      nameDiv.setAttribute('hidden', 'until-found');
+      nameDiv.dataset.row = id;
+      nameDiv.dataset.part = 'name';
+      nameDiv.textContent = name;
+      fragment.appendChild(nameDiv);
+
+      if (path && path !== name) {
+        const pathDiv = document.createElement('div');
+        pathDiv.setAttribute('hidden', 'until-found');
+        pathDiv.dataset.row = id;
+        pathDiv.dataset.part = 'path';
+        pathDiv.textContent = path;
+        fragment.appendChild(pathDiv);
+      }
+    }
+    container.replaceChildren(fragment);
+
+    const handler = (event) => {
+      const span = event.target.closest('[data-row]');
+      if (span) {
+        const matchPart = span.dataset.part || 'name';
+        requestAnimationFrame(() => {
+          onMatchRef.current(span.dataset.row, matchPart);
+          setTimeout(() => {
+            span.setAttribute('hidden', 'until-found');
+          }, 0);
+        });
+      }
+    };
+
+    container.addEventListener('beforematch', handler);
+    return () => {
+      container.removeEventListener('beforematch', handler);
+      container.replaceChildren();
+    };
+  }, [index]);
+
+  return <div ref={containerRef} className="browser-search-index" aria-hidden="true" />;
+});
 
 function TagDictionary({ tags }) {
   const [open, setOpen] = useState(true);
