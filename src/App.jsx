@@ -965,9 +965,9 @@ export default function App() {
         >
           <p className="section-label">Upload</p>
           <h2>Drag a database here</h2>
-          <p>
-            Supported files: <code>.json</code>, <code>.json.zip</code>, <code>.ini</code>,
-            <code>.ini.zip</code>, and ZIP files that contain one of those formats.
+          <p className="helper-copy">
+            Supports database files (<code>.json</code>), drop-in databases (<code>.ini</code>), and <code>downloader.ini</code>.
+            All can be zipped.
           </p>
           <label className="dropzone-surface" htmlFor="database-file-input">
             <span className="dropzone-note">Drop database files here</span>
@@ -3513,7 +3513,14 @@ function GhostParentRow({ row, containerLeft, onNavigate }) {
         if (event.key === 'Enter') onNavigate();
       }}
     >
-      <span className={badgeClassName}>{badge}</span>
+      <div className="ghost-badge-stack">
+        <span className={badgeClassName}>{badge}</span>
+        <span className="ghost-nav-arrow" aria-hidden="true">
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
+            <path d="M3.22 9.78a.749.749 0 0 1 0-1.06l4.25-4.25a.749.749 0 0 1 1.06 0l4.25 4.25a.749.749 0 1 1-1.06 1.06L8 6.06 4.28 9.78a.749.749 0 0 1-1.06 0Z" />
+          </svg>
+        </span>
+      </div>
       <span className="ghost-parent-name">{title}</span>
     </div>
   );
