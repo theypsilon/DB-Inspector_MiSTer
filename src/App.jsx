@@ -423,7 +423,17 @@ export default function App() {
       return undefined;
     }
 
-    const previousOverflow = document.body.style.overflow;
+    const scrollY = window.scrollY;
+    const previousBodyStyle = {
+      position: document.body.style.position,
+      top: document.body.style.top,
+      width: document.body.style.width,
+      overflow: document.body.style.overflow,
+    };
+
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = '100%';
     document.body.style.overflow = 'hidden';
 
     function handleKeyDown(event) {
@@ -436,8 +446,12 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => {
-      document.body.style.overflow = previousOverflow;
       window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.position = previousBodyStyle.position;
+      document.body.style.top = previousBodyStyle.top;
+      document.body.style.width = previousBodyStyle.width;
+      document.body.style.overflow = previousBodyStyle.overflow;
+      window.scrollTo(0, scrollY);
     };
   }, [catalogModalOpen, iniPickerOpen, filterOverridePrompt]);
 
@@ -814,6 +828,7 @@ export default function App() {
 
   async function loadUrl(event) {
     event.preventDefault();
+    document.activeElement?.blur?.();
     queueCurrentFilterForPreservedLoad(true);
     await loadRemoteSource(databaseUrl, { preserveCurrentFilter: true });
   }
@@ -988,15 +1003,22 @@ export default function App() {
             Supports database files (<code>.json</code>), drop-in databases (<code>.ini</code>), and <code>downloader.ini</code>.
             All can be zipped.
           </p>
-          <label className="dropzone-surface" htmlFor="database-file-input">
+          <button
+            type="button"
+            className="dropzone-surface"
+            onClick={() => {
+              document.activeElement?.blur?.();
+              fileInputRef.current?.click();
+            }}
+          >
             <span className="dropzone-note">Drop database files here</span>
             <span className="dropzone-hint">or click to choose a file from disk</span>
             <span className="dropzone-action">Choose file</span>
-          </label>
+          </button>
           <input
             id="database-file-input"
             ref={fileInputRef}
-            className="hidden-input"
+            style={{ display: 'none' }}
             type="file"
             accept=".json,.json.zip,.ini,.ini.zip,.zip,application/json,application/zip,text/plain"
             onChange={(event) => {
@@ -1039,7 +1061,10 @@ export default function App() {
           <div className="button-row">
             <button
               type="button"
-              onClick={() => setCatalogModalOpen(true)}
+              onClick={() => {
+                document.activeElement?.blur?.();
+                setCatalogModalOpen(true);
+              }}
               disabled={!catalogReady}
             >
               Browse catalog

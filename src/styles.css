@@ -341,8 +341,11 @@ select {
 }
 
 button,
-summary {
-  touch-action: none;
+summary,
+a,
+label,
+[role='button'] {
+  touch-action: manipulation;
 }
 
 button {
