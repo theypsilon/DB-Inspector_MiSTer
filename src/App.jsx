@@ -2,7 +2,6 @@ import {
   memo,
   startTransition,
   useCallback,
-  useDeferredValue,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -40,6 +39,26 @@ const CLUSTER_SIZE_OPTIONS = [
   512 * 1024,
   1024 * 1024,
 ];
+
+const isTouchDevice =
+  typeof window !== 'undefined' &&
+  (window.matchMedia?.('(pointer: coarse)').matches || navigator.maxTouchPoints > 0);
+
+function useDebouncedValue(value, delay) {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
+}
 
 export default function App() {
   const fileInputRef = useRef(null);
@@ -1464,22 +1483,22 @@ const CatalogPickerModal = memo(function CatalogPickerModal({
   }, [initialDatabaseUrl, options]);
   const [query, setQuery] = useState('');
   const [selectedKey, setSelectedKey] = useState(initialSelectedKey);
-  const deferredQuery = useDeferredValue(query.trim().toLowerCase());
+  const debouncedQuery = useDebouncedValue(query.trim().toLowerCase(), FILTER_INPUT_DEBOUNCE_MS);
 
   useEffect(() => {
     setSelectedKey(initialSelectedKey);
   }, [initialSelectedKey]);
 
   const filteredOptions = useMemo(() => {
-    if (!deferredQuery) {
+    if (!debouncedQuery) {
       return options;
     }
 
     return options.filter((option) => {
       const haystack = `${option.dbId} ${option.title} ${option.dbUrl}`.toLowerCase();
-      return haystack.includes(deferredQuery);
+      return haystack.includes(debouncedQuery);
     });
-  }, [deferredQuery, options]);
+  }, [debouncedQuery, options]);
 
   const selectedOption = useMemo(
     () => options.find((item) => item.key === selectedKey) ?? null,
@@ -1593,22 +1612,22 @@ const CatalogPickerModal = memo(function CatalogPickerModal({
 const IniPickerModal = memo(function IniPickerModal({ iniSource, onClose, onOpenDatabase }) {
   const [query, setQuery] = useState('');
   const [selectedKey, setSelectedKey] = useState(iniSource.entries[0]?.key ?? '');
-  const deferredQuery = useDeferredValue(query.trim().toLowerCase());
+  const debounceddQuery = useDebouncedValue(query.trim().toLowerCase(), FILTER_INPUT_DEBOUNCE_MS);
 
   useEffect(() => {
     setSelectedKey(iniSource.entries[0]?.key ?? '');
   }, [iniSource]);
 
   const filteredEntries = useMemo(() => {
-    if (!deferredQuery) {
+    if (!debounceddQuery) {
       return iniSource.entries;
     }
 
     return iniSource.entries.filter((entry) => {
       const haystack = `${entry.dbId} ${entry.dbUrl}`.toLowerCase();
-      return haystack.includes(deferredQuery);
+      return haystack.includes(debounceddQuery);
     });
-  }, [deferredQuery, iniSource]);
+  }, [debounceddQuery, iniSource]);
 
   const selectedEntry = useMemo(
     () => iniSource.entries.find((entry) => entry.key === selectedKey) ?? null,
@@ -2343,7 +2362,7 @@ const TreeSection = memo(function TreeSection({
         setMeasuredHeights(nextMeasuredHeights);
       });
 
-      if (typeof window !== 'undefined' && scrollAnchorDelta && !suppressAnchoringRef.current) {
+      if (typeof window !== 'undefined' && !isTouchDevice && Math.abs(scrollAnchorDelta) > 2 && !suppressAnchoringRef.current) {
         window.scrollBy(0, scrollAnchorDelta);
       }
     }, [
