@@ -5,7 +5,7 @@ const RUNTIME_CATALOG_URL =
 
 const RUNTIME_CATALOG_SOURCE = `
 PRIMARY_URL = "https://example.com/primary.json"
-ALTERNATE_URL = "https://example.com/alternate.json"
+ALTERNATE_URL = "https://example.com/alias-alternate.json"
 OTHER_URL = "https://example.com/other.json"
 self.primary = Database(db_id='distribution_mister', db_url=PRIMARY_URL, title='Primary Distribution')
 self.alternate = Database(db_id='distribution_mister', db_url=ALTERNATE_URL, title='Alternate Distribution')
@@ -25,21 +25,11 @@ test.beforeEach(async ({ page }) => {
     const url = route.request().url();
     const pathname = new URL(url).pathname;
 
-    if (pathname === '/alias-alternate.json') {
-      await route.fulfill({
-        status: 302,
-        headers: {
-          location: 'https://example.com/alternate.json',
-        },
-      });
-      return;
-    }
-
     const dbId = pathname === '/other.json' ? 'other_db' : 'distribution_mister';
     const defaultFilter =
       pathname === '/primary.json'
         ? 'catalog-default'
-        : pathname === '/alternate.json'
+        : pathname === '/alias-alternate.json'
           ? 'alternate-default'
           : '';
     await route.fulfill({
@@ -69,7 +59,7 @@ test('loading a new shared-db_id URL keeps sibling catalog entries available', a
   await expect(page.locator('.catalog-option').filter({ hasText: 'example.com / custom.json' })).toHaveCount(1);
 });
 
-test('loading an alternate URL that redirects to a catalog entry preserves its title', async ({ page }) => {
+test('loading a URL registered in the catalog uses the existing entry without adding a duplicate', async ({ page }) => {
   await page.goto('/');
 
   await expect(page.getByText('3 entries available')).toBeVisible();

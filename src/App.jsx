@@ -312,6 +312,13 @@ export default function App() {
       return;
     }
 
+    // If we have a pending preserved filter but inspection is null (intermediate state
+    // while a new database is loading), don't consume the ref yet — wait for the real
+    // inspection to arrive so the preserved filter can be applied to it.
+    if (preservedFilter !== null && !inspection) {
+      return;
+    }
+
     pendingPreservedFilterRef.current = null;
     const nextFilter =
       preservedFilter !== null
@@ -658,7 +665,7 @@ export default function App() {
     if (loadedSource.entries.length === 1) {
       const [entry] = loadedSource.entries;
       const shouldPreserveCurrentFilter =
-        preserveCurrentFilter && !entry.defaultFilterPresent;
+        preserveCurrentFilter && !entry.defaultFilterExplicit;
       const loadSelectedEntry = (preserveSelectedFilter) => {
         queueCurrentFilterForPreservedLoad(preserveSelectedFilter);
         void loadRemoteSource(entry.dbUrl, {
@@ -667,7 +674,7 @@ export default function App() {
           registerInCatalog: false,
           sourceDefaultFilter: entry.defaultFilter || '',
           sourceDefaultFilterPresent: entry.defaultFilterPresent,
-          sourceDefaultFilterOverridesDatabaseDefault: entry.defaultFilterPresent,
+          sourceDefaultFilterOverridesDatabaseDefault: entry.defaultFilterExplicit,
           misterDefaultFilter: loadedSource.defaultFilter || '',
           misterDefaultFilterPresent: loadedSource.defaultFilterPresent,
           preserveCurrentFilter: preserveSelectedFilter,
@@ -677,7 +684,7 @@ export default function App() {
       if (
         maybeConfirmFilterOverride({
           nextFilter: entry.defaultFilter || '',
-          nextFilterPresent: entry.defaultFilterPresent,
+          nextFilterPresent: entry.defaultFilterExplicit,
           onAccept: () => loadSelectedEntry(false),
           onDecline: () => loadSelectedEntry(true),
         })
@@ -695,7 +702,7 @@ export default function App() {
         registerInCatalog: false,
         sourceDefaultFilter: entry.defaultFilter || '',
         sourceDefaultFilterPresent: entry.defaultFilterPresent,
-        sourceDefaultFilterOverridesDatabaseDefault: entry.defaultFilterPresent,
+        sourceDefaultFilterOverridesDatabaseDefault: entry.defaultFilterExplicit,
         misterDefaultFilter: loadedSource.defaultFilter || '',
         misterDefaultFilterPresent: loadedSource.defaultFilterPresent,
         preserveCurrentFilter: shouldPreserveCurrentFilter,
@@ -846,13 +853,13 @@ export default function App() {
     if (
       maybeConfirmFilterOverride({
         nextFilter: entry.defaultFilter || '',
-        nextFilterPresent: entry.defaultFilterPresent,
+        nextFilterPresent: entry.defaultFilterExplicit,
         onAccept: () =>
           startRemoteDatabaseLoad(entry.dbUrl, {
             registerInCatalog: false,
             sourceDefaultFilter: entry.defaultFilter || '',
             sourceDefaultFilterPresent: entry.defaultFilterPresent,
-            sourceDefaultFilterOverridesDatabaseDefault: entry.defaultFilterPresent,
+            sourceDefaultFilterOverridesDatabaseDefault: entry.defaultFilterExplicit,
             misterDefaultFilter: iniSource?.defaultFilter || '',
             misterDefaultFilterPresent: iniSource?.defaultFilterPresent,
             preserveCurrentFilter: false,
@@ -862,7 +869,7 @@ export default function App() {
             registerInCatalog: false,
             sourceDefaultFilter: entry.defaultFilter || '',
             sourceDefaultFilterPresent: entry.defaultFilterPresent,
-            sourceDefaultFilterOverridesDatabaseDefault: entry.defaultFilterPresent,
+            sourceDefaultFilterOverridesDatabaseDefault: entry.defaultFilterExplicit,
             misterDefaultFilter: iniSource?.defaultFilter || '',
             misterDefaultFilterPresent: iniSource?.defaultFilterPresent,
             preserveCurrentFilter: true,
@@ -876,10 +883,10 @@ export default function App() {
       registerInCatalog: false,
       sourceDefaultFilter: entry.defaultFilter || '',
       sourceDefaultFilterPresent: entry.defaultFilterPresent,
-      sourceDefaultFilterOverridesDatabaseDefault: entry.defaultFilterPresent,
+      sourceDefaultFilterOverridesDatabaseDefault: entry.defaultFilterExplicit,
       misterDefaultFilter: iniSource?.defaultFilter || '',
       misterDefaultFilterPresent: iniSource?.defaultFilterPresent,
-      preserveCurrentFilter: !entry.defaultFilterPresent,
+      preserveCurrentFilter: !entry.defaultFilterExplicit,
     });
   }
 

@@ -271,14 +271,19 @@ export function writeFilterSearchParam(value, { pushHistory = false, isPresent =
     currentUrl.searchParams.delete(FILTER_URL_PARAM);
   }
 
-  if (currentUrl.toString() === window.location.href) {
+  // URLSearchParams uses application/x-www-form-urlencoded encoding which differs from
+  // encodeURIComponent: spaces become '+' instead of '%20', and some chars like '!' become
+  // '%21' instead of remaining literal. Normalize to match encodeURIComponent output.
+  const urlString = currentUrl.toString().replace(/\+/g, '%20').replace(/%21/gi, '!');
+
+  if (urlString === window.location.href) {
     return;
   }
 
   if (pushHistory) {
-    window.history.pushState({}, '', currentUrl);
+    window.history.pushState({}, '', urlString);
   } else {
-    window.history.replaceState({}, '', currentUrl);
+    window.history.replaceState({}, '', urlString);
   }
 }
 
@@ -838,6 +843,14 @@ export function buildVirtualRows({
   const renderedIndexes = new Set();
   for (let index = startIndex; index < endIndex; index += 1) {
     renderedIndexes.add(index);
+  }
+
+  // Always render rows that would be visible if the section were at the top of the
+  // viewport. This keeps content in the DOM for sections below the initial scroll
+  // position, avoiding empty sections when the page first loads or a filter changes.
+  const sectionBaselineEnd = Math.min(rowIds.length, upperBound(offsets, viewportHeight));
+  for (let i = 0; i < sectionBaselineEnd; i += 1) {
+    renderedIndexes.add(i);
   }
 
   if (startIndex < rowIds.length) {

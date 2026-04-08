@@ -572,6 +572,9 @@ function parseDatabaseListIni(source, sourceName, { baseUrl = null } = {}) {
       ? resolveInheritedIniFilter(entry.defaultFilter, defaultFilterPresent ? defaultFilter : '')
       : defaultFilter,
     defaultFilterPresent: entry.defaultFilterPresent || defaultFilterPresent,
+    // Whether the entry had an explicit filter (not just inherited from [mister]).
+    // Used to decide whether the INI entry filter overrides the database's own default_options.filter.
+    defaultFilterExplicit: entry.defaultFilterPresent,
   }));
 
   return {

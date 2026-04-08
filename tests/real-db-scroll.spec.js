@@ -1,5 +1,24 @@
 import { expect, test } from '@playwright/test';
 
+// Two candidate real databases for these scroll tests:
+//
+//   Small — Update_All_MiSTer metadata DB (8 files, 3 folders):
+//     https://raw.githubusercontent.com/theypsilon/Update_All_MiSTer/db/update_all_db.json
+//   NOT suitable: far too few rows to produce a scrollable tree; none of the
+//   scroll regressions can be triggered.
+//
+//   Large — Distribution_MiSTer main DB (thousands of files):
+//     https://raw.githubusercontent.com/MiSTer-devel/Distribution_MiSTer/main/db.json.zip
+//   Required for all four tests:
+//   - Tests 1 and 4 need >9 000 px of tree height to reach a meaningful scroll position.
+//   - Tests 2 and 3 additionally look for the specific file "riscos.rom" (an ARM RISC OS ROM
+//     shipped with the Archimedes core) and the console folder names "Astrocade", "ATARI5200",
+//     and "Atari2600", which only exist in the Distribution_MiSTer database.
+//   RISCOS_REGION_ESTIMATED_TOP below is also calibrated against this database's tree layout.
+//
+// Set REAL_SCROLL_URL to the large-DB app URL to run the suite:
+//   REAL_SCROLL_URL='http://localhost:5173/?database-url=...' npx playwright test real-db-scroll
+
 const DEFAULT_REAL_SCROLL_URL =
   'http://localhost:5173/?database-url=https%3A%2F%2Fraw.githubusercontent.com%2FMiSTer-devel%2FDistribution_MiSTer%2Fmain%2Fdb.json.zip';
 const RISCOS_REGION_ESTIMATED_TOP = 317809 + 1200;
@@ -31,7 +50,7 @@ test.describe('real database upward scroll regression', () => {
     });
     await page.waitForTimeout(300);
 
-    await filesystemSection.getByRole('button', { name: 'Detailed toggle' }).click();
+    await page.getByRole('button', { name: 'Detailed toggle' }).click();
     await page.waitForTimeout(500);
 
     const tree = page.locator('.tree-root').first();
@@ -175,7 +194,7 @@ test.describe('real database upward scroll regression', () => {
     });
     await page.waitForTimeout(300);
 
-    await filesystemSection.getByRole('button', { name: 'Detailed toggle' }).click();
+    await page.getByRole('button', { name: 'Detailed toggle' }).click();
     await page.waitForTimeout(300);
     await filesystemSection.getByRole('button', { name: /^Open all$/ }).click();
     await page.waitForTimeout(1_200);
@@ -247,7 +266,7 @@ test.describe('real database upward scroll regression', () => {
     });
     await page.waitForTimeout(300);
 
-    await filesystemSection.getByRole('button', { name: 'Detailed toggle' }).click();
+    await page.getByRole('button', { name: 'Detailed toggle' }).click();
     await page.waitForTimeout(300);
     await filesystemSection.getByRole('button', { name: /^Open all$/ }).click();
     await page.waitForTimeout(1_200);
@@ -387,7 +406,7 @@ test.describe('real database upward scroll regression', () => {
     });
     await page.waitForTimeout(300);
 
-    await filesystemSection.getByRole('button', { name: 'Detailed toggle' }).click();
+    await page.getByRole('button', { name: 'Detailed toggle' }).click();
     await page.waitForTimeout(300);
     await filesystemSection.getByRole('button', { name: /^Open all$/ }).click();
     await page.waitForTimeout(1_200);
