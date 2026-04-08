@@ -1,8 +1,10 @@
 # MiSTer Custom Database Inspector
 
-Open the app on GitHub Pages:
+Check it in your browser:
 
 https://theypsilon.github.io/DB-Inspector_MiSTer/
+
+**Note:** Desktop (PC/Mac) is recommended over mobile.
 
 This is a small App for inspecting MiSTer custom downloader databases, including:
 
