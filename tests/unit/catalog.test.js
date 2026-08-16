@@ -5,6 +5,7 @@ import {
   mergeRuntimeDatabaseCatalogEntries,
   parseMultiDatabasesCatalog,
 } from '../../src/lib/database.js';
+import { mergeCatalogEntries } from '../../src/lib/utils.js';
 
 const EXISTING_DATABASE_URL =
   'https://raw.githubusercontent.com/theypsilon/MultiDatabases_MiSTer/db/existing-db/db.json';
@@ -78,6 +79,60 @@ test('Update_All entries win URL collisions and only new MultiDatabases entries 
         title: 'New title',
         approximate: true,
       },
+    ],
+  );
+});
+
+test('a definitive session override keeps the runtime entry position', () => {
+  const databaseUrl =
+    'https://raw.githubusercontent.com/theypsilon/MultiDatabases_MiSTer/db/readme-only/db.json';
+  const runtimeEntries = [
+    {
+      key: 'first',
+      dbId: 'first',
+      dbUrl: 'https://example.com/first.json',
+      title: 'First',
+    },
+    {
+      key: 'approximate',
+      dbId: 'MultiDatabases/readme-only',
+      dbIdApproximate: true,
+      dbUrl: databaseUrl,
+      title: 'README Exclusive',
+    },
+    {
+      key: 'last',
+      dbId: 'last',
+      dbUrl: 'https://example.com/last.json',
+      title: 'Last',
+    },
+  ];
+  const definitiveEntry = {
+    key: 'definitive',
+    dbId: 'definitive/readme-only',
+    dbIdApproximate: false,
+    dbUrl: databaseUrl,
+    title: 'Loaded title',
+  };
+
+  const mergedEntries = mergeCatalogEntries([definitiveEntry], runtimeEntries);
+
+  assert.deepEqual(
+    mergedEntries.map(({ key, dbId, title, dbIdApproximate }) => ({
+      key,
+      dbId,
+      title,
+      approximate: Boolean(dbIdApproximate),
+    })),
+    [
+      { key: 'first', dbId: 'first', title: 'First', approximate: false },
+      {
+        key: 'definitive',
+        dbId: 'definitive/readme-only',
+        title: 'README Exclusive',
+        approximate: false,
+      },
+      { key: 'last', dbId: 'last', title: 'Last', approximate: false },
     ],
   );
 });

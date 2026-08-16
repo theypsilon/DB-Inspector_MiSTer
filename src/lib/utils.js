@@ -372,7 +372,24 @@ export function mergeCustomCatalogEntries(nextEntries, currentEntries) {
 }
 
 export function mergeCatalogEntries(customEntries, runtimeEntries) {
-  return mergeCatalogEntryList(customEntries, runtimeEntries, { preferExistingTitle: true });
+  const mergedRuntimeEntries = [...runtimeEntries];
+  const unmatchedCustomEntries = [];
+
+  for (const customEntry of customEntries) {
+    const matchingIndex = findCatalogOverrideIndex(customEntry, mergedRuntimeEntries);
+    if (matchingIndex === -1) {
+      unmatchedCustomEntries.push(customEntry);
+      continue;
+    }
+
+    mergedRuntimeEntries[matchingIndex] = mergeCatalogEntry(
+      customEntry,
+      mergedRuntimeEntries[matchingIndex],
+      { preferExistingTitle: true },
+    );
+  }
+
+  return [...unmatchedCustomEntries, ...mergedRuntimeEntries];
 }
 
 export function findPreservedCatalogTitle(existingEntries, dbId, matchDbUrls) {

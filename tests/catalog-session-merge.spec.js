@@ -98,6 +98,7 @@ test('adds README-only catalog entries with approximate IDs while Update_All win
 
   const additionalOption = page.locator('.catalog-option').filter({ hasText: 'README Exclusive' });
   await expect(additionalOption).toHaveCount(1);
+  await expect(page.locator('.catalog-option').nth(3)).toContainText('README Exclusive');
   await expect(additionalOption).toContainText('MultiDatabases/readme-only');
   await expect(additionalOption).toContainText('Approximate ID');
 
@@ -120,6 +121,7 @@ test('adds README-only catalog entries with approximate IDs while Update_All win
   await expect(updatedOption).toHaveCount(1);
   await expect(updatedOption).toContainText('definitive/readme-only');
   await expect(updatedOption).not.toContainText('Approximate ID');
+  await expect(page.locator('.catalog-option').nth(3)).toContainText('README Exclusive');
   await expect(page.locator('.modal-selected')).toContainText('definitive/readme-only');
   await expect(page.locator('.modal-selected')).not.toContainText('Approximate ID');
 });
