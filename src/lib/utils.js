@@ -347,6 +347,7 @@ export function createCatalogEntriesFromLoadedSource(loadedSource, existingEntri
       {
         key: buildCustomCatalogEntryKey(dbId, dbUrl),
         dbId,
+        dbIdApproximate: false,
         dbUrl,
         matchDbUrls,
         title:

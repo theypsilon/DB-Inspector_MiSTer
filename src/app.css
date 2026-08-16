@@ -216,6 +216,7 @@ button:hover { filter: brightness(1.05); }
 .catalog-option-head code { font-size: 0.86rem; }
 .catalog-id-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem; }
 .catalog-id-approximation { display: inline-flex; padding: 0.2rem 0.42rem; border: 1px solid rgba(138, 92, 22, 0.22); border-radius: 999px; color: #72490f; background: rgba(221, 109, 61, 0.1); font-size: 0.68rem; font-weight: 700; letter-spacing: 0.04em; line-height: 1; text-transform: uppercase; }
+.catalog-id-approximation:hover .info-tip { display: block; }
 .catalog-approximation-note { margin: 0; }
 .catalog-option-url { display: block; color: var(--muted); font-family: 'IBM Plex Mono', monospace; font-size: 0.84rem; overflow-wrap: anywhere; }
 

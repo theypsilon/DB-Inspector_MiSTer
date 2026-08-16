@@ -24,13 +24,13 @@ test('MultiDatabases catalog entries come from README Inspect links', () => {
     entries.map(({ key, ...entry }) => entry),
     [
       {
-        dbId: 'existing-db',
+        dbId: 'MultiDatabases/existing-db',
         dbIdApproximate: true,
         dbUrl: EXISTING_DATABASE_URL,
         title: 'Existing title',
       },
       {
-        dbId: 'new-db',
+        dbId: 'MultiDatabases/new-db',
         dbIdApproximate: true,
         dbUrl: NEW_DATABASE_URL,
         title: 'New title',
@@ -74,7 +74,7 @@ test('Update_All entries win URL collisions and only new MultiDatabases entries 
         approximate: false,
       },
       {
-        dbId: 'new-db',
+        dbId: 'MultiDatabases/new-db',
         title: 'New title',
         approximate: true,
       },

@@ -41,6 +41,14 @@ test.beforeEach(async ({ page }) => {
     });
   });
 
+  await page.route(MULTIDATABASES_ONLY_URL, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json; charset=utf-8',
+      body: JSON.stringify(buildDatabase('definitive/readme-only')),
+    });
+  });
+
   await page.route('https://example.com/**', async (route) => {
     const url = route.request().url();
     const pathname = new URL(url).pathname;
@@ -90,12 +98,30 @@ test('adds README-only catalog entries with approximate IDs while Update_All win
 
   const additionalOption = page.locator('.catalog-option').filter({ hasText: 'README Exclusive' });
   await expect(additionalOption).toHaveCount(1);
-  await expect(additionalOption).toContainText('readme-only');
+  await expect(additionalOption).toContainText('MultiDatabases/readme-only');
   await expect(additionalOption).toContainText('Approximate ID');
+
+  const approximationLabel = additionalOption.locator('.catalog-id-approximation');
+  await approximationLabel.hover();
+  await expect(approximationLabel.getByRole('tooltip')).toBeVisible();
+  await expect(approximationLabel.getByRole('tooltip')).toHaveText(
+    'The real database ID will be determined when the database is opened.',
+  );
 
   await additionalOption.click();
   await expect(page.locator('.modal-selected')).toContainText('README Exclusive');
   await expect(page.locator('.modal-selected')).toContainText('Approximate ID');
+
+  await page.getByRole('button', { name: 'Open selected database' }).click();
+  await expect(page.getByRole('heading', { name: 'definitive/readme-only' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Browse catalog' }).click();
+  const updatedOption = page.locator('.catalog-option').filter({ hasText: 'README Exclusive' });
+  await expect(updatedOption).toHaveCount(1);
+  await expect(updatedOption).toContainText('definitive/readme-only');
+  await expect(updatedOption).not.toContainText('Approximate ID');
+  await expect(page.locator('.modal-selected')).toContainText('definitive/readme-only');
+  await expect(page.locator('.modal-selected')).not.toContainText('Approximate ID');
 });
 
 test('loading a URL registered in the catalog uses the existing entry without adding a duplicate', async ({ page }) => {

@@ -5,6 +5,29 @@ import EmptyState from '../ui/EmptyState.jsx';
 import useDebouncedValue from '../../hooks/useDebouncedValue.js';
 import { normalizeComparableUrl, runAfterNextPaint, FILTER_INPUT_DEBOUNCE_MS } from '../../lib/utils.js';
 
+const APPROXIMATE_DB_ID_TOOLTIP =
+  'The real database ID will be determined when the database is opened.';
+
+function ApproximateDbIdLabel() {
+  return (
+    <span
+      className="catalog-id-approximation info-hint"
+      aria-label={`Approximate ID. ${APPROXIMATE_DB_ID_TOOLTIP}`}
+      onMouseEnter={(event) => {
+        event.currentTarget.classList.toggle(
+          'tooltip-below',
+          event.currentTarget.getBoundingClientRect().top < 80,
+        );
+      }}
+    >
+      Approximate ID
+      <span className="info-tip" role="tooltip">
+        {APPROXIMATE_DB_ID_TOOLTIP}
+      </span>
+    </span>
+  );
+}
+
 const CatalogPickerModal = memo(function CatalogPickerModal({
   options,
   status,
@@ -63,7 +86,7 @@ const CatalogPickerModal = memo(function CatalogPickerModal({
                   onClose();
                 });
                 runAfterNextPaint(() => {
-                  onOpenDatabase(selectedOption.dbUrl);
+                  onOpenDatabase(selectedOption.dbUrl, selectedOption);
                 });
               }
             }}
@@ -109,7 +132,7 @@ const CatalogPickerModal = memo(function CatalogPickerModal({
               <div className="catalog-id-row">
                 <code>{selectedOption.dbId}</code>
                 {selectedOption.dbIdApproximate ? (
-                  <span className="catalog-id-approximation">Approximate ID</span>
+                  <ApproximateDbIdLabel />
                 ) : null}
               </div>
             </div>
@@ -148,7 +171,7 @@ const CatalogPickerModal = memo(function CatalogPickerModal({
                   <div className="catalog-id-row">
                     <code>{option.dbId}</code>
                     {option.dbIdApproximate ? (
-                      <span className="catalog-id-approximation">Approximate ID</span>
+                      <ApproximateDbIdLabel />
                     ) : null}
                   </div>
                   <strong>{option.title}</strong>

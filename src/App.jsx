@@ -1439,9 +1439,9 @@ export default function App() {
           error={catalogError}
           initialDatabaseUrl={databaseUrl}
           onClose={() => setCatalogModalOpen(false)}
-          onOpenDatabase={(url) => {
+          onOpenDatabase={(url, catalogEntry) => {
             startRemoteDatabaseLoad(url, {
-              registerInCatalog: false,
+              registerInCatalog: Boolean(catalogEntry.dbIdApproximate),
               preserveCurrentFilter: true,
             });
           }}

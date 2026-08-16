@@ -754,7 +754,8 @@ function parseMultiDatabasesCatalogTitle(line) {
 function deriveCatalogDbIdFromUrl(databaseUrl) {
   try {
     const pathSegments = new URL(databaseUrl).pathname.split('/').filter(Boolean);
-    return decodeURIComponent(pathSegments[pathSegments.length - 2] || '').trim();
+    const databaseFolder = decodeURIComponent(pathSegments[pathSegments.length - 2] || '').trim();
+    return databaseFolder ? `MultiDatabases/${databaseFolder}` : '';
   } catch {
     return '';
   }
