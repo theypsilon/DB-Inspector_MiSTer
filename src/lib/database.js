@@ -45,6 +45,8 @@ const REMOTE_SOURCE_URL_ALIASES = new Map([
 ]);
 const UPDATE_ALL_DATABASES_SOURCE_URL =
   'https://raw.githubusercontent.com/theypsilon/Update_All_MiSTer/master/src/update_all/databases.py';
+const MULTIDATABASES_CATALOG_SOURCE_URL =
+  'https://raw.githubusercontent.com/theypsilon/MultiDatabases_MiSTer/main/README.md';
 
 export async function loadDatabaseSourceFile(file) {
   const bytes = new Uint8Array(await file.arrayBuffer());
@@ -94,13 +96,32 @@ export async function inspectDatabaseUrl(input) {
 }
 
 export async function loadRuntimeDatabaseCatalog() {
-  const response = await fetch(UPDATE_ALL_DATABASES_SOURCE_URL);
-  if (!response.ok) {
-    throw new Error(`Could not load the database catalog: ${response.status} ${response.statusText}.`);
+  const [updateAllResponse, multiDatabasesResponse] = await Promise.all([
+    fetch(UPDATE_ALL_DATABASES_SOURCE_URL),
+    fetch(MULTIDATABASES_CATALOG_SOURCE_URL),
+  ]);
+
+  if (!updateAllResponse.ok) {
+    throw new Error(
+      `Could not load the database catalog: Update_All returned ${updateAllResponse.status} ${updateAllResponse.statusText}.`,
+    );
   }
 
-  const source = await response.text();
-  return parseRuntimeDatabaseCatalog(source);
+  if (!multiDatabasesResponse.ok) {
+    throw new Error(
+      `Could not load the database catalog: MultiDatabases returned ${multiDatabasesResponse.status} ${multiDatabasesResponse.statusText}.`,
+    );
+  }
+
+  const [updateAllSource, multiDatabasesSource] = await Promise.all([
+    updateAllResponse.text(),
+    multiDatabasesResponse.text(),
+  ]);
+
+  return mergeRuntimeDatabaseCatalogEntries(
+    parseRuntimeDatabaseCatalog(updateAllSource),
+    parseMultiDatabasesCatalog(multiDatabasesSource),
+  );
 }
 
 export function applyInspectionFilter(inspection, rawFilterInput) {
@@ -648,6 +669,103 @@ function parseRuntimeDatabaseCatalog(source) {
   }
 
   return entries;
+}
+
+export function parseMultiDatabasesCatalog(source) {
+  const entries = [];
+  const seenDatabaseUrls = new Set();
+
+  for (const line of String(source).replaceAll('\r\n', '\n').split('\n')) {
+    const inspectLinkMatch = line.match(/\[Inspect\]\(([^)\s]+)\)/i);
+    if (!inspectLinkMatch) {
+      continue;
+    }
+
+    let databaseUrl;
+    try {
+      const inspectUrl = new URL(inspectLinkMatch[1]);
+      const databaseUrlParam = inspectUrl.searchParams.get('database-url');
+      if (!databaseUrlParam) {
+        continue;
+      }
+
+      databaseUrl = normalizeSupportedSourceUrl(databaseUrlParam);
+    } catch {
+      continue;
+    }
+
+    const comparableDatabaseUrl = normalizeRuntimeCatalogUrl(databaseUrl);
+    if (!comparableDatabaseUrl || seenDatabaseUrls.has(comparableDatabaseUrl)) {
+      continue;
+    }
+
+    const dbId = deriveCatalogDbIdFromUrl(databaseUrl);
+    if (!dbId) {
+      continue;
+    }
+
+    seenDatabaseUrls.add(comparableDatabaseUrl);
+    entries.push({
+      key: `multidatabases:${comparableDatabaseUrl}`,
+      dbId,
+      dbIdApproximate: true,
+      dbUrl: databaseUrl,
+      title: parseMultiDatabasesCatalogTitle(line) || dbId,
+    });
+  }
+
+  if (!entries.length) {
+    throw new Error('Could not find any database Inspect links in the MultiDatabases catalog.');
+  }
+
+  return entries;
+}
+
+export function mergeRuntimeDatabaseCatalogEntries(updateAllEntries, multiDatabasesEntries) {
+  const knownDatabaseUrls = new Set(
+    updateAllEntries.map((entry) => normalizeRuntimeCatalogUrl(entry.dbUrl)).filter(Boolean),
+  );
+  const newMultiDatabasesEntries = [];
+
+  for (const entry of multiDatabasesEntries) {
+    const comparableDatabaseUrl = normalizeRuntimeCatalogUrl(entry.dbUrl);
+    if (!comparableDatabaseUrl || knownDatabaseUrls.has(comparableDatabaseUrl)) {
+      continue;
+    }
+
+    knownDatabaseUrls.add(comparableDatabaseUrl);
+    newMultiDatabasesEntries.push(entry);
+  }
+
+  return [...updateAllEntries, ...newMultiDatabasesEntries];
+}
+
+function parseMultiDatabasesCatalogTitle(line) {
+  const firstCellMatch = String(line).match(/^\s*\|\s*(.*?)\s*\|/);
+  if (!firstCellMatch) {
+    return '';
+  }
+
+  const cell = firstCellMatch[1].trim();
+  const linkMatch = cell.match(/^\[([^\]]+)\]\([^)]+\)$/);
+  return (linkMatch?.[1] || cell).replaceAll(/\\([\\`*_[\]{}()#+\-.!|>])/g, '$1').trim();
+}
+
+function deriveCatalogDbIdFromUrl(databaseUrl) {
+  try {
+    const pathSegments = new URL(databaseUrl).pathname.split('/').filter(Boolean);
+    return decodeURIComponent(pathSegments[pathSegments.length - 2] || '').trim();
+  } catch {
+    return '';
+  }
+}
+
+function normalizeRuntimeCatalogUrl(databaseUrl) {
+  try {
+    return new URL(String(databaseUrl).trim()).toString().toLowerCase();
+  } catch {
+    return '';
+  }
 }
 
 function resolvePythonScalar(token, constants) {

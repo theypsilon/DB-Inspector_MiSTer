@@ -40,6 +40,10 @@ const CatalogPickerModal = memo(function CatalogPickerModal({
     () => options.find((item) => item.key === selectedKey) ?? null,
     [options, selectedKey],
   );
+  const hasApproximateDbIds = useMemo(
+    () => options.some((option) => option.dbIdApproximate),
+    [options],
+  );
 
   return (
     <ModalFrame
@@ -90,13 +94,24 @@ const CatalogPickerModal = memo(function CatalogPickerModal({
             : 'Catalog unavailable'}
         </p>
       </div>
+      {hasApproximateDbIds ? (
+        <p className="helper-copy catalog-approximation-note">
+          Entries marked “Approximate ID” use the folder from their database URL because their
+          catalog source does not publish a database ID.
+        </p>
+      ) : null}
       {selectedOption ? (
         <article className="compact-selected modal-selected">
           <p className="section-label">Selected</p>
           <div className="catalog-selected-grid compact-selected-grid">
             <div>
               <span className="catalog-meta-label">Database ID</span>
-              <code>{selectedOption.dbId}</code>
+              <div className="catalog-id-row">
+                <code>{selectedOption.dbId}</code>
+                {selectedOption.dbIdApproximate ? (
+                  <span className="catalog-id-approximation">Approximate ID</span>
+                ) : null}
+              </div>
             </div>
             <div>
               <span className="catalog-meta-label">Title</span>
@@ -130,7 +145,12 @@ const CatalogPickerModal = memo(function CatalogPickerModal({
                 onClick={() => setSelectedKey(option.key)}
               >
                 <div className="catalog-option-head">
-                  <code>{option.dbId}</code>
+                  <div className="catalog-id-row">
+                    <code>{option.dbId}</code>
+                    {option.dbIdApproximate ? (
+                      <span className="catalog-id-approximation">Approximate ID</span>
+                    ) : null}
+                  </div>
                   <strong>{option.title}</strong>
                 </div>
                 <span className="catalog-option-url">{option.dbUrl}</span>

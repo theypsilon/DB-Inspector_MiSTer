@@ -2,14 +2,26 @@ import { expect, test } from '@playwright/test';
 
 const RUNTIME_CATALOG_URL =
   'https://raw.githubusercontent.com/theypsilon/Update_All_MiSTer/master/src/update_all/databases.py';
+const MULTIDATABASES_CATALOG_URL =
+  'https://raw.githubusercontent.com/theypsilon/MultiDatabases_MiSTer/main/README.md';
+const PRIMARY_DATABASE_URL = 'https://example.com/primary.json';
+const MULTIDATABASES_ONLY_URL =
+  'https://raw.githubusercontent.com/theypsilon/MultiDatabases_MiSTer/db/readme-only/db.json';
 
 const RUNTIME_CATALOG_SOURCE = `
-PRIMARY_URL = "https://example.com/primary.json"
+PRIMARY_URL = "${PRIMARY_DATABASE_URL}"
 ALTERNATE_URL = "https://example.com/alias-alternate.json"
 OTHER_URL = "https://example.com/other.json"
 self.primary = Database(db_id='distribution_mister', db_url=PRIMARY_URL, title='Primary Distribution')
 self.alternate = Database(db_id='distribution_mister', db_url=ALTERNATE_URL, title='Alternate Distribution')
 self.other = Database(db_id='other_db', db_url=OTHER_URL, title='Other Database')
+`;
+
+const MULTIDATABASES_CATALOG_SOURCE = `
+| Database | What it installs | Links |
+| --- | --- | --- |
+| [Lower-authority duplicate](duplicate/) | Duplicate | [Inspect](${buildInspectUrl(PRIMARY_DATABASE_URL)}) |
+| [README Exclusive](readme-only/) | Additional database | [Inspect](${buildInspectUrl(MULTIDATABASES_ONLY_URL)}) |
 `;
 
 test.beforeEach(async ({ page }) => {
@@ -18,6 +30,14 @@ test.beforeEach(async ({ page }) => {
       status: 200,
       contentType: 'text/plain; charset=utf-8',
       body: RUNTIME_CATALOG_SOURCE,
+    });
+  });
+
+  await page.route(MULTIDATABASES_CATALOG_URL, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/markdown; charset=utf-8',
+      body: MULTIDATABASES_CATALOG_SOURCE,
     });
   });
 
@@ -43,9 +63,47 @@ test.beforeEach(async ({ page }) => {
 test('loading a new shared-db_id URL keeps sibling catalog entries available', async ({ page }) => {
   await page.goto('/');
 
-  await expect(page.getByText('3 entries available')).toBeVisible();
+  await expect(page.getByText('4 entries available')).toBeVisible();
 
   await page.getByLabel('URL').fill('https://example.com/custom.json');
+  await page.getByRole('button', { name: 'Fetch database' }).click();
+
+  await expect(page.getByRole('heading', { name: 'distribution_mister' })).toBeVisible();
+  await expect(page.getByText('5 entries available')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Browse catalog' }).click();
+
+  await expect(page.getByText('5 of 5 entries')).toBeVisible();
+  await expect(page.locator('.catalog-option').filter({ hasText: 'Primary Distribution' })).toHaveCount(1);
+  await expect(page.locator('.catalog-option').filter({ hasText: 'Alternate Distribution' })).toHaveCount(1);
+  await expect(page.locator('.catalog-option').filter({ hasText: 'example.com / custom.json' })).toHaveCount(1);
+});
+
+test('adds README-only catalog entries with approximate IDs while Update_All wins duplicates', async ({ page }) => {
+  await page.goto('/');
+
+  await expect(page.getByText('4 entries available')).toBeVisible();
+  await page.getByRole('button', { name: 'Browse catalog' }).click();
+
+  await expect(page.locator('.catalog-option').filter({ hasText: 'Primary Distribution' })).toHaveCount(1);
+  await expect(page.locator('.catalog-option').filter({ hasText: 'Lower-authority duplicate' })).toHaveCount(0);
+
+  const additionalOption = page.locator('.catalog-option').filter({ hasText: 'README Exclusive' });
+  await expect(additionalOption).toHaveCount(1);
+  await expect(additionalOption).toContainText('readme-only');
+  await expect(additionalOption).toContainText('Approximate ID');
+
+  await additionalOption.click();
+  await expect(page.locator('.modal-selected')).toContainText('README Exclusive');
+  await expect(page.locator('.modal-selected')).toContainText('Approximate ID');
+});
+
+test('loading a URL registered in the catalog uses the existing entry without adding a duplicate', async ({ page }) => {
+  await page.goto('/');
+
+  await expect(page.getByText('4 entries available')).toBeVisible();
+
+  await page.getByLabel('URL').fill('https://example.com/alias-alternate.json');
   await page.getByRole('button', { name: 'Fetch database' }).click();
 
   await expect(page.getByRole('heading', { name: 'distribution_mister' })).toBeVisible();
@@ -54,25 +112,6 @@ test('loading a new shared-db_id URL keeps sibling catalog entries available', a
   await page.getByRole('button', { name: 'Browse catalog' }).click();
 
   await expect(page.getByText('4 of 4 entries')).toBeVisible();
-  await expect(page.locator('.catalog-option').filter({ hasText: 'Primary Distribution' })).toHaveCount(1);
-  await expect(page.locator('.catalog-option').filter({ hasText: 'Alternate Distribution' })).toHaveCount(1);
-  await expect(page.locator('.catalog-option').filter({ hasText: 'example.com / custom.json' })).toHaveCount(1);
-});
-
-test('loading a URL registered in the catalog uses the existing entry without adding a duplicate', async ({ page }) => {
-  await page.goto('/');
-
-  await expect(page.getByText('3 entries available')).toBeVisible();
-
-  await page.getByLabel('URL').fill('https://example.com/alias-alternate.json');
-  await page.getByRole('button', { name: 'Fetch database' }).click();
-
-  await expect(page.getByRole('heading', { name: 'distribution_mister' })).toBeVisible();
-  await expect(page.getByText('3 entries available')).toBeVisible();
-
-  await page.getByRole('button', { name: 'Browse catalog' }).click();
-
-  await expect(page.getByText('3 of 3 entries')).toBeVisible();
   await expect(page.locator('.modal-selected')).toContainText('Alternate Distribution');
   await expect(page.locator('.catalog-option').filter({ hasText: 'Primary Distribution' })).toHaveCount(1);
   await expect(page.locator('.catalog-option').filter({ hasText: 'Alternate Distribution' })).toHaveCount(1);
@@ -111,4 +150,8 @@ function buildDatabase(dbId, { defaultFilter = '' } = {}) {
     folders: {},
     archives: {},
   };
+}
+
+function buildInspectUrl(databaseUrl) {
+  return `https://theypsilon.github.io/DB-Inspector_MiSTer/?database-url=${encodeURIComponent(databaseUrl)}`;
 }
