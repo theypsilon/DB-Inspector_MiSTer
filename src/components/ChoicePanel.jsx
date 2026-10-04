@@ -1,5 +1,3 @@
-import EmptyState from './ui/EmptyState.jsx';
-
 // A database list, or a set of uploaded files, waiting for the user to choose the databases to
 // open. `choice` is built by buildListChoice or buildUploadChoice.
 function ChoicePanel({ choice, onBrowseEntries }) {
@@ -13,7 +11,6 @@ function ChoicePanel({ choice, onBrowseEntries }) {
           Browse entries
         </button>
       </div>
-      <EmptyState message="Choose databases in the list modal to open them." />
     </section>
   );
 }

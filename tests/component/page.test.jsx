@@ -267,6 +267,23 @@ describe('the page and the app model', () => {
     await waitFor(() => expect(scrolledTo).toContain('row-archive[alpha]:cheats'));
   });
 
+  test('once a database is loaded, the top of the page shrinks to its title and the spec link', async () => {
+    const url = 'https://example.com/hero.json';
+    const user = openPage('/', { [url]: { body: database('hero_db') } });
+    expect(screen.getByText('About MiSTer Downloader')).toBeTruthy();
+    expect(document.querySelector('.hero-copy')).not.toBeNull();
+
+    await user.type(screen.getByLabelText('URL'), url);
+    await user.click(screen.getByRole('button', { name: 'Fetch database' }));
+    expect(await screen.findByRole('heading', { name: 'hero_db' })).toBeTruthy();
+    expect(screen.queryByText('About MiSTer Downloader')).toBeNull();
+    expect(document.querySelector('.hero-copy')).toBeNull();
+    expect(screen.getByRole('heading', { level: 1, name: 'Custom Database Inspector' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Read the custom database spec' }).getAttribute('href')).toBe(
+      'https://github.com/MiSTer-devel/Downloader_MiSTer/blob/main/docs/custom-databases.md',
+    );
+  });
+
   test('an old link opens its database, and the address becomes its link', async () => {
     const url = 'https://example.com/old-link.json';
     openPage(`/?database-url=${encodeURIComponent(url)}&filter=arcade`, { [url]: { body: database('old_link_db') } });

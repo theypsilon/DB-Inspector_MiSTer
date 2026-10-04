@@ -35,11 +35,14 @@ describe('the ways to open a database', () => {
     expect(input.multiple).toBe(true);
     expect(document.querySelector('input[webkitdirectory]')).toBeNull();
     expect(screen.queryByRole('button', { name: /choose a folder/i })).toBeNull();
-    expect(text(document.querySelector('.dropzone'))).toContain('Drop several files or whole folders to choose among the databases they hold.');
+    expect(text(document.querySelector('.dropzone'))).toContain('Drop several files or whole folders to choose among their databases.');
 
+    // The button chooses files, and so does a click on the area that takes drops.
     const clicked = vi.spyOn(fileInputRef.current, 'click');
-    await user.click(screen.getByRole('button', { name: /Choose files/ }));
+    await user.click(screen.getByRole('button', { name: 'Choose files' }));
     expect(clicked).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByText('Drop files or folders here'));
+    expect(clicked).toHaveBeenCalledTimes(2);
 
     const files = [new File(['{}'], 'a.json'), new File(['{}'], 'b.json')];
     await user.upload(input, files);
