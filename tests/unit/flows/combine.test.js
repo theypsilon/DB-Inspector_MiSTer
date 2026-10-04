@@ -242,6 +242,71 @@ test('databases chosen together leave out those whose db_id is taken, and report
   assert.equal(app.search, `?database-url=${GAMMA_URL}`);
 });
 
+test('fetching the only loaded database again asks just whether to reload it', async () => {
+  const routes = { ...ROUTES };
+  app = await openApp('/', { routes });
+  await app.fetch(ALPHA_URL);
+  await app.typeFilter('arcade');
+  const loadedUrl = app.url;
+  const historyLength = app.historyLength;
+  // Alpha publishes a new version.
+  routes[ALPHA_URL] = { body: database('alpha', { 'cores/alpha-v2.rbf': { size: 11, hash: 'a2', tags: [0] } }) };
+
+  // A database cannot be combined with itself, so nothing asks whether to combine.
+  await app.fetch(ALPHA_URL);
+  assert.equal(app.prompt.kind, 'replaceLoaded');
+  assert.deepEqual(app.prompt.conflicts.map(({ dbId, reload }) => [dbId, reload]), [['alpha', true]]);
+  // The new version is asked for, not the browser's cached copy.
+  assert.deepEqual(app.browser.requests.at(-1), { url: ALPHA_URL, init: { redirect: 'follow', cache: 'no-cache' } });
+
+  await app.keepLoaded();
+  assert.equal(app.prompt, null);
+  assert.ok(app.view.files.includes('alpha.rbf'));
+  assert.ok(!app.view.files.includes('alpha-v2.rbf'));
+
+  await app.fetch(ALPHA_URL);
+  await app.reloadIt();
+  assert.equal(app.prompt, null);
+  assert.equal(app.view.heading, 'alpha');
+  assert.equal(app.view.combined, null);
+  assert.ok(app.view.files.includes('alpha-v2.rbf'));
+  assert.ok(!app.view.files.includes('alpha.rbf'));
+  // Reloading keeps FILTER and the address as they were.
+  assert.equal(app.filter, 'arcade');
+  assert.equal(app.url, loadedUrl);
+  assert.equal(app.historyLength, historyLength);
+});
+
+test('fetching one of several loaded databases again asks whether to combine, then whether to reload it', async () => {
+  const routes = { ...ROUTES };
+  app = await openApp('/', { routes });
+  await app.fetch(ALPHA_URL);
+  await app.fetch(BETA_URL);
+  await app.combine();
+  await app.giveOwnFilter('alpha');
+  await app.typeOwnFilter('alpha', 'console');
+  const combinedUrl = app.url;
+  routes[ALPHA_URL] = { body: database('alpha', { 'cores/alpha-v2.rbf': { size: 11, hash: 'a2', tags: [1] } }) };
+
+  await app.fetch(ALPHA_URL);
+  assert.equal(app.browser.requests.at(-1).init.cache, 'no-cache');
+  await app.combine();
+  assert.deepEqual(app.prompt.conflicts.map(({ dbId, reload }) => [dbId, reload]), [['alpha', true]]);
+  await app.reloadIt();
+
+  // The reloaded database keeps its place and its own filter.
+  assert.deepEqual(app.view.cards, ['alpha', 'beta']);
+  assert.ok(app.view.files.includes('alpha-v2.rbf'));
+  assert.equal(app.ownFilter('alpha'), 'console');
+  assert.equal(app.url, combinedUrl);
+
+  // Loading it alone still replaces every loaded database.
+  await app.fetch(ALPHA_URL);
+  await app.loadAlone();
+  assert.equal(app.view.heading, 'alpha');
+  assert.equal(app.search, `?database-url=${ALPHA_URL}`);
+});
+
 // A list's picker starts with one database per db_id selected.
 async function openAllSelected(count) {
   const picker = app.openChoice();

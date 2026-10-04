@@ -148,8 +148,14 @@ function startApp(browser) {
   async function answerReplaceQuestion(about, answerFor) {
     const prompt = model.getState().prompt;
     const count = prompt?.kind === 'replaceLoaded' ? prompt.conflicts.length : 0;
-    if (about === 'one' ? count !== 1 : count < 2) {
+    if (about === 'several' ? count < 2 : count !== 1) {
       throw new Error(`Expected a question about ${about} loaded database(s), got ${prompt?.kind ?? 'none'} about ${count}`);
+    }
+    // About one database, the question is whether to replace it, or to reload it when the new one
+    // is the loaded one again.
+    const reload = count === 1 && prompt.conflicts[0].reload;
+    if ((about === 'replace one' && reload) || (about === 'reload one' && !reload)) {
+      throw new Error(`Expected the question to ${about.split(' ')[0]} the loaded database, got the one to ${reload ? 'reload' : 'replace'} it`);
     }
     model.answerPrompt(answerFor(prompt.conflicts));
     await settle();
@@ -430,13 +436,16 @@ function startApp(browser) {
       return app.answer('loadMode', null);
     },
     // The answers of the question about loaded db_ids (ReplaceLoadedModal). About one database it
-    // offers "Keep the loaded one" and "Replace it"; about several, a checkbox each (all checked at
-    // first), Cancel and Continue.
+    // offers "Keep the loaded one" and "Replace it", or "Reload it" when the new database is the
+    // loaded one again; about several, a checkbox each (all checked at first), Cancel and Continue.
     keepLoaded() {
       return answerReplaceQuestion('one', () => new Set());
     },
     replaceIt() {
-      return answerReplaceQuestion('one', ([{ dbId }]) => new Set([dbId]));
+      return answerReplaceQuestion('replace one', ([{ dbId }]) => new Set([dbId]));
+    },
+    reloadIt() {
+      return answerReplaceQuestion('reload one', ([{ dbId }]) => new Set([dbId]));
     },
     continueReplacing(...checkedDbIds) {
       return answerReplaceQuestion('several', () => new Set(checkedDbIds));

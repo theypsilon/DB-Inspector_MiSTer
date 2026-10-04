@@ -7,8 +7,8 @@ const BASE_URL = 'http://[::1]:4173';
 
 export default defineConfig({
   testDir: './tests',
-  // Unit tests use node:test and run with `npm run test:unit`.
-  testIgnore: 'unit/**',
+  // Unit tests use node:test (`npm run test:unit`), and component tests Vitest (`npm run test:component`).
+  testIgnore: ['unit/**', 'component/**'],
   timeout: 60_000,
   expect: {
     timeout: 10_000,

@@ -26,6 +26,8 @@ import {
   buildUploadChoice,
   collectSelectedDatabases,
   findLoadedKeys,
+  isLoadedUrl,
+  isReloadOf,
   selectionIncludesLoadedDatabases,
 } from '../lib/selection.js';
 import {
@@ -513,7 +515,9 @@ export function createAppModel() {
   }
 
   // With databases loaded, a new source is read before anything is asked: a list with several
-  // entries opens its picker, and anything else asks whether to combine before `open` runs.
+  // entries opens its picker, and anything else asks whether to combine before `open` runs. The only
+  // loaded database, read again from its URL, cannot be combined with itself: it opens to be
+  // combined, which asks whether to reload it.
   async function readSourceThenAsk(ctx, message, read, open) {
     setState({ addingMessage: message, errorMessage: '' });
     let loadedSource;
@@ -529,6 +533,15 @@ export function createAppModel() {
     if (loadedSource.kind !== 'database' && loadedSource.entries.length > 1) {
       registerSourceInCatalog(ctx, loadedSource);
       showListChoice(loadedSource);
+      return;
+    }
+
+    if (
+      loadedSource.kind === 'database' &&
+      ctx.databases.length === 1 &&
+      isReloadOf(ctx.databases[0].inspection, loadedSource.inspection)
+    ) {
+      void open(loadedSource, 'add');
       return;
     }
 
@@ -1061,10 +1074,12 @@ export function createAppModel() {
       return;
     }
 
+    // A loaded URL fetched again is a reload, so the browser's cached copy will not do.
+    const reload = isLoadedUrl(ctx.databases, requestedUrl);
     void readSourceThenAsk(
       ctx,
       `Fetching ${requestedUrl}...`,
-      () => loadDatabaseSourceUrl(requestedUrl),
+      () => loadDatabaseSourceUrl(requestedUrl, { reload }),
       (loadedSource, mode) => openFetchedSource(ctx, requestedUrl, loadedSource, mode),
     );
   }

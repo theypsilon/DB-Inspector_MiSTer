@@ -34,7 +34,7 @@ export default [
   },
   {
     // Tests and tooling run in Node; Playwright specs also contain code evaluated in the page.
-    files: ['tests/**/*.js', '*.config.js'],
+    files: ['tests/**/*.{js,jsx}', '*.config.js'],
     languageOptions: {
       globals: { ...globals.node, ...globals.browser },
     },

@@ -47,6 +47,9 @@ const UPDATE_ALL_DATABASES_SOURCE_URL =
   'https://raw.githubusercontent.com/theypsilon/Update_All_MiSTer/master/src/update_all/databases.py';
 const MULTIDATABASES_CATALOG_SOURCE_URL =
   'https://raw.githubusercontent.com/theypsilon/MultiDatabases_MiSTer/main/README.md';
+// The path of a GitHub release download: <owner>/<repo>/releases/latest/download/<file>, or
+// <owner>/<repo>/releases/download/<tag>/<file>.
+const GITHUB_RELEASE_DOWNLOAD_PATH = /^\/[^/]+\/[^/]+\/releases\/(?:latest\/download|download\/[^/]+)\/([^/]+)$/;
 
 export async function loadDatabaseSourceFile(file) {
   return loadDatabaseSourceBytes(new Uint8Array(await file.arrayBuffer()), file.name);
@@ -108,10 +111,12 @@ export function isDownloaderDatabase(json) {
   );
 }
 
-export async function loadDatabaseSourceUrl(input) {
+// Loads the source at `input`. A reload asks the website again instead of reusing the browser's
+// cached copy.
+export async function loadDatabaseSourceUrl(input, { reload = false } = {}) {
   const requestedUrl = normalizeSupportedSourceUrl(input);
   const resolvedUrl = resolveRemoteSourceUrl(requestedUrl);
-  const decoded = await fetchSupportedSource(resolvedUrl);
+  const decoded = await fetchSupportedSource(resolvedUrl, { reload });
 
   return buildLoadedSource(decoded, {
     sourceKind: 'url',
@@ -315,8 +320,8 @@ function resolveRemoteSourceUrl(url) {
   return REMOTE_SOURCE_URL_ALIASES.get(url) ?? url;
 }
 
-async function fetchSupportedSource(url) {
-  const { bytes, fallbackName, finalUrl } = await fetchSourceBytes(url);
+async function fetchSupportedSource(url, { reload = false } = {}) {
+  const { bytes, fallbackName, finalUrl } = await fetchSourceBytes(url, { reload });
   const decoded = decodeSupportedSource(bytes, fallbackName, {
     baseUrl: finalUrl,
   });
@@ -337,8 +342,8 @@ async function fetchJsonish(url) {
   };
 }
 
-async function fetchSourceBytes(url) {
-  const response = await fetchRemoteResource(url);
+async function fetchSourceBytes(url, { reload = false } = {}) {
+  const response = await fetchRemoteResource(url, { reload });
   if (!response.ok) {
     throw new Error(`Request failed with ${response.status} ${response.statusText}.`);
   }
@@ -350,19 +355,61 @@ async function fetchSourceBytes(url) {
   };
 }
 
-async function fetchRemoteResource(url) {
+async function fetchRemoteResource(url, { reload = false } = {}) {
   try {
-    return await fetch(url, { redirect: 'follow' });
+    return await fetch(url, reload ? { redirect: 'follow', cache: 'no-cache' } : { redirect: 'follow' });
   } catch (error) {
     if (error instanceof TypeError) {
+      const release = findGitHubReleaseDownload(url);
       throw new Error(
-        `Could not open ${url} in the browser. The website may block direct access or be temporarily unavailable.`,
+        release
+          ? `GitHub does not let websites read release downloads, so ${url} cannot be opened in the browser. Download ${release.fileName} and drag it into Upload to inspect it.`
+          : `Could not open ${url} in the browser. The website may block direct access or be temporarily unavailable.`,
         { cause: error },
       );
     }
 
     throw error;
   }
+}
+
+// A GitHub release download ({ url, fileName }), or null when `url` is not one. GitHub sends no CORS
+// headers for release downloads, at any step of their redirects, so browsers cannot read them: they
+// can only be downloaded.
+export function findGitHubReleaseDownload(url) {
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(String(url).trim());
+  } catch {
+    return null;
+  }
+
+  const match = GITHUB_RELEASE_DOWNLOAD_PATH.exec(parsedUrl.pathname);
+  if (parsedUrl.protocol !== 'https:' || !['github.com', 'www.github.com'].includes(parsedUrl.hostname) || !match) {
+    return null;
+  }
+
+  let fileName = match[1];
+  try {
+    fileName = decodeURIComponent(fileName);
+  } catch {
+    // A name with a stray % stays as written.
+  }
+
+  return { url: parsedUrl.toString(), fileName };
+}
+
+// The GitHub release downloads named in a message, such as the errors of the sources that failed.
+export function findGitHubReleaseDownloads(message) {
+  const downloads = [];
+  for (const [candidate] of String(message).matchAll(/https:\/\/(?:www\.)?github\.com\/\S+/g)) {
+    const download = findGitHubReleaseDownload(candidate.replace(/[.,;:)]+$/, ''));
+    if (download && !downloads.some(({ url }) => url === download.url)) {
+      downloads.push(download);
+    }
+  }
+
+  return downloads;
 }
 
 function decodeSupportedSource(bytes, sourceName, { baseUrl = null } = {}) {

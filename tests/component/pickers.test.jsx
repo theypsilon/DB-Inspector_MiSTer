@@ -1,0 +1,239 @@
+import { describe, expect, test, vi } from 'vitest';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { strToU8 } from 'fflate';
+
+import CatalogPickerModal from '../../src/components/modals/CatalogPickerModal.jsx';
+import SourcePickerModal from '../../src/components/modals/SourcePickerModal.jsx';
+import { loadDatabaseSourceBytes } from '../../src/lib/database.js';
+import { UPDATE_ALL_DEFAULT_DATABASES, buildListChoice, buildUploadChoice } from '../../src/lib/selection.js';
+import { scanUploads } from '../../src/lib/uploads.js';
+import { text } from './support.js';
+
+const defaultUrl = (dbId) => UPDATE_ALL_DEFAULT_DATABASES.find((database) => database.dbId === dbId).dbUrl;
+const catalogEntry = (dbId, title, dbUrl, extra = {}) => ({ key: `url:${dbUrl}`, dbId, title, dbUrl, ...extra });
+
+// The catalog as Update All lists it: Edge Linux comes before the pinned Main Distribution.
+const UPDATE_ALL = catalogEntry('update_all_mister', 'Update All files', defaultUrl('update_all_mister'));
+const EDGE = catalogEntry('distribution_mister', 'Main Distribution: MiSTer-devel (Edge Linux)', 'https://example.com/edge/db.json.zip');
+const PINNED = catalogEntry('distribution_mister', 'Main Distribution: MiSTer-devel', defaultUrl('distribution_mister'));
+const JTCORES = catalogEntry('jtcores', 'JTCORES for MiSTer', defaultUrl('jtcores'));
+const ARCADE = catalogEntry('arcade_roms_db', 'Arcade ROMs Database', 'https://example.com/arcade.json');
+const COIN_OP = catalogEntry('Coin-OpCollection/Distribution-MiSTerFPGA', 'Coin-Op Collection', defaultUrl('Coin-OpCollection/Distribution-MiSTerFPGA'));
+const EXTRA = catalogEntry('MultiDatabases/extra', 'Extra', 'https://example.com/extra/db.json', { dbIdApproximate: true });
+const CATALOG = [UPDATE_ALL, EDGE, PINNED, JTCORES, ARCADE, COIN_OP, EXTRA];
+const UPDATE_ALL_DEFAULTS = [
+  'Update All files (update_all_mister)',
+  'Main Distribution: MiSTer-devel (distribution_mister)',
+  'JTCORES for MiSTer (jtcores)',
+  'Coin-Op Collection (Coin-OpCollection/Distribution-MiSTerFPGA)',
+];
+const EDGE_NAME = 'Main Distribution: MiSTer-devel (Edge Linux) (distribution_mister)';
+
+function renderCatalog({ options = CATALOG, loadedDatabases = [] } = {}) {
+  const props = { onClose: vi.fn(), onOpenDatabases: vi.fn() };
+  render(<CatalogPickerModal options={options} status="ready" error="" loadedDatabases={loadedDatabases} {...props} />);
+  return { ...props, dialog: screen.getByRole('dialog', { name: 'Browse database catalog' }), user: userEvent.setup() };
+}
+
+const selectedNames = (dialog) =>
+  within(dialog)
+    .getAllByRole('checkbox')
+    .filter((box) => box.checked && box.getAttribute('aria-label'))
+    .map((box) => box.getAttribute('aria-label'));
+
+describe('the catalog picker', () => {
+  test('starts with nothing selected, selects the Update All defaults, and opens them after closing', async () => {
+    const { dialog, user, onClose, onOpenDatabases } = renderCatalog();
+    expect(text(dialog)).toContain('7 of 7 entries');
+    expect(text(dialog.querySelector('.modal-selected'))).toContain('No databases selected.');
+    expect(within(dialog).getByRole('button', { name: 'Open selected databases' }).disabled).toBe(true);
+
+    await user.click(within(dialog).getByRole('button', { name: 'Select Update All defaults' }));
+    expect(selectedNames(dialog)).toEqual(UPDATE_ALL_DEFAULTS);
+    expect(text(dialog.querySelector('.modal-selected'))).toContain('4 databases');
+    expect([...dialog.querySelectorAll('.selection-chips .db-chip')].map(text)).toEqual([
+      'update_all_mister',
+      'distribution_mister',
+      'jtcores',
+      'Coin-OpCollection/Distribution-MiSTerFPGA',
+    ]);
+
+    await user.click(within(dialog).getByRole('button', { name: 'Open 4 selected databases' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onOpenDatabases).toHaveBeenCalledTimes(1));
+    expect(onOpenDatabases.mock.calls[0][0].map(({ dbId }) => dbId)).toEqual([
+      'update_all_mister',
+      'distribution_mister',
+      'jtcores',
+      'Coin-OpCollection/Distribution-MiSTerFPGA',
+    ]);
+  });
+
+  test('asks before replacing a selected db_id, and Escape answers only that question', async () => {
+    const { dialog, user } = renderCatalog();
+    // The page closes its dialogs on Escape; the question must keep it from seeing that one.
+    const pageEscape = vi.fn();
+    window.addEventListener('keydown', pageEscape);
+    try {
+      await user.click(within(dialog).getByRole('button', { name: 'Select Update All defaults' }));
+      const edge = within(dialog).getByRole('checkbox', { name: EDGE_NAME });
+
+      await user.click(edge);
+      const conflict = screen.getByRole('dialog', { name: 'Replace the selected database?' });
+      expect(text(conflict)).toContain('Another selected database has the db_id distribution_mister.');
+      await user.keyboard('{Escape}');
+      expect(screen.queryByRole('dialog', { name: 'Replace the selected database?' })).toBeNull();
+      expect(pageEscape).not.toHaveBeenCalled();
+      expect(edge.checked).toBe(false);
+
+      await user.click(edge);
+      await user.click(within(screen.getByRole('dialog', { name: 'Replace the selected database?' })).getByRole('button', { name: 'Cancel' }));
+      expect(edge.checked).toBe(false);
+      expect(within(dialog).getByRole('checkbox', { name: UPDATE_ALL_DEFAULTS[1] }).checked).toBe(true);
+
+      await user.click(edge);
+      await user.click(within(screen.getByRole('dialog', { name: 'Replace the selected database?' })).getByRole('button', { name: 'Replace' }));
+      expect(selectedNames(dialog)).toEqual([UPDATE_ALL_DEFAULTS[0], EDGE_NAME, UPDATE_ALL_DEFAULTS[2], UPDATE_ALL_DEFAULTS[3]]);
+    } finally {
+      window.removeEventListener('keydown', pageEscape);
+    }
+  });
+
+  test('select all picks one database per db_id: the one chosen, else the Update All default', async () => {
+    const { dialog, user } = renderCatalog();
+    const all = [UPDATE_ALL_DEFAULTS[0], UPDATE_ALL_DEFAULTS[1], UPDATE_ALL_DEFAULTS[2], 'Arcade ROMs Database (arcade_roms_db)', UPDATE_ALL_DEFAULTS[3], 'Extra (MultiDatabases/extra)'];
+
+    await user.click(within(dialog).getByRole('button', { name: 'Select all' }));
+    expect(selectedNames(dialog)).toEqual(all);
+    await user.click(within(dialog).getByRole('button', { name: 'Select none' }));
+    expect(selectedNames(dialog)).toEqual([]);
+
+    await user.click(within(dialog).getByRole('checkbox', { name: EDGE_NAME }));
+    await user.click(within(dialog).getByRole('button', { name: 'Select all' }));
+    expect(selectedNames(dialog)).toEqual([all[0], EDGE_NAME, ...all.slice(2)]);
+  });
+
+  test('marks loaded databases and approximate IDs, and counts the selection on its Open button', async () => {
+    const { dialog, user } = renderCatalog({ loadedDatabases: [{ inspection: { source: { sourceLabel: ARCADE.dbUrl } } }] });
+    const option = (title) => [...dialog.querySelectorAll('.catalog-option')].find((element) => text(element).includes(title));
+
+    expect(text(option('Arcade ROMs Database'))).toContain('Loaded');
+    expect(dialog.querySelectorAll('.catalog-loaded-badge')).toHaveLength(1);
+    expect(text(option('Extra'))).toContain('Approximate ID');
+    expect(text(option('Extra').querySelector('[role="tooltip"]'))).toBe('The real database ID will be determined when the database is opened.');
+    expect(text(dialog)).toContain('Entries marked “Approximate ID” use the folder from their database URL');
+
+    await user.click(within(dialog).getByRole('checkbox', { name: 'Extra (MultiDatabases/extra)' }));
+    expect(text(dialog.querySelector('.modal-selected'))).toContain('MultiDatabases/extra');
+    expect(text(dialog.querySelector('.modal-selected'))).toContain('Approximate ID');
+    expect(within(dialog).getByRole('button', { name: 'Open selected database' }).disabled).toBe(false);
+  });
+
+  test('searching narrows the list by db_id, title or URL', async () => {
+    const { dialog, user } = renderCatalog();
+    await user.type(within(dialog).getByLabelText('Search catalog'), 'jotego');
+    await waitFor(() => expect(text(dialog)).toContain('1 of 7 entries'), { timeout: 2000 });
+    expect(dialog.querySelectorAll('.catalog-option')).toHaveLength(1);
+    expect(within(dialog).getByRole('checkbox', { name: 'JTCORES for MiSTer (jtcores)' })).toBeTruthy();
+  });
+
+  test('with many selected, names ten and counts the rest, and reviewing lists only them', async () => {
+    const many = Array.from({ length: 12 }, (_, index) => catalogEntry(`db_${index}`, `Database ${index}`, `https://example.com/db_${index}.json`));
+    const twin = catalogEntry('db_0', 'Database 0 fork', 'https://example.com/fork.json');
+    const { dialog, user } = renderCatalog({ options: [...many, twin] });
+
+    await user.click(within(dialog).getByRole('button', { name: 'Select all' }));
+    const summary = dialog.querySelector('.modal-selected');
+    expect(text(summary)).toContain('12 databases');
+    expect(summary.querySelectorAll('.selection-chips .db-chip')).toHaveLength(10);
+
+    await user.click(within(summary).getByRole('button', { name: '+2 more' }));
+    expect(text(dialog)).toContain('12 of 13 entries');
+    expect(dialog.querySelectorAll('.catalog-option')).toHaveLength(12);
+    await user.click(within(dialog).getByRole('checkbox', { name: 'Database 0 (db_0)' }));
+    expect(dialog.querySelectorAll('.catalog-option')).toHaveLength(12);
+    expect(text(summary)).toContain('11 databases');
+
+    await user.click(within(summary).getByRole('button', { name: 'Show all entries' }));
+    expect(text(dialog)).toContain('13 of 13 entries');
+    expect(within(summary).getByRole('button', { name: 'Review selected' })).toBeTruthy();
+  });
+});
+
+describe('the picker of a database list', () => {
+  async function listChoice(ini) {
+    return buildListChoice(await loadDatabaseSourceBytes(strToU8(ini), 'downloader.ini'));
+  }
+
+  test('starts with all its databases selected and its [mister] filter applied, which can be unchecked', async () => {
+    const choice = await listChoice('[mister]\nfilter=arcade\n\n[jtcores]\ndb_url=https://example.com/jt.json\nfilter=[mister] console\n\n[arcade_roms_db]\ndb_url=https://example.com/arcade.json\n');
+    const onOpenDatabases = vi.fn();
+    render(<SourcePickerModal choice={choice} loadedDatabases={[]} onClose={() => {}} onOpenDatabases={onOpenDatabases} />);
+    const dialog = screen.getByRole('dialog', { name: 'Choose databases from this list' });
+    const user = userEvent.setup();
+
+    const mister = within(dialog).getByLabelText(/^Apply the \[mister\] filter/);
+    expect(mister.checked).toBe(true);
+    expect(text(dialog.querySelector('.mister-option code'))).toBe('arcade');
+    expect(text(dialog.querySelector('.catalog-option'))).toContain('Own filter: [mister] console');
+    expect(selectedNames(dialog)).toEqual(['jtcores', 'arcade_roms_db']);
+
+    await user.click(within(dialog).getByRole('button', { name: 'Open 2 selected databases' }));
+    await waitFor(() => expect(onOpenDatabases).toHaveBeenCalledTimes(1));
+    expect(onOpenDatabases.mock.calls[0][1]).toEqual({ misterFilter: 'arcade' });
+
+    await user.click(mister);
+    await user.click(within(dialog).getByRole('button', { name: 'Open 2 selected databases' }));
+    await waitFor(() => expect(onOpenDatabases).toHaveBeenCalledTimes(2));
+    expect(onOpenDatabases.mock.calls[1][1]).toEqual({ misterFilter: null });
+  });
+});
+
+describe('the picker of uploaded files', () => {
+  const file = (path, content) => ({ file: new File([typeof content === 'string' ? content : JSON.stringify(content)], path.split('/').at(-1)), path });
+  const database = (dbId) => ({ db_id: dbId, v: 1, timestamp: 1, files: {}, folders: {} });
+
+  test('names each database by where it came from', async () => {
+    const choice = buildUploadChoice(await scanUploads([file('a.json', database('alpha')), file('b.json', database('beta'))]));
+    render(<SourcePickerModal choice={choice} loadedDatabases={[]} onClose={() => {}} onOpenDatabases={() => {}} />);
+    const dialog = screen.getByRole('dialog', { name: 'Choose databases from your files' });
+
+    expect(text(dialog.querySelector('.catalog-option'))).toContain('From a.json');
+    expect(selectedNames(dialog)).toEqual(['alpha (a.json)', 'beta (b.json)']);
+  });
+
+  test('names the list whose [mister] filter it offers', async () => {
+    const choice = buildUploadChoice(
+      await scanUploads([file('a.json', database('alpha')), file('list.ini', '[mister]\nfilter=arcade\n\n[gamma]\ndb_url=https://example.com/gamma.json\n')]),
+    );
+    render(<SourcePickerModal choice={choice} loadedDatabases={[]} onClose={() => {}} onOpenDatabases={() => {}} />);
+    const dialog = screen.getByRole('dialog', { name: 'Choose databases from your files' });
+
+    expect(within(dialog).getByLabelText(/^Apply the \[mister\] filter/).checked).toBe(true);
+    expect(text(dialog.querySelector('.mister-option'))).toContain('From list.ini');
+  });
+
+  test('lets one of several [mister] filters, or none, apply', async () => {
+    const choice = buildUploadChoice(
+      await scanUploads([
+        file('lists/a/downloader.ini', '[mister]\nfilter=arcade\n\n[gamma]\ndb_url=https://example.com/gamma.json\n'),
+        file('lists/b/other.ini', '[mister]\nfilter=console\n\n[alpha_list]\ndb_url=https://example.com/alpha.json\n'),
+      ]),
+    );
+    const onOpenDatabases = vi.fn();
+    render(<SourcePickerModal choice={choice} loadedDatabases={[]} onClose={() => {}} onOpenDatabases={onOpenDatabases} />);
+    const dialog = screen.getByRole('dialog', { name: 'Choose databases from your files' });
+    const user = userEvent.setup();
+
+    const choices = within(within(dialog).getByRole('group', { name: '[mister] sections' })).getAllByRole('radio');
+    expect(choices).toHaveLength(3);
+    expect(choices[0].checked).toBe(true);
+    expect(text(dialog.querySelector('.mister-option'))).toContain('From lists/a/downloader.ini');
+
+    await user.click(choices[1]);
+    await user.click(within(dialog).getByRole('button', { name: 'Open 2 selected databases' }));
+    await waitFor(() => expect(onOpenDatabases).toHaveBeenCalledTimes(1));
+    expect(onOpenDatabases.mock.calls[0][1]).toEqual({ misterFilter: 'console' });
+  });
+});

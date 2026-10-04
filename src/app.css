@@ -288,6 +288,7 @@ fieldset.mister-option legend { float: left; width: 100%; padding: 0; }
 .status { margin: 0; font-weight: 700; }
 .status.loading { color: var(--accent-strong); }
 .status.error { color: var(--danger); }
+.status-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
 
 /* Overview */
 .overview-panel { display: grid; gap: 1rem; }

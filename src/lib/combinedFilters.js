@@ -1,4 +1,5 @@
 import { normalizeFilterPromptValue, resolveDownloaderFilter, resolveEffectiveDefaultFilter } from './filterDefaults.js';
+import { isReloadOf } from './selection.js';
 
 // The filters of combined databases, as in downloader.ini: a shared filter (the [mister] filter)
 // and each database's own filter, by db_id. Filters are { isSet, value }; a set filter applies
@@ -102,14 +103,15 @@ export function startSession(items, sharedFilter) {
 }
 
 // The loaded databases that some of `items` share a db_id with: for each such db_id, the loaded
-// database and the first item that would replace it.
+// database and the first item that would replace it, and whether that item is the loaded database
+// again (from the same URL), which replacing would reload.
 export function findLoadedDbIdConflicts(databases, items) {
   const conflicts = [];
   for (const item of items) {
     const dbId = item.inspection.overview.dbId;
     const loaded = databases.find(({ inspection }) => inspection.overview.dbId === dbId);
     if (loaded && !conflicts.some((conflict) => conflict.dbId === dbId)) {
-      conflicts.push({ dbId, loaded, incoming: item });
+      conflicts.push({ dbId, loaded, incoming: item, reload: isReloadOf(loaded.inspection, item.inspection) });
     }
   }
 

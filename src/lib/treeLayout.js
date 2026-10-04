@@ -211,6 +211,14 @@ export function getMeasurementScrollDelta({
   });
 }
 
+// What is left to scroll of a re-measurement's `delta` once its heights apply: when they make the
+// page shorter than its scroll position allows, as at the bottom of the page, the browser pulls the
+// scroll position back by itself (from `scrollYBefore` to `scrollYAfter`), and that already moved
+// the rows.
+export function getRemainingScrollAnchorDelta({ delta, scrollYBefore, scrollYAfter }) {
+  return delta - (scrollYAfter - scrollYBefore);
+}
+
 // Whether to scroll by a re-measurement's delta: not on touch devices, not for a couple of pixels,
 // and not while a jump to a row is settling.
 export function shouldApplyScrollAnchor(delta, { touchDevice, suppressed }) {

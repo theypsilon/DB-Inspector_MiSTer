@@ -8,7 +8,17 @@ import { filterHelpClauses } from '../../../src/lib/filterHelp.js';
 import { nextInfoHintOpen } from '../../../src/lib/interactions.js';
 import { findSearchMatches, nextMatchIndex } from '../../../src/lib/search.js';
 import { collectVisibleRowIds, findAncestorIds } from '../../../src/lib/treeIndex.js';
-import { buildVirtualRowLayout, buildVirtualRows, getRowJumpScrollTop } from '../../../src/lib/treeLayout.js';
+import {
+  buildVirtualRowLayout,
+  buildVirtualRows,
+  estimateRowHeight,
+  getMeasurementScrollDelta,
+  getRemainingScrollAnchorDelta,
+  getRowJumpScrollTop,
+  getRowMeasurementKey,
+  mergeMeasuredHeights,
+  shouldApplyScrollAnchor,
+} from '../../../src/lib/treeLayout.js';
 import { parseNodeAnchor } from '../../../src/lib/urlState.js';
 import {
   CLUSTER_SIZE_OPTIONS,
@@ -161,6 +171,21 @@ describe('remote loading', () => {
     await app.forward();
     assert.equal(app.view.heading, 'without_filter_db');
     assert.equal(app.databaseUrl, ENTRY_WITHOUT_FILTER_URL);
+  });
+
+  test('GitHub release downloads, which browsers cannot read, say how to inspect them anyway', async () => {
+    const releaseUrl = 'https://github.com/example-owner/example-repo/releases/latest/download/db.json.zip';
+    const guidance = `GitHub does not let websites read release downloads, so ${releaseUrl} cannot be opened in the browser. Download db.json.zip and drag it into Upload to inspect it.`;
+    // GitHub sends no CORS headers for them, so the browser blocks them: there is no route.
+    app = await openApp(`/?database-url=${encodeURIComponent(releaseUrl)}`, { routes: ROUTES });
+    assert.equal(app.view.heading, null);
+    assert.equal(app.errorMessage, guidance);
+
+    await app.fetch(ENTRY_WITH_FILTER_URL);
+    await app.fetch(releaseUrl);
+    assert.equal(app.prompt, null);
+    assert.equal(app.view.heading, 'with_filter_db');
+    assert.equal(app.errorMessage, guidance);
   });
 
   test('GitHub-hosted databases link to their source repository', async () => {
@@ -322,6 +347,57 @@ describe('navigation in large trees', () => {
     assert.ok(!atTop.includes(FAR_ROW_ID));
     assert.ok(afterJump.includes(FAR_ROW_ID));
     assertInViewport(topAfterJump);
+  });
+
+  // Opening search from the footer leaves the page at its bottom, where the last row already shows.
+  // The rows rendered there then report heights shorter than their estimates, so the page gets
+  // shorter and the browser pulls its scroll position back; the measurement's scroll anchoring
+  // scrolls only what is left (useVirtualRowWindow), and the row stays on screen.
+  test('a row on screen at the bottom of the page stays there when the rows around it measure shorter', async () => {
+    app = await openApp('/');
+    await app.upload(file('large.json', buildLargeDatabase()));
+    const { rootIds, rowsById } = app.view.filesystemIndex;
+    const rowIds = collectVisibleRowIds(rootIds, rowsById, new Set());
+    const layoutFor = (measuredHeights) =>
+      buildVirtualRowLayout({ rowIds, rowsById, collapsedIds: new Set(), detailOverrides: new Map(), defaultDetailed: false, measuredHeights });
+    // The tree's place in the page, and what follows it (the issues and the footer).
+    const treeTop = 1500;
+    const belowTree = 250;
+    const maxScrollY = (layout) => treeTop + layout.totalHeight + belowTree - VIEWPORT_HEIGHT;
+    const rowTop = (layout, scrollY) => treeTop + layout.offsets[layout.rowIndexById.get(FAR_ROW_ID)] - scrollY;
+
+    const estimated = layoutFor(new Map());
+    const scrollY = maxScrollY(estimated);
+    assertInViewport(rowTop(estimated, scrollY));
+
+    const rendered = buildVirtualRows({ layout: estimated, rowsById, containerTop: treeTop, scrollY, viewportHeight: VIEWPORT_HEIGHT }).items;
+    const measured = mergeMeasuredHeights(
+      new Map(),
+      rendered.map(({ rowId }) => {
+        const row = rowsById.get(rowId);
+        const estimate = estimateRowHeight(row, { collapsed: false, detailsVisible: false });
+        return [getRowMeasurementKey(rowId, { collapsed: false, detailsVisible: false }), Math.round(estimate * 0.6)];
+      }),
+    );
+    const next = layoutFor(measured);
+    const delta = getMeasurementScrollDelta({
+      rowIds,
+      rowsById,
+      collapsedIds: new Set(),
+      detailOverrides: new Map(),
+      defaultDetailed: false,
+      currentMeasuredHeights: new Map(),
+      nextMeasuredHeights: measured,
+      viewportTop: scrollY - treeTop,
+    });
+    // The page got shorter than its scroll position allows: the browser pulls it back.
+    const scrollYAfter = Math.min(scrollY, maxScrollY(next));
+    assert.ok(scrollYAfter < scrollY);
+    const remaining = getRemainingScrollAnchorDelta({ delta, scrollYBefore: scrollY, scrollYAfter });
+    const finalScrollY = shouldApplyScrollAnchor(remaining, { touchDevice: false, suppressed: false })
+      ? Math.max(0, Math.min(maxScrollY(next), scrollYAfter + remaining))
+      : scrollYAfter;
+    assertInViewport(rowTop(next, finalScrollY));
   });
 
   test('URL anchors open a row far outside the rendered rows', async () => {

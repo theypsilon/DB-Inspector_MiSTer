@@ -1,0 +1,223 @@
+import { expect, test } from '@playwright/test';
+
+// A database opened from a shared link, in a real browser: its default FILTER and the address,
+// the detailed toggle, size hints and downloads, find-in-page with its highlights and row flash,
+// section and row anchors across a reload, and back/forward between databases.
+
+const SHARED_URL = 'https://raw.githubusercontent.com/example-owner/example-repo/main/db.json';
+const SECOND_URL = 'https://example.com/second.json';
+
+function database(dbId, extra = {}) {
+  return {
+    db_id: dbId,
+    v: 1,
+    timestamp: 1710000000,
+    base_files_url: 'https://example.com/base/',
+    tag_dictionary: { essential: 0, arcade: 1, console: 2 },
+    files: {
+      'cores/essential.rbf': { size: 1024, hash: 'h1', tags: [0] },
+      'cores/arcade.rbf': { size: 2048, hash: 'h2', tags: [1] },
+      'cores/console.rbf': { size: 3000, hash: 'h3', tags: [2] },
+      'docs/notes.txt': { size: 10, hash: 'h4', url: 'https://example.com/files/notes.txt' },
+    },
+    folders: { 'cores/': {}, 'docs/': {} },
+    archives: {
+      flows_archive: {
+        description: 'Flows archive',
+        format: 'zip',
+        extract: 'selective',
+        target_folder: 'games/flows/',
+        archive_file: { url: 'https://example.com/flows.zip', size: 4096, hash: 'ah' },
+        summary_inline: { files: { 'games/flows/untagged.bin': { arc_id: 'flows_archive', arc_at: 'untagged.bin', size: 100 } }, folders: {} },
+      },
+    },
+    ...extra,
+  };
+}
+
+test.beforeEach(async ({ page }) => {
+  const json = (body) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  await page.route(SHARED_URL, (route) => route.fulfill(json(database('shared_db', { default_options: { filter: 'arcade' } }))));
+  await page.route(SECOND_URL, (route) => route.fulfill(json(database('second_db'))));
+});
+
+test('a shared link opens its database, and the page around it works', async ({ page }) => {
+  // The page clock runs normally, except while the find step stops it to time the row flash.
+  await page.clock.install();
+  await page.goto(`/?database-url=${encodeURIComponent(SHARED_URL)}`);
+  const filter = page.getByLabel('FILTER');
+  const heading = (name) => page.getByRole('heading', { name, exact: true });
+
+  await test.step('the database opens with its default FILTER and a link to its repository', async () => {
+    await expect(heading('shared_db')).toBeVisible();
+    await expect(page.locator('.github-repo-link')).toHaveText('example-owner/example-repo');
+    await expect(page.locator('.github-repo-link')).toHaveAttribute('href', 'https://github.com/example-owner/example-repo');
+    await expect(filter).toHaveValue('arcade');
+    await expect(heading('arcade.rbf')).toBeVisible();
+    await expect(heading('console.rbf')).toHaveCount(0);
+    expect(page.url()).not.toContain('filter=');
+  });
+
+  await test.step('FILTER follows into the address, Clear restores the default, and an empty FILTER shows everything', async () => {
+    await filter.fill('console');
+    await expect(heading('console.rbf')).toBeVisible();
+    await expect(heading('arcade.rbf')).toHaveCount(0);
+    await expect.poll(() => page.url()).toContain('filter=console');
+
+    await page.getByRole('button', { name: 'Clear' }).click();
+    await expect(filter).toHaveValue('arcade');
+    await expect.poll(() => page.url()).not.toContain('filter=');
+
+    await filter.fill('');
+    await expect(page.getByText(/^Showing the full database: \d+ files/)).toBeVisible();
+    await expect(heading('console.rbf')).toBeVisible();
+    await expect.poll(() => page.url()).toContain('filter=');
+    await page.getByRole('button', { name: 'Clear' }).click();
+    await expect(filter).toHaveValue('arcade');
+  });
+
+  await test.step('the detailed toggle shows details and keeps the choice in the address', async () => {
+    const toggle = page.locator('.overview-controls').getByRole('button', { name: 'Detailed toggle' });
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    await expect.poll(() => new URL(page.url()).searchParams.has('detailed')).toBe(true);
+    await expect(page.locator('.tree-entry', { has: heading('arcade.rbf') }).getByText('MD5 HASH')).toBeVisible();
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    await expect.poll(() => new URL(page.url()).searchParams.has('detailed')).toBe(false);
+  });
+
+  await test.step('size hints open on click and close when the pointer leaves, and the cluster size changes the estimate', async () => {
+    const size = page.locator('.disk-usage-value');
+    await size.click();
+    await expect(size).toHaveAttribute('data-open', '');
+    await page.mouse.move(0, 0);
+    await expect(size).not.toHaveAttribute('data-open', '');
+    await size.click();
+    await expect(size).toHaveAttribute('data-open', '');
+    await filter.focus();
+    await expect(size).not.toHaveAttribute('data-open', '');
+    const before = await size.textContent();
+    await page.getByLabel('Cluster size', { exact: true }).selectOption(String(4096));
+    await expect(size).not.toHaveText(before);
+  });
+
+  await test.step('files the browser can show open in a new tab; binaries only download', async () => {
+    const notes = page.locator('.tree-entry', { has: heading('notes.txt') });
+    await expect(notes.getByRole('link', { name: 'OPEN' })).toHaveAttribute('href', 'https://example.com/files/notes.txt');
+    await expect(notes.getByRole('button', { name: 'Download' })).toBeVisible();
+    const binary = page.locator('.tree-entry', { has: heading('essential.rbf') });
+    await expect(binary.getByRole('link', { name: 'OPEN' })).toHaveCount(0);
+  });
+
+  await test.step('the essential hint searches the page, highlighting every match and flashing the tree row it jumps to', async () => {
+    await page.locator('#filter-essential-hint').click();
+    const findInput = page.getByLabel('Search text');
+    await expect(findInput).toHaveValue('essential');
+    await expect(page.locator('.find-bar-count')).toHaveText('1 of 3');
+    await expect.poll(() => readHighlight(page, 'search-match')).toEqual(['essential']);
+
+    // From here the page's time moves only when the test moves it, so however slowly the page runs,
+    // the flash is timed exactly.
+    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1_000));
+    await findInput.press('Enter');
+    await expect(page.locator('.find-bar-count')).toHaveText('2 of 3');
+    // The jump lands after the next paint, and the row's text takes the highlight: the page's time
+    // moves a frame at a time until it does.
+    await expect
+      .poll(async () => {
+        await page.clock.runFor(16);
+        return [...new Set(await readHighlightOwners(page, 'search-match'))];
+      })
+      .toEqual(['row-database:file:cores/essential.rbf']);
+    const row = page.locator('[id="row-database:file:cores/essential.rbf"]');
+    await expect(row).toHaveClass(/tree-entry-highlighted/);
+    await expect.poll(() => readHighlight(page, 'search-match-all-filter')).toEqual(['essential']);
+    await expect.poll(() => readHighlight(page, 'search-match-all-tags')).toEqual(['essential']);
+
+    // Waiting for the jump took at most a few frames, so the flash is still on well before its three
+    // seconds end, and over after them.
+    await page.clock.runFor(1_400);
+    await expect(row).toHaveClass(/tree-entry-highlighted/);
+    await page.clock.runFor(2_000);
+    await expect(row).not.toHaveClass(/tree-entry-highlighted/);
+    // The row's text stays highlighted after its flash.
+    await expect.poll(async () => [...new Set(await readHighlightOwners(page, 'search-match'))]).toEqual(['row-database:file:cores/essential.rbf']);
+    await page.clock.resume();
+
+    await findInput.press('Escape');
+    await expect(page.getByRole('search')).toHaveCount(0);
+    await expect.poll(() => readHighlight(page, 'search-match')).toBeNull();
+    await expect(page.locator('.tree-entry-highlighted')).toHaveCount(0);
+
+    // Closing search right after a jump leaves nothing behind, not even what the jump does later.
+    // Unlike fastForward, runFor also runs the timers those timers start, so the jump's later
+    // scrolls end here rather than in the next step.
+    await page.locator('#filter-essential-hint').click();
+    await findInput.press('Enter');
+    await findInput.press('Escape');
+    await page.clock.runFor(1_500);
+    expect(await readHighlight(page, 'search-match')).toBeNull();
+    await expect(page.locator('.tree-entry-highlighted')).toHaveCount(0);
+  });
+
+  await test.step('section anchors open their section, and row anchors reopen at their row after a reload', async () => {
+    const issues = page.locator('#section-issues');
+    await issues.locator('summary').click();
+    await expect(issues).not.toHaveAttribute('open');
+    await issues.locator('h2').hover();
+    await issues.locator('h2 .section-anchor-button').click();
+    await expect(issues).toHaveAttribute('open', '');
+    expect(new URL(page.url()).hash).toBe('#issues');
+    // The section scrolls into view smoothly, and a row's link icon shows only under the pointer.
+    await untilScrollStops(page);
+
+    const consoleRow = page.locator('.tree-entry', { has: heading('essential.rbf') });
+    await consoleRow.hover();
+    await consoleRow.locator('.copy-link-button').click();
+    await expect.poll(() => new URL(page.url()).hash).toBe(`#files:${encodeURIComponent('cores/essential.rbf')}`);
+    await page.reload();
+    await expect(heading('shared_db')).toBeVisible();
+    await expect(page.locator('[id="row-database:file:cores/essential.rbf"]')).toBeInViewport();
+  });
+
+  await test.step('back and forward reopen the databases opened before', async () => {
+    await page.getByLabel('URL').fill(SECOND_URL);
+    await page.getByRole('button', { name: 'Fetch database' }).click();
+    await page.getByRole('dialog', { name: 'Combine with the loaded databases?' }).getByRole('button', { name: 'Load alone' }).click();
+    await expect(heading('second_db')).toBeVisible();
+
+    await page.goBack();
+    await expect(heading('shared_db')).toBeVisible();
+    await expect(page.getByLabel('URL')).toHaveValue(SHARED_URL);
+    await page.goForward();
+    await expect(heading('second_db')).toBeVisible();
+    await expect(page.getByLabel('URL')).toHaveValue(SECOND_URL);
+  });
+});
+
+// Waits until the page stops scrolling: its scroll position holds for ten frames.
+async function untilScrollStops(page) {
+  await page.evaluate(async () => {
+    let last = window.scrollY;
+    for (let still = 0, frames = 0; still < 10 && frames < 600; frames += 1) {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      still = window.scrollY === last ? still + 1 : 0;
+      last = window.scrollY;
+    }
+  });
+}
+
+function readHighlight(page, name) {
+  return page.evaluate((highlightName) => {
+    const highlight = CSS.highlights.get(highlightName);
+    return highlight ? [...highlight].map((range) => range.toString()) : null;
+  }, name);
+}
+
+function readHighlightOwners(page, name) {
+  return page.evaluate((highlightName) => {
+    const highlight = CSS.highlights.get(highlightName);
+    return highlight ? [...highlight].map((range) => range.startContainer.parentElement?.closest('[id]')?.id ?? null) : [];
+  }, name);
+}

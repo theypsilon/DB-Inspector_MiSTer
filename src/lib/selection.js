@@ -134,6 +134,23 @@ export function findLoadedKeys(entries, databases) {
   );
 }
 
+// Whether `url` is where a loaded database ({ inspection }) came from.
+export function isLoadedUrl(databases, url) {
+  const key = normalizeComparableUrl(url);
+  return Boolean(key) && databases.some(({ inspection }) => loadedSourceKeys(inspection).includes(key));
+}
+
+// Whether the inspection `incoming` is the loaded `loaded` again: the same db_id from the same URL.
+// Opening it again can only reload it.
+export function isReloadOf(loaded, incoming) {
+  return (
+    loaded.source.sourceKind === 'url' &&
+    incoming.source.sourceKind === 'url' &&
+    loaded.overview.dbId === incoming.overview.dbId &&
+    normalizeComparableUrl(loaded.source.sourceLabel) === normalizeComparableUrl(incoming.source.sourceLabel)
+  );
+}
+
 // Whether opening `entries` alone would open every loaded database again.
 export function selectionIncludesLoadedDatabases(entries, databases) {
   const selectedKeys = new Set(entries.flatMap((entry) => entryKeys(entry)));

@@ -3,7 +3,8 @@ import { STATUS_CODES } from 'node:http';
 // A browser for the app model under Node: an address bar with history (back and forward fire
 // popstate), timers on a clock the test moves, and fetch answered from routes. Routes map a URL to
 // { status, body, contentType } (or are a function from URL to that); a body that is not a string or
-// bytes is sent as JSON. Unknown URLs fail as a blocked request would.
+// bytes is sent as JSON. Unknown URLs fail as a blocked request would. Requests ({ url, init }) are
+// recorded in order.
 
 function createClock() {
   let now = 0;
@@ -122,8 +123,9 @@ function createWindow(href, clock) {
   };
 }
 
-function createFetch(routes) {
-  return async (input) => {
+function createFetch(routes, requests) {
+  return async (input, init) => {
+    requests.push({ url: String(input), init });
     // Responses arrive in a later task, as they do from the network.
     await new Promise((resolve) => setTimeout(resolve, 0));
     const url = String(input);
@@ -144,13 +146,15 @@ export function installBrowser(href, { routes = {} } = {}) {
   const clock = createClock();
   const window = createWindow(href, clock);
   const previous = { window: globalThis.window, history: globalThis.history, fetch: globalThis.fetch };
+  const requests = [];
   globalThis.window = window;
   globalThis.history = window.history;
-  globalThis.fetch = createFetch(routes);
+  globalThis.fetch = createFetch(routes, requests);
   return {
     window,
     clock,
     routes,
+    requests,
     restore() {
       globalThis.window = previous.window;
       globalThis.history = previous.history;

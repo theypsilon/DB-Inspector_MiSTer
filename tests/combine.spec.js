@@ -1,5 +1,9 @@
 import { expect, test } from '@playwright/test';
 
+// Legacy end-to-end tests: replaced by the journeys in tests/journeys/, with their behavior specced
+// by tests/unit/flows/ and tests/component/. Kept for reference; LEGACY_E2E=1 runs them.
+test.skip(!process.env.LEGACY_E2E, 'Replaced by the journeys in tests/journeys/; set LEGACY_E2E=1 to run it');
+
 const ALPHA_URL = 'https://example.com/combine/alpha.json';
 const BETA_URL = 'https://example.com/combine/beta.json';
 const ALPHA_TWIN_URL = 'https://example.com/combine/alpha-twin.json';

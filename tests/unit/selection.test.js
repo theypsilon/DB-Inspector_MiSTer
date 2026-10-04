@@ -9,6 +9,8 @@ import {
   findDbIdConflict,
   findLoadedKeys,
   findUpdateAllDefaultKeys,
+  isLoadedUrl,
+  isReloadOf,
   selectOnePerDbId,
   selectPreset,
   selectionIncludesLoadedDatabases,
@@ -77,6 +79,29 @@ test('entries are marked as loaded by any URL their database was opened from', (
   const entries = [...CATALOG, { key: 'uploaded', dbId: 'mine', dbUrl: 'blob:https://x/1' }];
 
   assert.deepEqual([...findLoadedKeys(entries, [pinned, aliased, upload])], ['pinned', 'jtcores', 'uploaded']);
+});
+
+test('a URL is loaded when a loaded database was opened from it', () => {
+  const pinned = loaded('url', distribution.dbUrl);
+  const aliased = loaded('url', 'https://example.com/elsewhere.json', { resolvedUrl: jtcores.dbUrl });
+
+  assert.equal(isLoadedUrl([pinned, aliased], distribution.dbUrl.toUpperCase()), true);
+  assert.equal(isLoadedUrl([pinned, aliased], jtcores.dbUrl), true);
+  assert.equal(isLoadedUrl([pinned, aliased], updateAll.dbUrl), false);
+  assert.equal(isLoadedUrl([pinned, aliased], 'not a url'), false);
+  assert.equal(isLoadedUrl([], distribution.dbUrl), false);
+});
+
+test('a database opened again from its URL, with its db_id, reloads it', () => {
+  const at = (sourceKind, url, dbId = 'update_all_mister') => ({ overview: { dbId }, source: { sourceKind, sourceLabel: url } });
+  const loadedUpdateAll = at('url', updateAll.dbUrl);
+
+  assert.equal(isReloadOf(loadedUpdateAll, at('url', updateAll.dbUrl)), true);
+  assert.equal(isReloadOf(loadedUpdateAll, at('url', updateAll.dbUrl.toUpperCase())), true);
+  assert.equal(isReloadOf(loadedUpdateAll, at('url', 'https://example.com/fork/update_all_db.json')), false);
+  assert.equal(isReloadOf(loadedUpdateAll, at('url', updateAll.dbUrl, 'another_db')), false);
+  assert.equal(isReloadOf(loadedUpdateAll, at('upload', 'update_all_db.json')), false);
+  assert.equal(isReloadOf(at('upload', 'update_all_db.json'), at('upload', 'update_all_db.json')), false);
 });
 
 test('a selection includes the loaded databases only when it opens each of them again', () => {

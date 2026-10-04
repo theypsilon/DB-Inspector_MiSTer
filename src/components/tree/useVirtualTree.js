@@ -5,6 +5,7 @@ import {
   buildVirtualRowLayout,
   buildVirtualRows,
   getMeasurementScrollDelta,
+  getRemainingScrollAnchorDelta,
   getRowJumpScrollTop,
   mergeMeasuredHeights,
   shouldApplyScrollAnchor,
@@ -130,15 +131,16 @@ export function useVirtualRowWindow({
     }
 
     measuredHeightsRef.current = nextMeasuredHeights;
+    const scrollYBefore = typeof window !== 'undefined' ? window.scrollY : 0;
     flushSync(() => {
       setMeasuredHeights(nextMeasuredHeights);
     });
 
-    if (
-      typeof window !== 'undefined' &&
-      shouldApplyScrollAnchor(scrollAnchorDelta, { touchDevice: isTouchDevice, suppressed: suppressAnchoringRef.current })
-    ) {
-      window.scrollBy(0, scrollAnchorDelta);
+    if (typeof window !== 'undefined') {
+      const remainingDelta = getRemainingScrollAnchorDelta({ delta: scrollAnchorDelta, scrollYBefore, scrollYAfter: window.scrollY });
+      if (shouldApplyScrollAnchor(remainingDelta, { touchDevice: isTouchDevice, suppressed: suppressAnchoringRef.current })) {
+        window.scrollBy(0, remainingDelta);
+      }
     }
   }, [
     collapsedIds,

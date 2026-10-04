@@ -39,6 +39,7 @@ import TagDictionary from './components/TagDictionary.jsx';
 import FindBar from './components/FindBar.jsx';
 import SourceLoaders from './components/SourceLoaders.jsx';
 import ChoicePanel from './components/ChoicePanel.jsx';
+import ErrorPanel from './components/ErrorPanel.jsx';
 import DatabaseOverview from './components/DatabaseOverview.jsx';
 import FilterPanel from './components/FilterPanel.jsx';
 import IssuesSection from './components/IssuesSection.jsx';
@@ -353,11 +354,7 @@ export default function App() {
       />
 
       <div className="results-stack">
-        {errorMessage ? (
-          <section className="panel status-panel">
-            <p className="status error">{errorMessage}</p>
-          </section>
-        ) : null}
+        {errorMessage ? <ErrorPanel message={errorMessage} /> : null}
 
         {addingMessage ? (
           <section className="panel status-panel">

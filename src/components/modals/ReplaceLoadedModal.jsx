@@ -6,10 +6,44 @@ function describeSource({ source }) {
 }
 
 // Asked when databases being combined have the db_id of loaded ones. Only one database per db_id
-// can be loaded, so each new one either replaces the loaded one or stays out. `conflicts` come
-// from findLoadedDbIdConflicts; `onAnswer` gets the db_ids to replace, or null to cancel.
+// can be loaded, so each new one either replaces the loaded one or stays out; one from the same URL
+// is the loaded database again, so replacing it reloads it. `conflicts` come from
+// findLoadedDbIdConflicts; `onAnswer` gets the db_ids to replace, or null to cancel.
 const ReplaceLoadedModal = memo(function ReplaceLoadedModal({ conflicts, onAnswer }) {
   const [replaceDbIds, setReplaceDbIds] = useState(() => new Set(conflicts.map(({ dbId }) => dbId)));
+
+  if (conflicts.length === 1 && conflicts[0].reload) {
+    const [{ dbId, loaded }] = conflicts;
+    const keep = () => onAnswer(new Set());
+    return (
+      <ModalFrame
+        label="Open database"
+        title="Reload the loaded database?"
+        onClose={keep}
+        footer={
+          <>
+            <button type="button" className="secondary-button" onClick={keep}>
+              Keep the loaded one
+            </button>
+            <button type="button" onClick={() => onAnswer(new Set([dbId]))}>
+              Reload it
+            </button>
+          </>
+        }
+      >
+        <p className="helper-copy">
+          The database <code>{dbId}</code> is already loaded from this URL. Reloading it replaces the loaded
+          copy with the one just fetched.
+        </p>
+        <div className="filter-override-grid">
+          <div>
+            <span className="catalog-meta-label">URL</span>
+            <span className="catalog-option-url">{describeSource(loaded.inspection)}</span>
+          </div>
+        </div>
+      </ModalFrame>
+    );
+  }
 
   if (conflicts.length === 1) {
     const [{ dbId, loaded, incoming }] = conflicts;

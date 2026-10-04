@@ -13,10 +13,10 @@ import {
 } from '../../src/lib/combinedFilters.js';
 import { NO_FILTER_DEFAULTS, resolveDownloaderFilter } from '../../src/lib/filterDefaults.js';
 
-function inspection(dbId, defaultFilter = '', sourceKind = 'url') {
+function inspection(dbId, defaultFilter = '', sourceKind = 'url', sourceLabel = `https://example.com/${dbId}.json`) {
   return {
     overview: { dbId, defaultFilter },
-    source: { sourceKind, sourceLabel: `https://example.com/${dbId}.json` },
+    source: { sourceKind, sourceLabel },
   };
 }
 
@@ -124,8 +124,9 @@ test('a database whose db_id is loaded replaces the loaded one in place, only wh
   const another = { inspection: inspection('first'), filterDefaults: NO_FILTER_DEFAULTS };
   const session = { databases: [first, second], filters: { shared: { isSet: true, value: 'console' }, overrides: {} } };
 
+  // The twin comes from the loaded one's URL, so replacing it would reload it.
   assert.deepEqual(findLoadedDbIdConflicts(session.databases, [twin, another]), [
-    { dbId: 'first', loaded: first, incoming: twin },
+    { dbId: 'first', loaded: first, incoming: twin, reload: true },
   ]);
 
   const kept = addDatabasesToSession(session, [twin], '');
@@ -138,6 +139,19 @@ test('a database whose db_id is loaded replaces the loaded one in place, only wh
   assert.deepEqual(replaced.databases, [twin, second]);
   assert.deepEqual(replaced.rejected, [another]);
   assert.deepEqual(replaced.filters.overrides, { first: 'arcade' });
+});
+
+test('a conflict reloads the loaded database only when it comes from the same URL', () => {
+  const loaded = [{ inspection: inspection('first'), filterDefaults: NO_FILTER_DEFAULTS }];
+  const reloads = (incoming) =>
+    findLoadedDbIdConflicts(loaded, [{ inspection: incoming, filterDefaults: NO_FILTER_DEFAULTS }]).map(({ reload }) => reload);
+
+  assert.deepEqual(reloads(inspection('first')), [true]);
+  // URLs compare as the pickers' Loaded markers do, ignoring letter case.
+  assert.deepEqual(reloads(inspection('first', '', 'url', 'https://EXAMPLE.com/FIRST.json')), [true]);
+  assert.deepEqual(reloads(inspection('first', '', 'url', 'https://example.com/fork/first.json')), [false]);
+  assert.deepEqual(reloads(inspection('first', '', 'upload', 'first.json')), [false]);
+  assert.deepEqual(reloads(inspection('second')), []);
 });
 
 test('no sequence of openings, combinations and replacements loads two databases with one db_id', () => {
