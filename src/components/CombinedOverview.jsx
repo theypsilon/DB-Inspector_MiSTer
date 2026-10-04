@@ -1,10 +1,103 @@
+import CollapsibleSection from './ui/CollapsibleSection.jsx';
 import DetailedToggle from './ui/DetailedToggle.jsx';
 import SectionAnchor from './ui/SectionAnchor.jsx';
 import GitHubRepoLink from './ui/GitHubRepoLink.jsx';
 import MetadataList from './ui/MetadataList.jsx';
 
-// Several combined databases: a card for each, with the Detailed toggle for all of them.
+// Up to this many combined databases show as cards. More show as a compact list, a row each that
+// opens on its own, in a section that collapses. A row shows only what tells it apart, so the
+// whole row opens it; its links and buttons are inside.
+export const COMBINED_DATABASE_CARDS_MAX = 3;
+
+function formatCounts(counts) {
+  return (
+    `${counts.files.toLocaleString()} files, ` +
+    `${counts.folders.toLocaleString()} folders, ` +
+    `${counts.archives.toLocaleString()} archives`
+  );
+}
+
+// What a database's card shows, and what its row in the compact list opens to.
+function databaseFields(inspection, detailed) {
+  return [
+    { label: 'Version', value: `v${inspection.overview.version}` },
+    { label: 'Timestamp', value: inspection.overview.timestampLabel },
+    { label: 'Loaded from', value: inspection.source.sourceLabel, kind: 'url' },
+    { label: 'Counts', value: formatCounts(inspection.overview.counts) },
+    ...(detailed
+      ? [
+          { label: 'base_files_url', value: inspection.overview.baseFilesUrl || 'None', kind: 'url' },
+          { label: 'Default filter', value: inspection.overview.defaultFilter || 'None' },
+        ]
+      : []),
+  ];
+}
+
+// Databases loaded from a URL can be installed; uploads cannot.
+function InstallButton({ inspection, onInstall }) {
+  if (inspection.source.sourceKind !== 'url' || !inspection.source.requestedUrl) {
+    return null;
+  }
+
+  return (
+    <button type="button" className="install-button" onClick={() => onInstall(inspection.overview.dbId)}>
+      Install
+    </button>
+  );
+}
+
+/**
+ * Several combined databases: a card for each, or a compact list when there are many, with the
+ * Detailed toggle for all of them.
+ * @param {{
+ *   databases: { inspection: any }[],
+ *   detailed: boolean,
+ *   onDetailedChange: (detailed: boolean) => void,
+ *   onInstall: (dbId: string) => void,
+ * }} props
+ */
 function CombinedOverview({ databases, detailed, onDetailedChange, onInstall }) {
+  const title = `${databases.length} combined databases`;
+  // In the compact list it sits in the section's summary, so it stays at hand while collapsed.
+  const toggle = (
+    <div className="overview-controls">
+      <DetailedToggle detailed={detailed} onDetailedChange={onDetailedChange} />
+    </div>
+  );
+
+  if (databases.length > COMBINED_DATABASE_CARDS_MAX) {
+    return (
+      <CollapsibleSection
+        label="Databases"
+        title={title}
+        defaultOpen
+        anchor="database"
+        className="combined-overview-panel"
+        summaryAside={toggle}
+      >
+        <ul className="combined-database-list">
+          {databases.map(({ inspection }) => (
+            <li key={inspection.overview.dbId}>
+              <details className="combined-database-card combined-database-row">
+                <summary className="combined-database-row-summary">
+                  <h3 className="db-chip">{inspection.overview.dbId}</h3>
+                  <span className="combined-database-row-counts">{formatCounts(inspection.overview.counts)}</span>
+                </summary>
+                <div className="combined-database-row-body">
+                  <div className="combined-database-row-actions">
+                    <InstallButton inspection={inspection} onInstall={onInstall} />
+                    <GitHubRepoLink source={inspection.source} dbId={inspection.overview.dbId} />
+                  </div>
+                  <MetadataList fields={databaseFields(inspection, detailed)} />
+                </div>
+              </details>
+            </li>
+          ))}
+        </ul>
+      </CollapsibleSection>
+    );
+  }
+
   return (
     <section id="section-database" className="panel overview-panel">
       <div className="overview-header">
@@ -12,14 +105,10 @@ function CombinedOverview({ databases, detailed, onDetailedChange, onInstall }) 
           <p className="section-label">Databases</p>
           <h2>
             <SectionAnchor anchor="database" />
-            {databases.length} combined databases
+            {title}
           </h2>
         </div>
-        <div className="overview-side">
-          <div className="overview-controls">
-            <DetailedToggle detailed={detailed} onDetailedChange={onDetailedChange} />
-          </div>
-        </div>
+        <div className="overview-side">{toggle}</div>
       </div>
 
       <div className="combined-database-grid">
@@ -28,36 +117,9 @@ function CombinedOverview({ databases, detailed, onDetailedChange, onInstall }) 
             <div className="combined-database-heading">
               <h3 className="db-chip">{inspection.overview.dbId}</h3>
               <GitHubRepoLink source={inspection.source} dbId={inspection.overview.dbId} />
-              {inspection.source.sourceKind === 'url' && inspection.source.requestedUrl ? (
-                <button
-                  type="button"
-                  className="install-button"
-                  onClick={() => onInstall(inspection.overview.dbId)}
-                >
-                  Install
-                </button>
-              ) : null}
+              <InstallButton inspection={inspection} onInstall={onInstall} />
             </div>
-            <MetadataList
-              fields={[
-                { label: 'Version', value: `v${inspection.overview.version}` },
-                { label: 'Timestamp', value: inspection.overview.timestampLabel },
-                { label: 'Loaded from', value: inspection.source.sourceLabel, kind: 'url' },
-                {
-                  label: 'Counts',
-                  value:
-                    `${inspection.overview.counts.files.toLocaleString()} files, ` +
-                    `${inspection.overview.counts.folders.toLocaleString()} folders, ` +
-                    `${inspection.overview.counts.archives.toLocaleString()} archives`,
-                },
-                ...(detailed
-                  ? [
-                      { label: 'base_files_url', value: inspection.overview.baseFilesUrl || 'None', kind: 'url' },
-                      { label: 'Default filter', value: inspection.overview.defaultFilter || 'None' },
-                    ]
-                  : []),
-              ]}
-            />
+            <MetadataList fields={databaseFields(inspection, detailed)} />
           </article>
         ))}
       </div>

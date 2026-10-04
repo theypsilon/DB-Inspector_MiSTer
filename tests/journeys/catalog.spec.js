@@ -172,6 +172,33 @@ test('the catalog lists known databases and opens them alone or together', async
     await expect.poll(() => decodeURIComponent(new URL(page.url()).search)).toContain(`database-url[jtcores]=${JTCORES_URL}`);
   });
 
+  await test.step('more than three databases list compactly, each opening on its own, in a section that collapses', async () => {
+    const section = page.locator('#section-database');
+    const rows = section.locator('.combined-database-row');
+    await expect(rows).toHaveCount(6);
+    const row = (dbId) => rows.filter({ has: page.getByRole('heading', { name: dbId, exact: true }) });
+    await expect(row('jtcores').getByText('Loaded from')).toBeHidden();
+    await row('jtcores').locator('summary').click();
+    await expect(row('jtcores').getByText('Loaded from')).toBeVisible();
+    await expect(row('jtcores').getByRole('button', { name: 'Install' })).toBeVisible();
+    await expect(row('update_all_mister').getByText('Loaded from')).toBeHidden();
+
+    // The Detailed toggle sits in the section's summary, and clicking it does not collapse it.
+    const toggle = section.getByRole('button', { name: 'Detailed toggle' });
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    await expect(row('jtcores').getByText('Default filter')).toBeVisible();
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+
+    const indicator = section.locator('summary.section-summary .summary-indicator');
+    await indicator.click();
+    await expect(rows.first()).toBeHidden();
+    await expect(toggle).toBeVisible();
+    await indicator.click();
+    await expect(rows.first()).toBeVisible();
+  });
+
   await test.step('reviewing the selection lists only the selected databases', async () => {
     const catalog = await openCatalog(page, 8);
     await catalog.getByRole('button', { name: 'Select all' }).click();

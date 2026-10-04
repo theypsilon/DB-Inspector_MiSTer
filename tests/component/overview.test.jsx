@@ -89,6 +89,72 @@ describe('combined databases', () => {
     expect([...document.querySelectorAll('.combined-database-card h3')].map(text)).toEqual(['alpha', 'beta']);
   });
 
+  // Loaded from URLs, so they can be installed; gamma has a GitHub repository.
+  async function several(count) {
+    const urls = { gamma: 'https://raw.githubusercontent.com/example-owner/gamma-repo/main/db.json' };
+    return Promise.all(
+      ['alpha', 'beta', 'gamma', 'delta', 'epsilon'].slice(0, count).map(async (dbId, index) => ({
+        inspection: await fromUrl(
+          database(dbId, Object.fromEntries(Array.from({ length: index + 1 }, (_, file) => [`${dbId}/f${file}.rbf`, { size: 1, hash: 'h' }]))),
+          urls[dbId] ?? `https://example.com/${dbId}.json`,
+        ),
+        filterDefaults: {},
+      })),
+    );
+  }
+
+  test('show cards for up to three databases, and a compact list for more', async () => {
+    const three = render(<CombinedOverview databases={await several(3)} detailed={false} onDetailedChange={() => {}} onInstall={() => {}} />);
+    expect(document.querySelector('#section-database').tagName).toBe('SECTION');
+    expect(document.querySelectorAll('article.combined-database-card')).toHaveLength(3);
+    three.unmount();
+
+    render(<CombinedOverview databases={await several(4)} detailed={false} onDetailedChange={() => {}} onInstall={() => {}} />);
+    expect(document.querySelector('#section-database').tagName).toBe('DETAILS');
+    expect(document.querySelectorAll('article.combined-database-card')).toHaveLength(0);
+    expect([...document.querySelectorAll('.combined-database-row h3')].map(text)).toEqual(['alpha', 'beta', 'gamma', 'delta']);
+  });
+
+  test('in the compact list, each database opens on its own, and the list collapses with the Detailed toggle at hand', async () => {
+    const onDetailedChange = vi.fn();
+    const onInstall = vi.fn();
+    const view = render(<CombinedOverview databases={await several(5)} detailed={false} onDetailedChange={onDetailedChange} onInstall={onInstall} />);
+    const section = document.querySelector('#section-database');
+    expect(section.open).toBe(true);
+    expect(screen.getByRole('heading', { name: '5 combined databases' })).toBeTruthy();
+
+    // A row shows its db_id and counts, and nothing in it but the row itself can be clicked.
+    const rows = [...document.querySelectorAll('.combined-database-row')];
+    expect(rows.map((row) => [text(row.querySelector('summary h3')), text(row.querySelector('summary .combined-database-row-counts'))])).toEqual([
+      ['alpha', '1 files, 0 folders, 0 archives'],
+      ['beta', '2 files, 0 folders, 0 archives'],
+      ['gamma', '3 files, 0 folders, 0 archives'],
+      ['delta', '4 files, 0 folders, 0 archives'],
+      ['epsilon', '5 files, 0 folders, 0 archives'],
+    ]);
+    expect(rows.every((row) => row.querySelector('summary').children.length === 2)).toBe(true);
+    expect(document.querySelector('.combined-database-row summary a, .combined-database-row summary button')).toBeNull();
+    expect(rows.every((row) => !row.open)).toBe(true);
+
+    // Open, a row shows what its card would: Install, its repository, and its details.
+    const gamma = rows[2];
+    gamma.open = true;
+    const body = within(gamma.querySelector('.combined-database-row-body'));
+    const user = userEvent.setup();
+    await user.click(body.getByRole('button', { name: 'Install' }));
+    expect(onInstall).toHaveBeenCalledWith('gamma');
+    expect(body.getByRole('link', { name: 'example-owner/gamma-repo' }).getAttribute('href')).toBe('https://github.com/example-owner/gamma-repo');
+    expect(text(gamma.querySelector('.metadata-list'))).toContain('https://raw.githubusercontent.com/example-owner/gamma-repo/main/db.json');
+    expect(text(gamma.querySelector('.metadata-list'))).not.toContain('Default filter');
+
+    // The Detailed toggle is in the section's summary, so it is there while the list is collapsed.
+    const toggle = within(section.querySelector('summary')).getByRole('button', { name: 'Detailed toggle' });
+    await user.click(toggle);
+    expect(onDetailedChange).toHaveBeenCalledWith(true);
+    view.rerender(<CombinedOverview databases={await several(5)} detailed onDetailedChange={onDetailedChange} onInstall={onInstall} />);
+    expect(text(document.querySelectorAll('.combined-database-row')[2].querySelector('.metadata-list'))).toContain('Default filter');
+  });
+
   test('share a FILTER, can have their own, and list the filter each one gets', async () => {
     const { view } = await combined({ shared: { isSet: true, value: 'arcade' }, overrides: { beta: '[mister] console' } });
     const handlers = { onSharedFilterChange: vi.fn(), onSharedFilterReset: vi.fn(), onOverrideChange: vi.fn(), onOverrideAdd: vi.fn(), onOverrideRemove: vi.fn() };

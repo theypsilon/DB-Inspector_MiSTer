@@ -477,6 +477,21 @@ fieldset.mister-option legend { float: left; width: 100%; padding: 0; }
 .combined-database-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1rem; margin-top: 1.2rem; }
 .combined-database-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin-bottom: 0.7rem; }
 .combined-database-heading .install-button { margin-left: auto; }
+.combined-overview-panel .section-summary-side { flex-wrap: wrap; }
+.combined-database-list { display: grid; gap: 0.45rem; margin: 0; padding: 0; list-style: none; }
+.combined-database-row { border: 1px solid rgba(22, 33, 47, 0.12); border-radius: var(--radius-sm); background: rgba(255, 255, 255, 0.52); }
+.combined-database-row-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.75rem; padding: 0.55rem 0.85rem; border-radius: var(--radius-sm); list-style: none; cursor: pointer; }
+.combined-database-row-summary:hover { background: rgba(15, 111, 145, 0.05); }
+.combined-database-row-summary::-webkit-details-marker { display: none; }
+.combined-database-row-summary::before { content: ''; flex-shrink: 0; width: 0.42rem; height: 0.42rem; margin-right: 0.15rem; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(-45deg); transition: transform 140ms ease; }
+.combined-database-row[open] > .combined-database-row-summary::before { transform: rotate(45deg); }
+.combined-database-row-summary .db-chip { font-size: 0.9rem; }
+.combined-database-row-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1rem; }
+.combined-database-row-actions:empty { display: none; }
+.combined-database-row-actions .github-repo-link { margin-top: 0; }
+.combined-database-row-counts { margin-left: auto; color: var(--muted); font-size: 0.85rem; }
+.combined-database-row-body { display: grid; justify-items: start; gap: 0.8rem; padding: 0.2rem 0.85rem 0.95rem 1.85rem; }
+.combined-database-row-body .metadata-list { width: 100%; }
 .database-filters { display: grid; justify-items: start; gap: 0.7rem; margin: 0 0 0.9rem; }
 .database-filter-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 0.7rem; width: 100%; }
 .effective-filter-list { display: grid; gap: 0.45rem; margin: 0 0 0.9rem; padding: 0; list-style: none; }
@@ -486,7 +501,7 @@ fieldset.mister-option legend { float: left; width: 100%; padding: 0; }
 
 @media (max-width: 960px) {
   .hero, .loader-grid, .catalog-toolbar, .filter-toolbar, .modal-toolbar, .picker-toolbar, .catalog-selected-grid, .overview-grid, .highlight-row, .metadata-list { grid-template-columns: 1fr; }
-  .overview-header, .section-heading, .tree-heading { align-items: stretch; flex-direction: column; }
+  .overview-header, .section-heading, .tree-heading, .combined-overview-panel > .section-summary { align-items: stretch; flex-direction: column; }
   .overview-controls, .section-controls, .dictionary-summary, .section-summary, .section-summary-side, .collapsible-actions { justify-content: start; }
   .tree-heading-actions { align-items: start; }
   .node-action-row { justify-content: start; }
