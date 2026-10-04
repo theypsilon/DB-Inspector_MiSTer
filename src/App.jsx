@@ -39,6 +39,7 @@ import TagDictionary from './components/TagDictionary.jsx';
 import FindBar from './components/FindBar.jsx';
 import SourceLoaders from './components/SourceLoaders.jsx';
 import Hero from './components/Hero.jsx';
+import ThemeMenu from './components/ui/ThemeMenu.jsx';
 import ChoicePanel from './components/ChoicePanel.jsx';
 import ErrorPanel from './components/ErrorPanel.jsx';
 import DatabaseOverview from './components/DatabaseOverview.jsx';
@@ -304,6 +305,7 @@ export default function App() {
 
   return (
     <main className="app-shell">
+      <ThemeMenu />
       <Hero compact={heroCompact} />
 
       <SourceLoaders

@@ -211,6 +211,44 @@ test('a shared link opens its database, and the page around it works', async ({ 
     await expect(heading('arcade.rbf')).toHaveCount(0);
     expect(await page.evaluate(() => window.notReloaded)).toBe(true);
   });
+
+  await test.step('the theme menu in the top corner: a chosen theme stays across a reload and the system\u2019s switches, and Match system follows the system', async () => {
+    const theme = () => page.evaluate(() => document.documentElement.dataset.theme);
+    const pageColor = () => page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor);
+    const chooseTheme = async (current, choice) => {
+      await page.getByRole('button', { name: `Theme: ${current}` }).click();
+      await page.getByRole('menu', { name: 'Theme' }).getByRole('menuitemradio', { name: choice }).click();
+    };
+    const systemIsDark = () => page.evaluate(() => matchMedia('(prefers-color-scheme: dark)').matches);
+    expect(await theme()).toBe('light');
+    expect(await pageColor()).toBe('rgb(220, 220, 229)');
+
+    await chooseTheme('Match system', 'Dark');
+    await expect.poll(theme).toBe('dark');
+    await expect.poll(pageColor).toBe('rgb(18, 15, 38)');
+    await page.reload();
+    await expect(heading('shared_db')).toBeVisible();
+    expect(await theme()).toBe('dark');
+    // The system switching, by hand or on a schedule, leaves a chosen theme alone.
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await expect.poll(systemIsDark).toBe(true);
+    await page.emulateMedia({ colorScheme: 'light' });
+    await expect.poll(systemIsDark).toBe(false);
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    expect(await theme()).toBe('dark');
+
+    // Match system follows the system again, from the first draw and while the page is open.
+    await chooseTheme('Dark', 'Match system');
+    await expect.poll(theme).toBe('light');
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await expect.poll(theme).toBe('dark');
+    await page.reload();
+    await expect(heading('shared_db')).toBeVisible();
+    expect(await theme()).toBe('dark');
+    await page.emulateMedia({ colorScheme: 'light' });
+    await expect.poll(theme).toBe('light');
+    await expect.poll(pageColor).toBe('rgb(220, 220, 229)');
+  });
 });
 
 // Waits until the page stops scrolling: its scroll position holds for ten frames.

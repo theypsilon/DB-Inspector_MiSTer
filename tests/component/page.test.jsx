@@ -143,6 +143,24 @@ describe('the page and the app model', () => {
     expect(screen.queryByRole('search')).toBeNull();
   });
 
+  test('Escape in the theme menu closes only the menu, and the find bar stays open', async () => {
+    const url = 'https://example.com/essential.json';
+    const user = openPage(`/#db=${url}`, { [url]: { body: database('essential_db') } });
+    expect(await screen.findByRole('heading', { name: 'essential_db' })).toBeTruthy();
+    await user.keyboard('{Control>}f{/Control}');
+    expect(await screen.findByRole('search', { name: 'Find in tree' })).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Theme: Match system' }));
+    expect(screen.getByRole('menu', { name: 'Theme' })).toBeTruthy();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(screen.getByRole('search', { name: 'Find in tree' })).toBeTruthy();
+
+    // Outside the menu, Escape closes the find bar as before.
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('search')).toBeNull();
+  });
+
   test('fetching the loaded database again asks only whether to reload it, and reloading shows its new version', async () => {
     const url = 'https://example.com/reload.json';
     const routes = { [url]: { body: database('reload_db') } };

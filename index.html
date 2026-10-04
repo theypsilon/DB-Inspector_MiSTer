@@ -9,6 +9,22 @@
       name="description"
       content="Inspect MiSTer custom downloader databases and archive summaries in the browser."
     />
+    <script>
+      // The theme, before the page draws: the visitor's choice, else their system's. The same rule
+      // as src/lib/theme.js, which the page's toggle uses from then on.
+      (function () {
+        var theme = null;
+        try {
+          theme = window.localStorage.getItem('inspector-theme');
+        } catch (error) {
+          theme = null;
+        }
+        if (theme !== 'light' && theme !== 'dark') {
+          theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        document.documentElement.dataset.theme = theme;
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
