@@ -199,6 +199,28 @@ test('the catalog lists known databases and opens them alone or together', async
     await expect(rows.first()).toBeVisible();
   });
 
+  await test.step('on a phone, nothing on the page or in the catalog is wider than the screen', async () => {
+    // A long db_id in the compact list (one row open), on rows and in path collisions, in issues and
+    // tags, and in the filters, with a filter of its own.
+    const viewport = page.viewportSize();
+    const link = new URL(page.url()).hash;
+    const dbId = 'Coin-OpCollection/Distribution-MiSTerFPGA';
+    await page.setViewportSize({ width: 360, height: 800 });
+    await page.getByLabel('Give a database its own filter').selectOption(dbId);
+    await expect(page.getByLabel(`FILTER for ${dbId}`)).toBeVisible();
+    await expect.poll(() => page.evaluate(findWiderThanScreen)).toEqual([]);
+    await page.locator('.database-filter-row').getByRole('button', { name: 'Remove' }).click();
+    await expect.poll(() => new URL(page.url()).hash).toBe(link);
+
+    // The catalog's selection names it too, and the catalog scrolls only up and down.
+    const catalog = await openCatalog(page, 8);
+    await catalog.getByRole('button', { name: 'Select all' }).click();
+    await expect(catalog.getByRole('button', { name: 'Open 6 selected databases' })).toBeVisible();
+    expect(await catalog.locator('.modal-body').evaluate((body) => body.scrollWidth - body.clientWidth)).toBe(0);
+    await catalog.getByRole('button', { name: 'Close', exact: true }).click();
+    await page.setViewportSize(viewport);
+  });
+
   await test.step('reviewing the selection lists only the selected databases', async () => {
     const catalog = await openCatalog(page, 8);
     await catalog.getByRole('button', { name: 'Select all' }).click();
@@ -222,6 +244,20 @@ test('the catalog lists known databases and opens them alone or together', async
 async function fetchDatabase(page, url) {
   await page.getByLabel('URL').fill(url);
   await page.getByRole('button', { name: 'Fetch database' }).click();
+}
+
+// Runs in the page. Nothing when the page fits the screen; otherwise by how much it does not, and
+// each element that sticks out past the screen's edge while its parent does not.
+function findWiderThanScreen() {
+  const overflow = document.documentElement.scrollWidth - window.innerWidth;
+  if (overflow <= 0) {
+    return [];
+  }
+  const sticksOut = (element) => element.getBoundingClientRect().right > window.innerWidth;
+  const culprits = [...document.body.querySelectorAll('*')]
+    .filter((element) => sticksOut(element) && !sticksOut(element.parentElement))
+    .map((element) => `<${element.localName} class="${element.getAttribute('class') ?? ''}"> ${element.textContent.slice(0, 60)}`);
+  return [`${overflow}px wider than the screen`, ...culprits];
 }
 
 async function openCatalog(page, entryCount) {

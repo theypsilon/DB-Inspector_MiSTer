@@ -6,8 +6,9 @@ import MetadataList from './ui/MetadataList.jsx';
 import { COMBINED_DATABASES_IN_FULL_MAX } from '../lib/utils.js';
 
 // Up to COMBINED_DATABASES_IN_FULL_MAX combined databases show as cards. More show as a compact
-// list, a row each that opens on its own, in a section that collapses. A row shows only what tells
-// it apart, so the whole row opens it; its links and buttons are inside.
+// list in columns, a row each that opens on its own, in a section that collapses. A row shows only
+// what tells it apart (its db_id, in full in its tooltip when cut short, and its counts), so the
+// whole row opens it; its links and buttons are inside.
 
 function formatCounts(counts) {
   return (
@@ -31,6 +32,11 @@ function databaseFields(inspection, detailed) {
         ]
       : []),
   ];
+}
+
+// A db_id that can break after its _ and / separators, as a long one must on a narrow screen.
+function breakableId(id) {
+  return id.split(/(?<=[_/])/).flatMap((part, index) => (index ? [<wbr key={index} />, part] : [part]));
 }
 
 // Databases loaded from a URL can be installed; uploads cannot.
@@ -80,7 +86,9 @@ function CombinedOverview({ databases, detailed, onDetailedChange, onInstall }) 
             <li key={inspection.overview.dbId}>
               <details className="combined-database-card combined-database-row">
                 <summary className="combined-database-row-summary">
-                  <h3 className="db-chip">{inspection.overview.dbId}</h3>
+                  <h3 className="db-chip" title={inspection.overview.dbId}>
+                    {breakableId(inspection.overview.dbId)}
+                  </h3>
                   <span className="combined-database-row-counts">{formatCounts(inspection.overview.counts)}</span>
                 </summary>
                 <div className="combined-database-row-body">
@@ -115,7 +123,7 @@ function CombinedOverview({ databases, detailed, onDetailedChange, onInstall }) 
         {databases.map(({ inspection }) => (
           <article key={inspection.overview.dbId} className="metadata-card combined-database-card">
             <div className="combined-database-heading">
-              <h3 className="db-chip">{inspection.overview.dbId}</h3>
+              <h3 className="db-chip">{breakableId(inspection.overview.dbId)}</h3>
               <GitHubRepoLink source={inspection.source} dbId={inspection.overview.dbId} />
               <InstallButton inspection={inspection} onInstall={onInstall} />
             </div>

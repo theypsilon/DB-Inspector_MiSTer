@@ -141,7 +141,7 @@ const TreeEntryRow = memo(/** @param {TreeEntryRowProps} props */ function TreeE
           <div className="tree-heading">
             <div className="tree-title-row">
               <span className={badgeClassName}>{badge}</span>
-              {dbId ? <span className="db-chip">{dbId}</span> : null}
+              {dbId ? <span className="db-chip" title={dbId}>{dbId}</span> : null}
               <button
                 type="button"
                 className="copy-link-button"

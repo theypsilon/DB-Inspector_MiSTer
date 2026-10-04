@@ -247,13 +247,16 @@ export function getRowJumpScrollTop({ containerTop, offset, viewportHeight }) {
   return containerTop + offset - viewportHeight / 2;
 }
 
+// A row's height before it is measured. The estimates keep the ratios to the measured heights they
+// were tuned with (a file with a line of tags measures about 101px, a row without tags 61px, and a
+// file with its details about 353px), which the scrolling of the virtual tree relies on.
 export function estimateRowHeight(row, { collapsed, detailsVisible }) {
   if (!row) {
-    return 180;
+    return 129;
   }
 
   if (row.type === 'archive') {
-    let estimate = 180;
+    let estimate = 129;
     if (detailsVisible) {
       estimate += 120;
     }
@@ -270,12 +273,12 @@ export function estimateRowHeight(row, { collapsed, detailsVisible }) {
   }
 
   if (row.node.kind === 'file' && collapsed) {
-    return 120;
+    return 86;
   }
 
-  let estimate = row.node.kind === 'folder' ? 145 : 155;
+  let estimate = row.node.kind === 'folder' ? 104 : 123;
   if (detailsVisible) {
-    estimate += 110;
+    estimate += 125;
   }
 
   return estimate;

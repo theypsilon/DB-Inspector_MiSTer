@@ -115,6 +115,27 @@ describe('combined databases', () => {
     expect([...document.querySelectorAll('.combined-database-row h3')].map(text)).toEqual(['alpha', 'beta', 'gamma', 'delta']);
   });
 
+  test('a long db_id in the compact list keeps its full name in its tooltip, and can break after _ and /', async () => {
+    const [first, ...rest] = await several(4);
+    const dbId = 'chipster6502/artworkdb_neogeopocket';
+    const long = { ...first, inspection: { ...first.inspection, overview: { ...first.inspection.overview, dbId } } };
+    render(<CombinedOverview databases={[long, ...rest]} detailed={false} onDetailedChange={() => {}} onInstall={() => {}} />);
+    const chip = document.querySelector('.combined-database-row h3');
+    expect(text(chip)).toBe(dbId);
+    expect(chip.getAttribute('title')).toBe(dbId);
+    expect(chip.querySelectorAll('wbr')).toHaveLength(2);
+  });
+
+  test('a long db_id on a card can break after _ and /', async () => {
+    const [first, second] = await several(2);
+    const dbId = 'chipster6502/artworkdb_neogeopocket';
+    const long = { ...first, inspection: { ...first.inspection, overview: { ...first.inspection.overview, dbId } } };
+    render(<CombinedOverview databases={[long, second]} detailed={false} onDetailedChange={() => {}} onInstall={() => {}} />);
+    const chip = document.querySelector('article.combined-database-card h3');
+    expect(text(chip)).toBe(dbId);
+    expect(chip.querySelectorAll('wbr')).toHaveLength(2);
+  });
+
   test('in the compact list, each database opens on its own, and the list collapses with the Detailed toggle at hand', async () => {
     const onDetailedChange = vi.fn();
     const onInstall = vi.fn();
