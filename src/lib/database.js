@@ -49,16 +49,63 @@ const MULTIDATABASES_CATALOG_SOURCE_URL =
   'https://raw.githubusercontent.com/theypsilon/MultiDatabases_MiSTer/main/README.md';
 
 export async function loadDatabaseSourceFile(file) {
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  const decoded = decodeSupportedSource(bytes, file.name);
+  return loadDatabaseSourceBytes(new Uint8Array(await file.arrayBuffer()), file.name);
+}
+
+// An uploaded source: `name` decides how it is read, and `label` (a file name, or a path inside a
+// dropped folder) is how it is shown.
+export async function loadDatabaseSourceBytes(bytes, name, label = name) {
+  const decoded = decodeSupportedSource(bytes, name);
 
   return buildLoadedSource(decoded, {
     sourceKind: 'upload',
-    sourceLabel: file.name,
+    sourceLabel: label,
     sourceUrl: null,
     containerType: decoded.containerType,
     extractedEntry: decoded.entryName,
   });
+}
+
+// Reads one of several uploaded files without inspecting it: a database JSON that Downloader
+// would accept, or a database list with at least one database. Anything else is null.
+export function readUploadCandidate(bytes, name) {
+  let decoded;
+  try {
+    decoded = decodeSupportedSource(bytes, name);
+  } catch {
+    return null;
+  }
+
+  if (decoded.documentType === 'ini') {
+    return {
+      kind: 'ini',
+      entries: decoded.entries,
+      defaultFilter: decoded.defaultFilter || '',
+      defaultFilterPresent: Boolean(decoded.defaultFilterPresent),
+    };
+  }
+
+  return isDownloaderDatabase(decoded.json) ? { kind: 'database', dbId: decoded.json.db_id } : null;
+}
+
+// The checks Downloader makes before it uses a database (DbEntity), plus a usable db_id.
+export function isDownloaderDatabase(json) {
+  if (!isPlainObject(json) || typeof json.db_id !== 'string' || !json.db_id.trim()) {
+    return false;
+  }
+
+  const version = Object.hasOwn(json, 'v') ? json.v : 0;
+  const optionalRecords = ['zips', 'archives', 'tag_dictionary'].filter((key) => Object.hasOwn(json, key));
+  return (
+    Number.isInteger(version) &&
+    version >= 0 &&
+    Number.isInteger(json.timestamp) &&
+    isPlainObject(json.files) &&
+    isPlainObject(json.folders) &&
+    optionalRecords.every((key) => isPlainObject(json[key])) &&
+    (json.linux == null || isPlainObject(json.linux)) &&
+    (!Object.hasOwn(json, 'base_files_url') || typeof json.base_files_url === 'string')
+  );
 }
 
 export async function loadDatabaseSourceUrl(input) {
@@ -75,24 +122,6 @@ export async function loadDatabaseSourceUrl(input) {
     containerType: decoded.containerType,
     extractedEntry: decoded.entryName,
   });
-}
-
-export async function inspectDatabaseFile(file) {
-  const loadedSource = await loadDatabaseSourceFile(file);
-  if (loadedSource.kind !== 'database') {
-    throw new Error('The uploaded file is a database list, not a single database.');
-  }
-
-  return loadedSource.inspection;
-}
-
-export async function inspectDatabaseUrl(input) {
-  const loadedSource = await loadDatabaseSourceUrl(input);
-  if (loadedSource.kind !== 'database') {
-    throw new Error('The requested link points to a database list, not a single database.');
-  }
-
-  return loadedSource.inspection;
 }
 
 export async function loadRuntimeDatabaseCatalog() {
@@ -287,35 +316,36 @@ function resolveRemoteSourceUrl(url) {
 }
 
 async function fetchSupportedSource(url) {
-  const response = await fetchRemoteResource(url);
-  if (!response.ok) {
-    throw new Error(`Request failed with ${response.status} ${response.statusText}.`);
-  }
-
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  const fallbackName = response.url.split('/').pop() || url;
+  const { bytes, fallbackName, finalUrl } = await fetchSourceBytes(url);
   const decoded = decodeSupportedSource(bytes, fallbackName, {
-    baseUrl: response.url || url,
+    baseUrl: finalUrl,
   });
 
   return {
     ...decoded,
-    finalUrl: response.url || url,
+    finalUrl,
   };
 }
 
 async function fetchJsonish(url) {
+  const { bytes, fallbackName, finalUrl } = await fetchSourceBytes(url);
+  const decoded = decodeJsonish(bytes, fallbackName);
+
+  return {
+    ...decoded,
+    finalUrl,
+  };
+}
+
+async function fetchSourceBytes(url) {
   const response = await fetchRemoteResource(url);
   if (!response.ok) {
     throw new Error(`Request failed with ${response.status} ${response.statusText}.`);
   }
 
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  const fallbackName = response.url.split('/').pop() || url;
-  const decoded = decodeJsonish(bytes, fallbackName);
-
   return {
-    ...decoded,
+    bytes: new Uint8Array(await response.arrayBuffer()),
+    fallbackName: response.url.split('/').pop() || url,
     finalUrl: response.url || url,
   };
 }
@@ -327,6 +357,7 @@ async function fetchRemoteResource(url) {
     if (error instanceof TypeError) {
       throw new Error(
         `Could not open ${url} in the browser. The website may block direct access or be temporarily unavailable.`,
+        { cause: error },
       );
     }
 
@@ -337,18 +368,7 @@ async function fetchRemoteResource(url) {
 function decodeSupportedSource(bytes, sourceName, { baseUrl = null } = {}) {
   const lowerName = String(sourceName || '').toLowerCase();
   if (lowerName.endsWith('.zip') || looksLikeZip(bytes)) {
-    let archive;
-    try {
-      archive = unzipSync(bytes);
-    } catch (error) {
-      throw new Error(`Could not unzip ${sourceName}: ${error.message}`);
-    }
-
-    const entries = Object.entries(archive).filter(([name]) => !name.endsWith('/'));
-    if (!entries.length) {
-      throw new Error(`ZIP archive ${sourceName} does not contain any files.`);
-    }
-
+    const entries = unzipFileEntries(bytes, sourceName);
     const supportedEntries = entries.filter(([name]) => isSupportedSourceEntry(name));
     if (!supportedEntries.length) {
       throw new Error(`ZIP archive ${sourceName} does not contain any .json or .ini files.`);
@@ -372,40 +392,46 @@ function decodeSupportedSource(bytes, sourceName, { baseUrl = null } = {}) {
 function decodeJsonish(bytes, sourceName) {
   const lowerName = String(sourceName || '').toLowerCase();
   if (lowerName.endsWith('.zip') || looksLikeZip(bytes)) {
-    let archive;
-    try {
-      archive = unzipSync(bytes);
-    } catch (error) {
-      throw new Error(`Could not unzip ${sourceName}: ${error.message}`);
-    }
-
-    const entries = Object.entries(archive).filter(([name]) => !name.endsWith('/'));
-    if (!entries.length) {
-      throw new Error(`ZIP archive ${sourceName} does not contain any files.`);
-    }
-
+    const entries = unzipFileEntries(bytes, sourceName);
     const jsonEntry =
       entries.find(([name]) => name.toLowerCase().endsWith('.json')) ?? entries[0];
 
-    try {
-      return {
-        json: JSON.parse(strFromU8(jsonEntry[1])),
-        containerType: 'zip',
-        entryName: jsonEntry[0],
-      };
-    } catch (error) {
-      throw new Error(`Could not parse JSON inside ${sourceName}: ${error.message}`);
-    }
+    return {
+      json: parseJsonContent(jsonEntry[1], sourceName),
+      containerType: 'zip',
+      entryName: jsonEntry[0],
+    };
   }
 
+  return {
+    json: parseJsonContent(bytes, sourceName),
+    containerType: 'json',
+    entryName: null,
+  };
+}
+
+function unzipFileEntries(bytes, sourceName) {
+  let archive;
   try {
-    return {
-      json: JSON.parse(strFromU8(bytes)),
-      containerType: 'json',
-      entryName: null,
-    };
+    archive = unzipSync(bytes);
   } catch (error) {
-    throw new Error(`Could not parse JSON inside ${sourceName}: ${error.message}`);
+    throw new Error(`Could not unzip ${sourceName}: ${error.message}`, { cause: error });
+  }
+
+  const entries = Object.entries(archive).filter(([name]) => !name.endsWith('/'));
+  if (!entries.length) {
+    throw new Error(`ZIP archive ${sourceName} does not contain any files.`);
+  }
+
+  return entries;
+}
+
+// Accepts decoded text or raw bytes; decoding failures are reported like parse failures.
+function parseJsonContent(content, sourceName) {
+  try {
+    return JSON.parse(typeof content === 'string' ? content : strFromU8(content));
+  } catch (error) {
+    throw new Error(`Could not parse JSON inside ${sourceName}: ${error.message}`, { cause: error });
   }
 }
 
@@ -415,16 +441,12 @@ function parseSupportedSourceText(text, sourceName, { containerType, entryName, 
   const inferredIniContainerType = entryName ? containerType : 'ini';
 
   function parseJson() {
-    try {
-      return {
-        documentType: 'json',
-        json: JSON.parse(text),
-        containerType: inferredJsonContainerType,
-        entryName,
-      };
-    } catch (error) {
-      throw new Error(`Could not parse JSON inside ${sourceName}: ${error.message}`);
-    }
+    return {
+      documentType: 'json',
+      json: parseJsonContent(text, sourceName),
+      containerType: inferredJsonContainerType,
+      entryName,
+    };
   }
 
   function parseIni() {
@@ -439,7 +461,7 @@ function parseSupportedSourceText(text, sourceName, { containerType, entryName, 
         entryName,
       };
     } catch (error) {
-      throw new Error(`Could not parse INI inside ${sourceName}: ${error.message}`);
+      throw new Error(`Could not parse INI inside ${sourceName}: ${error.message}`, { cause: error });
     }
   }
 
@@ -457,7 +479,7 @@ function parseSupportedSourceText(text, sourceName, { containerType, entryName, 
     try {
       return parseIni();
     } catch (iniError) {
-      throw new Error(`${jsonError.message} ${iniError.message}`);
+      throw new Error(`${jsonError.message} ${iniError.message}`, { cause: iniError });
     }
   }
 }
@@ -589,8 +611,10 @@ function parseDatabaseListIni(source, sourceName, { baseUrl = null } = {}) {
     key: `${index}:${entry.dbId}`,
     dbId: entry.dbId,
     dbUrl: entry.dbUrl,
+    // The section's own `filter` line as written, before [mister] is expanded into it.
+    sectionFilter: entry.defaultFilterPresent ? entry.defaultFilter : null,
     defaultFilter: entry.defaultFilterPresent
-      ? resolveInheritedIniFilter(entry.defaultFilter, defaultFilterPresent ? defaultFilter : '')
+      ? resolveInheritedFilterValue(entry.defaultFilter, defaultFilterPresent ? defaultFilter : '')
       : defaultFilter,
     defaultFilterPresent: entry.defaultFilterPresent || defaultFilterPresent,
     // Whether the entry had an explicit filter (not just inherited from [mister]).
@@ -609,7 +633,8 @@ function isIgnoredDatabaseListSection(sectionName) {
   return String(sectionName).trim().toLowerCase() === 'mister';
 }
 
-function resolveInheritedIniFilter(filterValue, inheritedFilterValue) {
+// Expands the `[mister]` inheritance token used by INI entry filters and database defaults.
+export function resolveInheritedFilterValue(filterValue, inheritedFilterValue) {
   return String(filterValue || '')
     .replaceAll(/\[\s*mister\s*\]/gi, inheritedFilterValue)
     .trim();
@@ -620,7 +645,7 @@ function normalizeReferencedDatabaseUrl(input, { baseUrl = null, dbId = '' } = {
     return normalizeSupportedSourceUrl(input, { baseUrl });
   } catch (error) {
     if (dbId) {
-      throw new Error(`Section [${dbId}] has an invalid database URL. ${error.message}`);
+      throw new Error(`Section [${dbId}] has an invalid database URL. ${error.message}`, { cause: error });
     }
 
     throw error;
@@ -694,7 +719,7 @@ export function parseMultiDatabasesCatalog(source) {
       continue;
     }
 
-    const comparableDatabaseUrl = normalizeRuntimeCatalogUrl(databaseUrl);
+    const comparableDatabaseUrl = normalizeComparableUrl(databaseUrl);
     if (!comparableDatabaseUrl || seenDatabaseUrls.has(comparableDatabaseUrl)) {
       continue;
     }
@@ -723,12 +748,12 @@ export function parseMultiDatabasesCatalog(source) {
 
 export function mergeRuntimeDatabaseCatalogEntries(updateAllEntries, multiDatabasesEntries) {
   const knownDatabaseUrls = new Set(
-    updateAllEntries.map((entry) => normalizeRuntimeCatalogUrl(entry.dbUrl)).filter(Boolean),
+    updateAllEntries.map((entry) => normalizeComparableUrl(entry.dbUrl)).filter(Boolean),
   );
   const newMultiDatabasesEntries = [];
 
   for (const entry of multiDatabasesEntries) {
-    const comparableDatabaseUrl = normalizeRuntimeCatalogUrl(entry.dbUrl);
+    const comparableDatabaseUrl = normalizeComparableUrl(entry.dbUrl);
     if (!comparableDatabaseUrl || knownDatabaseUrls.has(comparableDatabaseUrl)) {
       continue;
     }
@@ -761,9 +786,10 @@ function deriveCatalogDbIdFromUrl(databaseUrl) {
   }
 }
 
-function normalizeRuntimeCatalogUrl(databaseUrl) {
+// Canonical form used to compare database URLs (catalog de-duplication, loop detection).
+export function normalizeComparableUrl(value) {
   try {
-    return new URL(String(databaseUrl).trim()).toString().toLowerCase();
+    return new URL(String(value).trim()).toString().toLowerCase();
   } catch {
     return '';
   }
@@ -841,7 +867,6 @@ function convertLegacyZipToArchive(zipId, zip) {
 
   if (isPlainObject(legacyZip.internal_summary)) {
     archive.summary_inline = convertLegacyZipSummary({
-      zipId,
       summary: legacyZip.internal_summary,
       archivePathKind: archive.path,
       extractMode: archive.extract,
@@ -853,69 +878,58 @@ function convertLegacyZipToArchive(zipId, zip) {
   return archive;
 }
 
-function convertLegacyZipSummary({ zipId, summary, archivePathKind, extractMode }) {
+function convertLegacyZipSummary({ summary, archivePathKind, extractMode }) {
   const summaryRecord = isPlainObject(summary) ? summary : {};
   const files = asRecord(summaryRecord.files);
   const folders = asRecord(summaryRecord.folders);
   const shouldForcePext = extractMode === 'all' && archivePathKind === 'pext';
   const shouldRemovePext = extractMode === 'all' && archivePathKind !== 'pext';
 
+  const adjustPextPath = (entry) => {
+    if (shouldForcePext) {
+      entry.path = 'pext';
+    } else if (shouldRemovePext && entry.path === 'pext') {
+      delete entry.path;
+    }
+
+    return entry;
+  };
+
   return {
     ...summaryRecord,
     files: Object.fromEntries(
-      Object.entries(files).map(([path, file]) => {
-        const entry = reverseLegacyZipFileSummaryFields(file);
-
-        if (shouldForcePext) {
-          entry.path = 'pext';
-        } else if (shouldRemovePext && entry.path === 'pext') {
-          delete entry.path;
-        }
-
-        return [path, entry];
-      }),
+      Object.entries(files).map(([path, file]) => [
+        path,
+        adjustPextPath(reverseLegacyZipFileSummaryFields(file)),
+      ]),
     ),
     folders: Object.fromEntries(
-      Object.entries(folders).map(([path, folder]) => {
-        const entry = reverseLegacyZipFolderSummaryFields(folder);
-
-        if (shouldForcePext) {
-          entry.path = 'pext';
-        } else if (shouldRemovePext && entry.path === 'pext') {
-          delete entry.path;
-        }
-
-        return [path, entry];
-      }),
+      Object.entries(folders).map(([path, folder]) => [
+        path,
+        adjustPextPath(reverseLegacyZipFolderSummaryFields(folder)),
+      ]),
     ),
   };
 }
 
 function reverseLegacyZipFileSummaryFields(file) {
   const entry = isPlainObject(file) ? { ...file } : {};
-
-  if (Object.hasOwn(entry, 'zip_id')) {
-    entry.arc_id = entry.zip_id;
-    delete entry.zip_id;
-  }
-
-  if (Object.hasOwn(entry, 'zip_path')) {
-    entry.arc_at = entry.zip_path;
-    delete entry.zip_path;
-  }
-
+  renameField(entry, 'zip_id', 'arc_id');
+  renameField(entry, 'zip_path', 'arc_at');
   return entry;
 }
 
 function reverseLegacyZipFolderSummaryFields(folder) {
   const entry = isPlainObject(folder) ? { ...folder } : {};
-
-  if (Object.hasOwn(entry, 'zip_id')) {
-    entry.arc_id = entry.zip_id;
-    delete entry.zip_id;
-  }
-
+  renameField(entry, 'zip_id', 'arc_id');
   return entry;
+}
+
+function renameField(record, fromKey, toKey) {
+  if (Object.hasOwn(record, fromKey)) {
+    record[toKey] = record[fromKey];
+    delete record[fromKey];
+  }
 }
 
 async function inspectDatabase(rawDatabase, source) {
@@ -1073,6 +1087,7 @@ async function buildArchiveView({
   issues,
 }) {
   const localIssues = [];
+  const issueContext = archiveId || 'archive';
   const archiveRecord = isPlainObject(archive) ? archive : {};
   const archiveBaseFilesUrl = getString(archiveRecord.base_files_url);
   const archiveFile = isPlainObject(archiveRecord.archive_file) ? archiveRecord.archive_file : {};
@@ -1085,13 +1100,8 @@ async function buildArchiveView({
   }
 
   if (archiveRecord.extract === 'all' && !archivePathInfo.displayPath) {
-    addIssue(
-      issues,
-      'error',
-      archiveId || 'archive',
-      '`target_folder` is required when `extract` is `all`.',
-    );
-    addIssue(localIssues, 'error', archiveId || 'archive', '`target_folder` is required.');
+    addIssue(issues, 'error', issueContext, '`target_folder` is required when `extract` is `all`.');
+    addIssue(localIssues, 'error', issueContext, '`target_folder` is required.');
   }
 
   if (archivePathInfo.displayPath) {
@@ -1101,7 +1111,7 @@ async function buildArchiveView({
       dbId,
       'archives.target_folder',
       localIssues,
-      archiveId || 'archive',
+      issueContext,
     );
   }
 
@@ -1115,42 +1125,26 @@ async function buildArchiveView({
     const summaryUrl = getString(summaryFile.url);
 
     if (!summaryUrl) {
-      addIssue(localIssues, 'error', archiveId || 'archive', '`summary_file.url` is missing.');
+      addIssue(localIssues, 'error', issueContext, '`summary_file.url` is missing.');
     } else {
       const resolvedSummaryUrl = resolveUrl(summaryUrl, sourceUrl);
       if (!resolvedSummaryUrl) {
-        addIssue(
-          localIssues,
-          'error',
-          archiveId || 'archive',
-          `Could not resolve summary file URL ${summaryUrl}.`,
-        );
+        addIssue(localIssues, 'error', issueContext, `Could not resolve summary file URL ${summaryUrl}.`);
       } else {
         loadedSummaryFile = resolvedSummaryUrl;
         try {
           const decoded = await fetchJsonish(resolvedSummaryUrl);
           summary = archiveRecord.__legacyZip
             ? convertLegacyZipSummary({
-                zipId: archiveId,
                 summary: decoded.json,
                 archivePathKind: getString(archiveRecord.path),
                 extractMode: getString(archiveRecord.extract),
               })
             : decoded.json;
-          summarySource = archiveRecord.__legacyZip
-            ? decoded.containerType === 'zip'
-              ? 'legacy summary_file (.json.zip)'
-              : 'legacy summary_file (.json)'
-            : decoded.containerType === 'zip'
-              ? 'summary_file (.json.zip)'
-              : 'summary_file (.json)';
+          const summaryFileKind = decoded.containerType === 'zip' ? '.json.zip' : '.json';
+          summarySource = `${archiveRecord.__legacyZip ? 'legacy ' : ''}summary_file (${summaryFileKind})`;
         } catch (error) {
-          addIssue(
-            localIssues,
-            'error',
-            archiveId || 'archive',
-            `Could not load summary_file: ${error.message}`,
-          );
+          addIssue(localIssues, 'error', issueContext, `Could not load summary_file: ${error.message}`);
         }
       }
     }
@@ -1158,12 +1152,7 @@ async function buildArchiveView({
     summary = archiveRecord.summary_inline;
     summarySource = archiveRecord.__legacyZip ? 'legacy internal_summary' : 'summary_inline';
   } else {
-    addIssue(
-      localIssues,
-      'error',
-      archiveId || 'archive',
-      'Archives need either `summary_inline` or `summary_file`.',
-    );
+    addIssue(localIssues, 'error', issueContext, 'Archives need either `summary_inline` or `summary_file`.');
   }
 
   for (const issue of localIssues) {
@@ -1206,16 +1195,10 @@ async function buildArchiveView({
 
   const missingArchiveFolders = findMissingParentFolders(summaryFiles, summaryFolders);
   for (const missingPath of missingArchiveFolders) {
-    addIssue(
-      localIssues,
+    addIssueToAll(
+      [localIssues, issues],
       'warning',
-      archiveId || 'archive',
-      `Folder \`${missingPath}/\` is not declared in the archive summary \`folders\` but is needed as a parent directory.`,
-    );
-    addIssue(
-      issues,
-      'warning',
-      archiveId || 'archive',
+      issueContext,
       `Folder \`${missingPath}/\` is not declared in the archive summary \`folders\` but is needed as a parent directory.`,
     );
   }
@@ -1227,11 +1210,7 @@ async function buildArchiveView({
     summarySource,
     summaryLoadedFrom: loadedSummaryFile,
     issues: localIssues,
-    primaryFields: buildPrimaryFields({
-      hash: getString(archiveFile.hash),
-      size: Number(archiveFile.size),
-      tags: [],
-    }),
+    primaryFields: buildPrimaryFields([]),
     details: buildArchiveDetails({
       archiveRecord,
       archivePath: archivePathInfo.displayPath,
@@ -1272,13 +1251,7 @@ function buildArchiveDetails({
     { label: 'Summary source', value: summarySource },
     { label: 'Loaded summary URL', value: loadedSummaryFile || 'Not loaded', kind: 'url' },
     { label: 'Archive base_files_url', value: archiveBaseFilesUrl || 'None', kind: 'url' },
-    {
-      label: 'External path',
-      value:
-        getString(archiveRecord.path) === 'pext' || archiveUsesLegacyExternalPath
-          ? 'Yes (pext)'
-          : 'No',
-    },
+    buildExternalPathDetail(archiveRecord.path, archiveUsesLegacyExternalPath),
     {
       label: 'Summary counts',
       value: `${Object.keys(summaryFolders).length} folders, ${Object.keys(summaryFiles).length} files`,
@@ -1301,20 +1274,8 @@ function buildFolderRecord({ scope, context, path, dbVersion, dbId, folder, tagL
     path: pathInfo.displayPath,
     name: leafName(pathInfo.displayPath, 'folder'),
     badge: 'DIR',
-    primaryFields: buildPrimaryFields({
-      hash: null,
-      size: null,
-      tags: tagEntries,
-    }),
-    details: [
-      {
-        label: 'External path',
-        value:
-          getString(folderRecord.path) === 'pext' || pathInfo.usesLegacyExternalPath
-            ? 'Yes (pext)'
-            : 'No',
-      },
-    ],
+    primaryFields: buildPrimaryFields(tagEntries),
+    details: [buildExternalPathDetail(folderRecord.path, pathInfo.usesLegacyExternalPath)],
   };
 }
 
@@ -1352,14 +1313,13 @@ function buildFileRecord({
     id: `${scope}:file:${path}`,
     kind: 'file',
     sizeBytes,
+    hash: getString(fileRecord.hash) || null,
     downloadUrl: resolvedUrl,
     filterTags: buildFilterTagNames(fileRecord.tags, tagLookup),
     path: pathInfo.displayPath,
     name: leafName(pathInfo.displayPath, 'file'),
     badge: 'FILE',
-    primaryFields: buildPrimaryFields({
-      tags: tagEntries,
-    }),
+    primaryFields: buildPrimaryFields(tagEntries),
     details: [
       ...buildHashAndSizeDetails({
         hash: getString(fileRecord.hash),
@@ -1370,21 +1330,7 @@ function buildFileRecord({
         resolvedUrl,
         missingLabel: 'None',
       }),
-      { label: 'Overwrite', value: fileRecord.overwrite === false ? 'No' : 'Yes' },
-      { label: 'Reboot', value: fileRecord.reboot === true ? 'Yes' : 'No' },
-      {
-        label: 'External path',
-        value:
-          getString(fileRecord.path) === 'pext' || pathInfo.usesLegacyExternalPath
-            ? 'Yes (pext)'
-            : 'No',
-      },
-      {
-        label: 'Tangle',
-        value: Array.isArray(fileRecord.tangle) && fileRecord.tangle.length
-          ? fileRecord.tangle
-          : ['None'],
-      },
+      ...buildFileInstallDetails(fileRecord, pathInfo),
     ],
   };
 }
@@ -1412,14 +1358,8 @@ function buildArchiveFolderRecord({
 
   const arcId = getString(folderRecord.arc_id);
   if (arcId && arcId !== archiveId) {
-    addIssue(
-      issues,
-      'error',
-      archiveId || 'archive',
-      `Archive folder ${path} has arc_id ${arcId}, expected ${archiveId}.`,
-    );
-    addIssue(
-      localIssues,
+    addIssueToAll(
+      [issues, localIssues],
       'error',
       archiveId || 'archive',
       `Archive folder ${path} has arc_id ${arcId}, expected ${archiveId}.`,
@@ -1436,20 +1376,10 @@ function buildArchiveFolderRecord({
     path: pathInfo.displayPath,
     name: leafName(pathInfo.displayPath, 'folder'),
     badge: 'DIR',
-    primaryFields: buildPrimaryFields({
-      hash: null,
-      size: null,
-      tags: tagEntries,
-    }),
+    primaryFields: buildPrimaryFields(tagEntries),
     details: [
       { label: 'Archive ID', value: arcId || 'Missing', kind: 'code' },
-      {
-        label: 'External path',
-        value:
-          getString(folderRecord.path) === 'pext' || pathInfo.usesLegacyExternalPath
-            ? 'Yes (pext)'
-            : 'No',
-      },
+      buildExternalPathDetail(folderRecord.path, pathInfo.usesLegacyExternalPath),
     ],
   };
 }
@@ -1478,34 +1408,24 @@ function buildArchiveFileRecord({
     path,
   );
 
+  const issueContext = archiveId || 'archive';
   const arcId = getString(wrapped.arc_id);
   const arcAt = getString(wrapped.arc_at);
   const isExtractAllArchive = archiveExtractMode === 'all';
 
   if (arcId && arcId !== archiveId) {
-    addIssue(
-      issues,
+    addIssueToAll(
+      [issues, localIssues],
       'error',
-      archiveId || 'archive',
-      `Archive file ${path} has arc_id ${arcId}, expected ${archiveId}.`,
-    );
-    addIssue(
-      localIssues,
-      'error',
-      archiveId || 'archive',
+      issueContext,
       `Archive file ${path} has arc_id ${arcId}, expected ${archiveId}.`,
     );
   }
 
   if (arcAt) {
-    validateArchiveMemberPath(arcAt, issues, archiveId || 'archive');
+    validateArchiveMemberPath(arcAt, issues, issueContext);
   } else if (!isExtractAllArchive) {
-    addIssue(
-      issues,
-      'warning',
-      archiveId || 'archive',
-      `Archive file ${path} is missing \`arc_at\`.`,
-    );
+    addIssue(issues, 'warning', issueContext, `Archive file ${path} is missing \`arc_at\`.`);
   }
 
   const explicitUrl = getString(wrapped.url);
@@ -1521,14 +1441,13 @@ function buildArchiveFileRecord({
     id: `archive:${archiveId}:file:${path}`,
     kind: 'file',
     sizeBytes,
+    hash: getString(wrapped.hash) || null,
     downloadUrl: resolvedUrl,
     filterTags: buildFilterTagNames(wrapped.tags, tagLookup),
     path: pathInfo.displayPath,
     name: leafName(pathInfo.displayPath, 'file'),
     badge: 'FILE',
-    primaryFields: buildPrimaryFields({
-      tags: tagEntries,
-    }),
+    primaryFields: buildPrimaryFields(tagEntries),
     details: [
       ...buildHashAndSizeDetails({
         hash: getString(wrapped.hash),
@@ -1545,24 +1464,12 @@ function buildArchiveFileRecord({
         resolvedUrl,
         missingLabel: 'Archive-only',
       }),
-      { label: 'Overwrite', value: wrapped.overwrite === false ? 'No' : 'Yes' },
-      { label: 'Reboot', value: wrapped.reboot === true ? 'Yes' : 'No' },
-      {
-        label: 'External path',
-        value:
-          getString(wrapped.path) === 'pext' || pathInfo.usesLegacyExternalPath
-            ? 'Yes (pext)'
-            : 'No',
-      },
-      {
-        label: 'Tangle',
-        value: Array.isArray(wrapped.tangle) && wrapped.tangle.length ? wrapped.tangle : ['None'],
-      },
+      ...buildFileInstallDetails(wrapped, pathInfo),
     ],
   };
 }
 
-function buildPrimaryFields({ tags }) {
+function buildPrimaryFields(tags) {
   const fields = [];
 
   if (Array.isArray(tags) && tags.length) {
@@ -1570,6 +1477,25 @@ function buildPrimaryFields({ tags }) {
   }
 
   return fields;
+}
+
+function buildFileInstallDetails(fileRecord, pathInfo) {
+  return [
+    { label: 'Overwrite', value: fileRecord.overwrite === false ? 'No' : 'Yes' },
+    { label: 'Reboot', value: fileRecord.reboot === true ? 'Yes' : 'No' },
+    buildExternalPathDetail(fileRecord.path, pathInfo.usesLegacyExternalPath),
+    {
+      label: 'Tangle',
+      value: Array.isArray(fileRecord.tangle) && fileRecord.tangle.length ? fileRecord.tangle : ['None'],
+    },
+  ];
+}
+
+function buildExternalPathDetail(pathKind, usesLegacyExternalPath) {
+  return {
+    label: 'External path',
+    value: getString(pathKind) === 'pext' || usesLegacyExternalPath ? 'Yes (pext)' : 'No',
+  };
 }
 
 function buildHashAndSizeDetails({ hash, size }) {
@@ -1628,20 +1554,22 @@ function collectInspectionFileRecords(inspection) {
   return [...filesystemFiles, ...archiveFiles];
 }
 
-function buildTreeFromRecords(records, scope) {
+// Builds the folder/file tree of a list of records (sorted in place). With `caseInsensitive`,
+// paths that differ only in letter case share a node, which keeps the first record's names.
+export function buildTreeFromRecords(records, scope, { caseInsensitive = false } = {}) {
   const root = {
     id: `${scope}:root`,
     childrenMap: new Map(),
   };
 
   for (const record of records.sort((left, right) => left.path.localeCompare(right.path))) {
-    insertRecord(root, record, scope);
+    insertRecord(root, record, scope, caseInsensitive);
   }
 
   return finalizeTreeNode(root);
 }
 
-function insertRecord(root, record, scope) {
+function insertRecord(root, record, scope, caseInsensitive) {
   const normalizedPath = trimTrailingSlash(record.path);
   const segments = normalizedPath.split('/').filter(Boolean);
 
@@ -1653,11 +1581,12 @@ function insertRecord(root, record, scope) {
 
   for (let index = 0; index < segments.length; index += 1) {
     const segment = segments[index];
+    const key = caseInsensitive ? segment.toLowerCase() : segment;
     const isLast = index === segments.length - 1;
     const missingFolderPath = segments.slice(0, index + 1).join('/');
 
     if (record.kind === 'file' && isLast) {
-      current.childrenMap.set(segment, {
+      current.childrenMap.set(key, {
         id: record.id,
         kind: 'file',
         downloadUrl: record.downloadUrl,
@@ -1666,11 +1595,12 @@ function insertRecord(root, record, scope) {
         badge: record.badge,
         primaryFields: record.primaryFields,
         details: record.details,
+        ...(record.dbId ? { dbId: record.dbId } : {}),
       });
       return;
     }
 
-    let child = current.childrenMap.get(segment);
+    let child = current.childrenMap.get(key);
     if (!child) {
       child = {
         id: `${scope}:missingfolder:${missingFolderPath}`,
@@ -1686,10 +1616,12 @@ function insertRecord(root, record, scope) {
         ],
         childrenMap: new Map(),
       };
-      current.childrenMap.set(segment, child);
+      current.childrenMap.set(key, child);
     }
 
-    if (record.kind === 'folder' && isLast) {
+    // Case-insensitive trees keep the first folder record for a path; others keep the last.
+    if (record.kind === 'folder' && isLast && !child.fromRecord) {
+      child.fromRecord = caseInsensitive;
       child.id = record.id;
       child.path = record.path;
       child.badge = record.badge;
@@ -2055,6 +1987,12 @@ function addIssue(list, level, context, message) {
   });
 }
 
+function addIssueToAll(lists, level, context, message) {
+  for (const list of lists) {
+    addIssue(list, level, context, message);
+  }
+}
+
 function validateDestinationPath(path, kind, dbId, context, issues, itemLabel) {
   if (context === 'archives.target_folder' && (path === '.' || path === './')) {
     return path;
@@ -2187,15 +2125,8 @@ function findMissingParentFolders(files, folders) {
 
   const requiredParents = new Set();
 
-  for (const filePath of Object.keys(files)) {
-    const segments = trimTrailingSlash(filePath).split('/').filter(Boolean);
-    for (let depth = 1; depth < segments.length; depth += 1) {
-      requiredParents.add(segments.slice(0, depth).join('/'));
-    }
-  }
-
-  for (const folderPath of Object.keys(folders)) {
-    const segments = trimTrailingSlash(folderPath).split('/').filter(Boolean);
+  for (const path of [...Object.keys(files), ...Object.keys(folders)]) {
+    const segments = trimTrailingSlash(path).split('/').filter(Boolean);
     for (let depth = 1; depth < segments.length; depth += 1) {
       requiredParents.add(segments.slice(0, depth).join('/'));
     }

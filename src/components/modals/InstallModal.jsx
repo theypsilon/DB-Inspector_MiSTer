@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { strToU8, zipSync } from 'fflate';
 import ModalFrame from './ModalFrame.jsx';
 import CopyLinkButton from '../ui/CopyLinkButton.jsx';
-import { triggerBrowserDownload } from '../../lib/utils.js';
+import { triggerBrowserDownload } from '../../lib/downloads.js';
 
-export default function InstallModal({ dbId, dbUrl, activeFilter, onClose }) {
+export default function InstallModal({ dbId, dbUrl, activeFilter, onClose, showInstallLink = true }) {
   const [includeFilter, setIncludeFilter] = useState(false);
   const trimmedFilter = String(activeFilter || '').trim();
   const hasFilter = trimmedFilter.length > 0;
@@ -31,7 +31,9 @@ export default function InstallModal({ dbId, dbUrl, activeFilter, onClose }) {
       label="Install"
       title={`Install \u201C${dbId}\u201D on MiSTer`}
       onClose={onClose}
-      headerActions={<CopyLinkButton url={installUrl} tooltip="Copy install link to clipboard" />}
+      headerActions={
+        showInstallLink ? <CopyLinkButton url={installUrl} tooltip="Copy install link to clipboard" /> : null
+      }
     >
       <p className="helper-copy">
         To install this database on your MiSTer, download the ZIP below, extract{' '}

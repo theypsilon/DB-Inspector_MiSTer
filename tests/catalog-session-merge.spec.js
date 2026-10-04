@@ -1,5 +1,13 @@
 import { expect, test } from '@playwright/test';
 
+// Opening a database while another is loaded asks whether to combine them; these flows replace it.
+function loadAlone(page) {
+  return page
+    .getByRole('dialog', { name: 'Combine with the loaded databases?' })
+    .getByRole('button', { name: 'Load alone' })
+    .click();
+}
+
 const RUNTIME_CATALOG_URL =
   'https://raw.githubusercontent.com/theypsilon/Update_All_MiSTer/master/src/update_all/databases.py';
 const MULTIDATABASES_CATALOG_URL =
@@ -110,7 +118,7 @@ test('adds README-only catalog entries with approximate IDs while Update_All win
   );
 
   await additionalOption.click();
-  await expect(page.locator('.modal-selected')).toContainText('README Exclusive');
+  await expect(page.locator('.modal-selected')).toContainText('MultiDatabases/readme-only');
   await expect(page.locator('.modal-selected')).toContainText('Approximate ID');
 
   await page.getByRole('button', { name: 'Open selected database' }).click();
@@ -122,8 +130,8 @@ test('adds README-only catalog entries with approximate IDs while Update_All win
   await expect(updatedOption).toContainText('definitive/readme-only');
   await expect(updatedOption).not.toContainText('Approximate ID');
   await expect(page.locator('.catalog-option').nth(3)).toContainText('README Exclusive');
-  await expect(page.locator('.modal-selected')).toContainText('definitive/readme-only');
-  await expect(page.locator('.modal-selected')).not.toContainText('Approximate ID');
+  await expect(updatedOption.locator('.catalog-loaded-badge')).toHaveText('Loaded');
+  await expect(page.locator('.catalog-loaded-badge')).toHaveCount(1);
 });
 
 test('loading a URL registered in the catalog uses the existing entry without adding a duplicate', async ({ page }) => {
@@ -140,7 +148,11 @@ test('loading a URL registered in the catalog uses the existing entry without ad
   await page.getByRole('button', { name: 'Browse catalog' }).click();
 
   await expect(page.getByText('4 of 4 entries')).toBeVisible();
-  await expect(page.locator('.modal-selected')).toContainText('Alternate Distribution');
+  // The loaded database is recognized as its existing catalog entry.
+  await expect(page.locator('.catalog-loaded-badge')).toHaveCount(1);
+  await expect(
+    page.locator('.catalog-option').filter({ hasText: 'Alternate Distribution' }).locator('.catalog-loaded-badge'),
+  ).toHaveText('Loaded');
   await expect(page.locator('.catalog-option').filter({ hasText: 'Primary Distribution' })).toHaveCount(1);
   await expect(page.locator('.catalog-option').filter({ hasText: 'Alternate Distribution' })).toHaveCount(1);
 });
@@ -158,10 +170,29 @@ test('catalog selections keep the active filter until the user clears it', async
   await page.getByRole('button', { name: 'Browse catalog' }).click();
   await page.locator('.catalog-option').filter({ hasText: 'Primary Distribution' }).click();
   await page.getByRole('button', { name: 'Open selected database' }).click();
+  await loadAlone(page);
 
   await expect(page.getByRole('heading', { name: 'distribution_mister' })).toBeVisible();
   await expect(filterInput).toHaveValue('manual !keep');
   await expect.poll(() => page.url()).toContain(`filter=${encodeURIComponent('manual !keep')}`);
+});
+
+test('a catalog database can be combined with the loaded one', async ({ page }) => {
+  await page.goto('/');
+  await page.getByLabel('URL').fill('https://example.com/other.json');
+  await page.getByRole('button', { name: 'Fetch database' }).click();
+  await expect(page.getByRole('heading', { name: 'other_db' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Browse catalog' }).click();
+  await page.locator('.catalog-option').filter({ hasText: 'Primary Distribution' }).click();
+  await page.getByRole('button', { name: 'Open selected database' }).click();
+  await page
+    .getByRole('dialog', { name: 'Combine with the loaded databases?' })
+    .getByRole('button', { name: 'Combine' })
+    .click();
+
+  await expect(page.getByRole('heading', { name: '2 combined databases' })).toBeVisible();
+  await expect(page.locator('.combined-database-card h3')).toHaveText(['other_db', 'distribution_mister']);
 });
 
 function buildDatabase(dbId, { defaultFilter = '' } = {}) {

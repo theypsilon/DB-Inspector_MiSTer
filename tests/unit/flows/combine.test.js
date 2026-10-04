@@ -1,0 +1,269 @@
+import assert from 'node:assert/strict';
+import { afterEach, test } from 'node:test';
+
+import { file, openApp } from '../support/app.js';
+
+// Mirrors tests/combine.spec.js.
+
+const ALPHA_URL = 'https://example.com/combine/alpha.json';
+const BETA_URL = 'https://example.com/combine/beta.json';
+const ALPHA_TWIN_URL = 'https://example.com/combine/alpha-twin.json';
+const GAMMA_URL = 'https://example.com/combine/gamma.json';
+const BETA_TWIN_URL = 'https://example.com/combine/beta-twin.json';
+
+const ALPHA = database('alpha', {
+  'cores/alpha.rbf': { size: 10, hash: 'a1', tags: [0] },
+  'games/shared.rom': { size: 5, hash: 'same' },
+});
+const BETA = database(
+  'beta',
+  {
+    'cores/beta.rbf': { size: 20, hash: 'b1', tags: [1] },
+    'games/shared.rom': { size: 7, hash: 'other' },
+  },
+  { default_options: { filter: '!console' } },
+);
+
+const ROUTES = {
+  [ALPHA_URL]: { body: ALPHA },
+  [BETA_URL]: { body: BETA },
+  [ALPHA_TWIN_URL]: { body: database('alpha', { 'twin.rbf': { size: 1 } }) },
+  [GAMMA_URL]: { body: database('gamma', { 'gamma.rbf': { size: 1, tags: [0] } }) },
+  [BETA_TWIN_URL]: { body: database('beta', { 'beta-twin.rbf': { size: 1 } }) },
+};
+
+let app;
+afterEach(() => app?.close());
+
+test('combining shows both databases, lists the paths they share as collisions, and keeps them in the URL', async () => {
+  app = await openApp('/', { routes: ROUTES });
+  await app.fetch(ALPHA_URL);
+  assert.equal(app.view.heading, 'alpha');
+
+  await app.fetch(BETA_URL);
+  await app.combine();
+
+  assert.equal(app.view.heading, '2 combined databases');
+  assert.deepEqual(
+    app.view.fileRows.filter(({ name }) => name === 'alpha.rbf'),
+    [{ name: 'alpha.rbf', dbId: 'alpha' }],
+  );
+  // Beta's own default filter (!console) still applies to it.
+  assert.ok(!app.view.files.includes('beta.rbf'));
+  assert.ok(!app.view.files.includes('shared.rom'));
+
+  assert.equal(app.view.collisions.filter((name) => name === 'shared.rom').length, 3);
+  assert.deepEqual(app.view.collisionRows.filter(({ dbId }) => dbId).map(({ dbId }) => dbId), ['alpha', 'beta']);
+  assert.ok(
+    app.view.issues.some((message) => message.includes('1 path is claimed by more than one database: alpha, beta.')),
+    app.view.issues.join('\n'),
+  );
+  assert.equal(app.search, `?database-url[alpha]=${ALPHA_URL}&database-url[beta]=${BETA_URL}`);
+
+  // Collided paths can be found like any other row.
+  assert.equal(app.find('shared.rom').length, 3);
+});
+
+test('the load prompt can be cancelled, asks which database stays when its db_id is loaded, and can load alone', async () => {
+  app = await openApp('/', { routes: ROUTES });
+  await app.fetch(ALPHA_URL);
+  assert.equal(app.view.heading, 'alpha');
+
+  await app.fetch(BETA_URL);
+  await app.cancelLoad();
+  assert.equal(app.prompt, null);
+  assert.equal(app.view.heading, 'alpha');
+
+  await app.fetch(BETA_URL);
+  await app.combine();
+  assert.equal(app.view.heading, '2 combined databases');
+  const combinedUrl = app.url;
+
+  // Only one database per db_id can be loaded: the user chooses which one stays.
+  await app.fetch(ALPHA_TWIN_URL);
+  await app.combine();
+  assert.equal(app.prompt.kind, 'replaceLoaded');
+  assert.deepEqual(
+    app.prompt.conflicts.map(({ dbId, loaded, incoming }) => [dbId, loaded.inspection.source.sourceLabel, incoming.inspection.source.sourceLabel]),
+    [['alpha', ALPHA_URL, ALPHA_TWIN_URL]],
+  );
+  await app.keepLoaded();
+  assert.equal(app.prompt, null);
+  assert.equal(app.view.heading, '2 combined databases');
+  assert.ok(!app.view.files.includes('twin.rbf'));
+  assert.equal(app.url, combinedUrl);
+
+  // Escape keeps the loaded one too.
+  await app.fetch(ALPHA_TWIN_URL);
+  await app.combine();
+  assert.equal(app.prompt.kind, 'replaceLoaded');
+  await app.escape();
+  assert.equal(app.prompt, null);
+  assert.ok(!app.view.files.includes('twin.rbf'));
+  assert.equal(app.url, combinedUrl);
+
+  await app.fetch(ALPHA_TWIN_URL);
+  await app.combine();
+  await app.replaceIt();
+  assert.deepEqual(app.view.cards, ['alpha', 'beta']);
+  assert.ok(app.view.files.includes('twin.rbf'));
+  assert.ok(!app.view.files.includes('alpha.rbf'));
+  assert.equal(app.search, `?database-url[alpha]=${ALPHA_TWIN_URL}&database-url[beta]=${BETA_URL}`);
+
+  await app.fetch(ALPHA_TWIN_URL);
+  await app.loadAlone();
+  assert.ok(app.view.files.includes('twin.rbf'));
+  assert.equal(app.view.combined, null);
+  assert.equal(app.search, `?database-url=${ALPHA_TWIN_URL}`);
+});
+
+test('combined databases share a [mister] filter and can have their own, kept in the URL and in history', async () => {
+  app = await openApp('/', { routes: ROUTES });
+  await app.fetch(ALPHA_URL);
+  assert.equal(app.view.heading, 'alpha');
+  await app.fetch(BETA_URL);
+  await app.combine();
+
+  assert.deepEqual(app.view.appliedFilters, ['alphaEverythingno filter', 'beta!consoledatabase default']);
+
+  // Beta's default does not include [mister], so the shared filter replaces it, as in Downloader.
+  await app.typeSharedFilter('arcade');
+  assert.deepEqual(app.view.appliedFilters, ['alphaarcadeshared filter', 'betaarcadeshared filter']);
+
+  await app.giveOwnFilter('beta');
+  await app.typeOwnFilter('beta', '[mister] console');
+  assert.deepEqual(app.view.appliedFilters, ['alphaarcadeshared filter', 'betaarcade consoleits own filter']);
+  assert.ok(app.view.files.includes('beta.rbf'));
+  assert.equal(
+    app.search,
+    `?database-url[alpha]=${ALPHA_URL}&database-url[beta]=${BETA_URL}&filter=arcade&filter[beta]=[mister] console`,
+  );
+
+  await app.reload();
+  assert.equal(app.view.heading, '2 combined databases');
+  assert.equal(app.sharedFilter, 'arcade');
+  assert.equal(app.ownFilter('beta'), '[mister] console');
+
+  await app.back();
+  assert.equal(app.view.heading, 'alpha');
+  assert.equal(app.view.combined, null);
+  await app.forward();
+  assert.equal(app.view.heading, '2 combined databases');
+  assert.deepEqual(app.view.appliedFilters, ['alphaarcadeshared filter', 'betaarcade consoleits own filter']);
+});
+
+test('uploads and database list entries can be combined too, and uploads stay out of the URL', async () => {
+  app = await openApp('/', { routes: ROUTES });
+  await app.fetch(ALPHA_URL);
+  assert.equal(app.view.heading, 'alpha');
+
+  await app.upload(file('beta.json', BETA));
+  await app.combine();
+  assert.equal(app.view.heading, '2 combined databases');
+
+  await app.upload(
+    file('downloader.ini', `[mister]\nfilter=arcade\n\n[gamma]\ndb_url=${GAMMA_URL}\n\n[other]\ndb_url=${BETA_URL}\n`),
+  );
+  // The list's picker opens first; combining is asked once its databases are chosen.
+  const picker = app.openChoice();
+  picker.toggleAll();
+  picker.check('gamma');
+  assert.equal(picker.openLabel, 'Open selected database');
+  await picker.open();
+  await app.combine();
+
+  assert.equal(app.view.heading, '3 combined databases');
+  // Gamma keeps the filter its list gives it ([mister] = arcade) as its own.
+  assert.equal(app.view.appliedFilters[2], 'gammaarcadeits own filter');
+  assert.equal(app.search, `?database-url[alpha]=${ALPHA_URL}&database-url[gamma]=${GAMMA_URL}&filter[gamma]=arcade`);
+});
+
+test('databases chosen together leave out those whose db_id is taken, and report what failed', async () => {
+  const missingUrl = 'https://example.com/combine/missing.json';
+  app = await openApp('/', {
+    routes: { ...ROUTES, [missingUrl]: { status: 404, contentType: 'text/plain', body: 'missing' } },
+  });
+
+  // Opened alone: within the selection, the first database with a db_id wins.
+  await app.upload(
+    file('downloader.ini', `[twin]\ndb_url=${ALPHA_TWIN_URL}\n\n[gamma]\ndb_url=${GAMMA_URL}\n\n[alpha]\ndb_url=${ALPHA_URL}\n`),
+  );
+  await openAllSelected(3);
+  assert.equal(app.view.heading, '2 combined databases');
+  assert.deepEqual(app.view.cards, ['alpha', 'gamma']);
+  assert.ok(app.view.files.includes('twin.rbf'));
+  assert.ok(
+    app.errorMessage.includes(`Another selected database has the db_id alpha, so ${ALPHA_URL} was not opened.`),
+    app.errorMessage,
+  );
+
+  // Combined with the loaded ones: a database whose db_id is loaded replaces it only when the user
+  // says so, and a selected database that is itself loaded (gamma) just stays.
+  await app.upload(
+    file('downloader.ini', `[beta]\ndb_url=${BETA_URL}\n\n[alpha]\ndb_url=${ALPHA_URL}\n\n[gamma]\ndb_url=${GAMMA_URL}\n`),
+  );
+  await openAllSelected(3);
+  await app.combine();
+  await app.keepLoaded();
+  assert.equal(app.view.heading, '3 combined databases');
+  assert.deepEqual(app.view.cards, ['alpha', 'gamma', 'beta']);
+  assert.ok(app.view.files.includes('twin.rbf'));
+  assert.equal(app.errorMessage, '');
+  expectOneDatabasePerDbId();
+
+  // Several databases with loaded db_ids: each one replaces the loaded one or stays out.
+  const replacing = `[alpha]\ndb_url=${ALPHA_URL}\n\n[other]\ndb_url=${BETA_TWIN_URL}\n`;
+  await app.upload(file('replacing.ini', replacing));
+  await openAllSelected(2);
+  await app.combine();
+  assert.deepEqual(app.prompt.conflicts.map(({ dbId }) => dbId), ['alpha', 'beta']);
+  await app.cancelReplace();
+  assert.deepEqual(app.view.cards, ['alpha', 'gamma', 'beta']);
+  assert.ok(app.view.files.includes('twin.rbf'));
+
+  await app.upload(file('replacing.ini', replacing));
+  await openAllSelected(2);
+  await app.combine();
+  // Every conflict starts checked; unchecking beta leaves alpha.
+  await app.continueReplacing('alpha');
+  assert.deepEqual(app.view.cards, ['alpha', 'gamma', 'beta']);
+  assert.ok(app.view.files.includes('alpha.rbf'));
+  assert.ok(!app.view.files.includes('twin.rbf'));
+  assert.ok(!app.view.files.includes('beta-twin.rbf'));
+  expectOneDatabasePerDbId();
+
+  // When only one of them opens, it is shown alone.
+  await app.upload(file('downloader.ini', `[missing]\ndb_url=${missingUrl}\n\n[gamma]\ndb_url=${GAMMA_URL}\n`));
+  await openAllSelected(2);
+  await app.loadAlone();
+  assert.equal(app.view.heading, 'gamma');
+  assert.equal(app.view.combined, null);
+  assert.ok(app.errorMessage.includes(`${missingUrl}: Request failed with 404 Not Found.`), app.errorMessage);
+  assert.equal(app.search, `?database-url=${GAMMA_URL}`);
+});
+
+// A list's picker starts with one database per db_id selected.
+async function openAllSelected(count) {
+  const picker = app.openChoice();
+  assert.equal(picker.openLabel, `Open ${count} selected databases`);
+  await picker.open();
+}
+
+// No two loaded databases ever share a db_id.
+function expectOneDatabasePerDbId() {
+  const dbIds = app.view.cards;
+  assert.equal(new Set(dbIds).size, dbIds.length);
+}
+
+function database(dbId, files, extra = {}) {
+  return {
+    db_id: dbId,
+    v: 1,
+    timestamp: 1710000000,
+    base_files_url: `https://example.com/${dbId}/`,
+    tag_dictionary: { arcade: 0, console: 1 },
+    files,
+    folders: {},
+    ...extra,
+  };
+}

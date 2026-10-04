@@ -34,14 +34,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build app (virtualized)
+      - name: Build app
         run: npm run build
-
-      - name: Build app (no virtualization)
-        run: VIRTUALIZE=false npm run build -- --outDir dist-dom --base "$([ -n "$GITHUB_REPOSITORY" ] && echo "/${GITHUB_REPOSITORY#*/}/dom/" || echo "/dom/")"
-
-      - name: Merge builds
-        run: mv dist-dom dist/dom
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

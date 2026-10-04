@@ -1,56 +1,17 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { findSearchMatches, matchIndexAt, nextMatchIndex, previousMatchIndex } from '../lib/search.js';
 
-const EMPTY_MATCHES = [];
-
-function useGlobalSearch({ filesystemIndex, archivesIndex, tagDictionary, hasEssentialHint, hasInspection }) {
+// `tagGroups` is [{ dbId, tags }]: one group with a null dbId for a single database.
+function useGlobalSearch({ filesystemIndex, archivesIndex, collisionsIndex, tagGroups, hasEssentialHint, hasInspection }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
   const [token, setToken] = useState(0);
 
-  const matches = useMemo(() => {
-    const trimmed = query.trim().toLowerCase();
-    if (!trimmed) return EMPTY_MATCHES;
-    const result = [];
-
-    const searchIndex = (index, section) => {
-      if (!index) return;
-      for (const [id, row] of index.rowsById) {
-        const name = (row.type === 'archive' ? row.archive.title : row.node.name) || '';
-        const path = row.type !== 'archive' ? row.node.path || '' : '';
-        if (name.toLowerCase().includes(trimmed)) {
-          result.push({ rowId: id, section, matchPart: 'name' });
-        } else if (path && path !== name && path.toLowerCase().includes(trimmed)) {
-          result.push({ rowId: id, section, matchPart: 'path' });
-        } else {
-          const fields = row.type === 'archive' ? row.archive.primaryFields : row.node.primaryFields;
-          const hasTagMatch = fields?.some(
-            (f) => f.kind === 'tags' && Array.isArray(f.value) && f.value.some((t) => t.label.toLowerCase().includes(trimmed)),
-          );
-          if (hasTagMatch) {
-            result.push({ rowId: id, section, matchPart: 'tags' });
-          }
-        }
-      }
-    };
-
-    if (hasEssentialHint && 'essential'.includes(trimmed)) {
-      result.push({ rowId: 'filter-essential-hint', section: 'filter', matchPart: 'name' });
-    }
-
-    searchIndex(filesystemIndex, 'filesystem');
-    searchIndex(archivesIndex, 'archives');
-
-    if (tagDictionary.length) {
-      for (const tag of tagDictionary) {
-        if (tag.name.toLowerCase().includes(trimmed)) {
-          result.push({ rowId: `tagdict-${tag.name}-${tag.index}`, section: 'tags', matchPart: 'name' });
-        }
-      }
-    }
-
-    return result;
-  }, [query, filesystemIndex, archivesIndex, tagDictionary, hasEssentialHint]);
+  const matches = useMemo(
+    () => findSearchMatches({ query, filesystemIndex, archivesIndex, collisionsIndex, tagGroups, hasEssentialHint }),
+    [query, filesystemIndex, archivesIndex, collisionsIndex, tagGroups, hasEssentialHint],
+  );
 
   const clampedIndex = matches.length ? currentMatchIndex % matches.length : 0;
   const trimmedQuery = query.trim();
@@ -91,20 +52,19 @@ function useGlobalSearch({ filesystemIndex, archivesIndex, tagDictionary, hasEss
   const goToNextMatch = useCallback(() => {
     if (!matches.length) return;
     setToken((t) => t + 1);
-    setCurrentMatchIndex((i) => (i + 1) % matches.length);
+    setCurrentMatchIndex((i) => nextMatchIndex(i, matches.length));
   }, [matches.length]);
 
   const goToPrevMatch = useCallback(() => {
     if (!matches.length) return;
     setToken((t) => t + 1);
-    setCurrentMatchIndex((i) => (i - 1 + matches.length) % matches.length);
+    setCurrentMatchIndex((i) => previousMatchIndex(i, matches.length));
   }, [matches.length]);
 
   const jumpToMatch = useCallback((oneBasedIndex) => {
     if (!matches.length) return;
-    const clamped = Math.max(0, Math.min(matches.length - 1, oneBasedIndex - 1));
     setToken((t) => t + 1);
-    setCurrentMatchIndex(clamped);
+    setCurrentMatchIndex(matchIndexAt(oneBasedIndex, matches.length));
   }, [matches.length]);
 
   const openRef = useRef(open);

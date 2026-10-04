@@ -1,5 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
-@import "tailwindcss";
+@import "tailwindcss" source(".");
 
 @theme {
   --color-bg: #f5efe2;
@@ -143,7 +143,7 @@ button, summary, a, label, [role='button'] { touch-action: manipulation; }
 .dropzone-active .dropzone-action { transform: translateY(-2px); box-shadow: 0 20px 38px rgba(30, 71, 117, 0.24); }
 .dropzone-drop-feedback .dropzone-surface { animation: dropzone-drop-flash 560ms cubic-bezier(0.2, 0.8, 0.2, 1); }
 .dropzone-drop-feedback .dropzone-action { animation: dropzone-action-pop 560ms cubic-bezier(0.2, 0.8, 0.2, 1); }
-.dropzone-note { font-size: 1.02rem; font-weight: 700; letter-spacing: -0.01em; }
+.dropzone-note { color: var(--ink); font-size: 1.02rem; font-weight: 700; letter-spacing: -0.01em; }
 .dropzone-hint { color: var(--muted); line-height: 1.5; }
 .dropzone-action { display: inline-flex; align-items: center; justify-content: center; padding: 0.8rem 1.15rem; border-radius: 999px; color: #f9f8f3; font-weight: 700; background: linear-gradient(135deg, var(--accent), var(--accent-strong)); box-shadow: 0 16px 32px rgba(30, 71, 117, 0.18); transition: box-shadow 160ms ease, transform 160ms ease; }
 
@@ -219,6 +219,22 @@ button:hover { filter: brightness(1.05); }
 .catalog-id-approximation:hover .info-tip { display: block; }
 .catalog-approximation-note { margin: 0; }
 .catalog-option-url { display: block; color: var(--muted); font-family: 'IBM Plex Mono', monospace; font-size: 0.84rem; overflow-wrap: anywhere; }
+label.catalog-option { cursor: pointer; }
+.catalog-option-check { width: 1.1rem; height: 1.1rem; margin: 0; flex-shrink: 0; align-self: center; accent-color: var(--accent); cursor: pointer; }
+.catalog-loaded-badge { display: inline-flex; padding: 0.2rem 0.42rem; border-radius: 999px; color: #1e5a3a; background: rgba(61, 135, 81, 0.14); font-size: 0.68rem; font-weight: 700; letter-spacing: 0.04em; line-height: 1; text-transform: uppercase; }
+.catalog-option-filter { color: var(--muted); font-size: 0.86rem; }
+.catalog-option-origin { color: var(--muted); font-size: 0.86rem; overflow-wrap: anywhere; }
+.replace-list { display: grid; gap: 0.75rem; margin: 0; padding: 0; list-style: none; }
+.replace-list li { display: grid; gap: 0.3rem; padding: 0.8rem 1rem; border-radius: var(--radius-md); border: 1px solid rgba(22, 33, 47, 0.12); background: rgba(255, 255, 255, 0.56); }
+.selection-summary { display: grid; gap: 0.5rem; }
+.selection-summary .section-label { margin: 0; }
+.selection-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; max-height: 7.5rem; overflow: auto; }
+.selection-chip { display: inline-flex; align-items: center; gap: 0.35rem; }
+.mister-option { display: grid; gap: 0.5rem; padding: 1rem; border-radius: var(--radius-md); border: 1px solid rgba(15, 111, 145, 0.2); background: linear-gradient(135deg, rgba(15, 111, 145, 0.08), rgba(255, 255, 255, 0.6)); }
+.mister-option .section-label, .mister-option .helper-copy { margin: 0; }
+fieldset.mister-option { min-width: 0; margin: 0; }
+fieldset.mister-option legend { float: left; width: 100%; padding: 0; }
+.mister-option-toggle { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; font-weight: 700; cursor: pointer; }
 
 /* Filter override */
 .filter-override-grid { display: grid; gap: 0.9rem; }
@@ -314,7 +330,7 @@ button:hover { filter: brightness(1.05); }
 .tree-column-hovered::before { content: ''; position: absolute; top: 0; bottom: var(--hovered-column-bottom, 0px); left: var(--hovered-column-x); width: 2px; transform: translateX(-50%); background: repeating-linear-gradient(to bottom, rgba(15, 111, 145, 0.25) 0px, rgba(15, 111, 145, 0.25) 6px, transparent 6px, transparent 12px); z-index: 1; pointer-events: none; }
 
 /* CSS Highlights API */
-::highlight(search-match-all-filter), ::highlight(search-match-all-files), ::highlight(search-match-all-archives), ::highlight(search-match-all-tags) { background-color: #ffff00; color: #000; }
+::highlight(search-match-all-filter), ::highlight(search-match-all-files), ::highlight(search-match-all-archives), ::highlight(search-match-all-collisions), ::highlight(search-match-all-tags) { background-color: #ffff00; color: #000; }
 ::highlight(search-match) { background-color: #ff9632; color: #000; }
 
 /* Find bar */
@@ -438,6 +454,20 @@ button:hover { filter: brightness(1.05); }
 @keyframes dropzone-action-pop { 0% { transform: translateY(-2px) scale(1); } 45% { transform: translateY(-4px) scale(1.05); } 100% { transform: translateY(0) scale(1); } }
 
 /* Responsive */
+/* Combined databases */
+.db-chip { display: inline-flex; align-items: center; flex-shrink: 0; margin: 0; padding: 0.18rem 0.55rem; border-radius: 999px; background: rgba(106, 76, 147, 0.12); color: #4a3572; font-family: 'IBM Plex Mono', monospace; font-size: 0.8rem; font-weight: 700; letter-spacing: 0; white-space: nowrap; }
+.collision-badge { background: linear-gradient(135deg, #b23a48, #d1495b); }
+.collision-list { position: relative; min-height: 1px; overflow-anchor: none; }
+.combined-database-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1rem; margin-top: 1.2rem; }
+.combined-database-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin-bottom: 0.7rem; }
+.combined-database-heading .install-button { margin-left: auto; }
+.database-filters { display: grid; justify-items: start; gap: 0.7rem; margin: 0 0 0.9rem; }
+.database-filter-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 0.7rem; width: 100%; }
+.effective-filter-list { display: grid; gap: 0.45rem; margin: 0 0 0.9rem; padding: 0; list-style: none; }
+.effective-filter-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
+.effective-filter-source { color: var(--muted); font-size: 0.85rem; }
+.tag-groups { display: grid; gap: 1.2rem; }
+
 @media (max-width: 960px) {
   .hero, .loader-grid, .catalog-toolbar, .filter-toolbar, .modal-toolbar, .catalog-selected-grid, .overview-grid, .highlight-row, .metadata-list { grid-template-columns: 1fr; }
   .overview-header, .section-heading, .tree-heading { align-items: stretch; flex-direction: column; }
@@ -456,6 +486,8 @@ button:hover { filter: brightness(1.05); }
   .tree-row { gap: 0.6rem; }
   .tree-entry { --tree-indent-step: 1rem; padding-left: calc(var(--tree-depth, 0) * var(--tree-indent-step)); }
   .tree-guide-elbow { width: var(--tree-indent-step); }
+  .database-filter-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .database-filter-row .db-chip { grid-column: 1 / -1; justify-self: start; }
 }
 
 @media (hover: none), (pointer: coarse) {

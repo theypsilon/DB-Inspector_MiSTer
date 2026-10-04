@@ -5,7 +5,7 @@ import {
   mergeRuntimeDatabaseCatalogEntries,
   parseMultiDatabasesCatalog,
 } from '../../src/lib/database.js';
-import { mergeCatalogEntries } from '../../src/lib/utils.js';
+import { mergeCatalogEntries, mergeCustomCatalogEntries } from '../../src/lib/catalog.js';
 
 const EXISTING_DATABASE_URL =
   'https://raw.githubusercontent.com/theypsilon/MultiDatabases_MiSTer/db/existing-db/db.json';
@@ -135,6 +135,81 @@ test('a definitive session override keeps the runtime entry position', () => {
       { key: 'last', dbId: 'last', title: 'Last', approximate: false },
     ],
   );
+});
+
+// Runtime catalog with two forks that share a db_id, as in Update_All's databases.py.
+const RUNTIME_ENTRIES = [
+  { key: 'primary', dbId: 'distribution_mister', dbUrl: 'https://example.com/primary.json', title: 'Primary Distribution' },
+  { key: 'alternate', dbId: 'distribution_mister', dbUrl: 'https://example.com/alias-alternate.json', title: 'Alternate Distribution' },
+  { key: 'other', dbId: 'other_db', dbUrl: 'https://example.com/other.json', title: 'Other Database' },
+];
+
+const summarize = (entries) => entries.map(({ key, title }) => `${key}: ${title}`);
+
+test('a custom entry replaces the runtime entry with the same URL, even when forks share its db_id', () => {
+  const customEntry = {
+    key: 'custom-alternate',
+    dbId: 'distribution_mister',
+    dbUrl: 'HTTPS://Example.com/alias-alternate.json ',
+    title: 'example.com / alias-alternate.json',
+  };
+
+  const mergedEntries = mergeCatalogEntries([customEntry], RUNTIME_ENTRIES);
+
+  assert.deepEqual(summarize(mergedEntries), [
+    'primary: Primary Distribution',
+    'custom-alternate: Alternate Distribution',
+    'other: Other Database',
+  ]);
+});
+
+test('a custom entry with a new URL and a db_id shared by forks is added next to them', () => {
+  const customEntry = {
+    key: 'custom',
+    dbId: 'distribution_mister',
+    dbUrl: 'https://example.com/custom.json',
+    title: 'example.com / custom.json',
+  };
+
+  const mergedEntries = mergeCatalogEntries([customEntry], RUNTIME_ENTRIES);
+
+  assert.deepEqual(summarize(mergedEntries), [
+    'custom: example.com / custom.json',
+    'primary: Primary Distribution',
+    'alternate: Alternate Distribution',
+    'other: Other Database',
+  ]);
+});
+
+test('a custom entry with a new URL replaces the runtime entry whose db_id is unique', () => {
+  const customEntry = {
+    key: 'custom-other',
+    dbId: ' OTHER_DB ',
+    dbUrl: 'https://mirror.example.com/other.json',
+    title: 'mirror.example.com / other.json',
+  };
+
+  const mergedEntries = mergeCatalogEntries([customEntry], RUNTIME_ENTRIES);
+
+  assert.deepEqual(summarize(mergedEntries), [
+    'primary: Primary Distribution',
+    'alternate: Alternate Distribution',
+    'custom-other: Other Database',
+  ]);
+  assert.deepEqual(mergedEntries[2].matchDbUrls, [
+    'https://mirror.example.com/other.json',
+    'https://example.com/other.json',
+  ]);
+});
+
+test('reloading a session entry updates it in place of adding a duplicate', () => {
+  const firstLoad = { key: 'first', dbId: 'custom_db', dbUrl: 'https://example.com/custom.json', title: 'First title' };
+  const reload = { key: 'reload', dbId: 'custom_db', dbUrl: 'https://example.com/custom.json', title: 'New title' };
+  const unrelated = { key: 'unrelated', dbId: 'unrelated_db', dbUrl: 'https://example.com/unrelated.json', title: 'Unrelated' };
+
+  const sessionEntries = mergeCustomCatalogEntries([reload], [unrelated, firstLoad]);
+
+  assert.deepEqual(summarize(sessionEntries), ['reload: New title', 'unrelated: Unrelated']);
 });
 
 function buildInspectUrl(databaseUrl) {

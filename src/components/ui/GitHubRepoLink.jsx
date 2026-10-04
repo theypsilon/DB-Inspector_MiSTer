@@ -1,12 +1,4 @@
-function extractGitHubRepo(source) {
-  const url = source.requestedUrl || source.sourceLabel;
-  if (!url) return null;
-  let match = url.match(/raw\.githubusercontent\.com\/([^/]+\/[^/]+)/);
-  if (match) return match[1];
-  match = url.match(/github\.com\/([^/]+\/[^/]+)/);
-  if (match) return match[1].replace(/\.git$/, '');
-  return null;
-}
+import { extractGitHubRepo } from '../../lib/utils.js';
 
 function GitHubRepoLink({ source, dbId }) {
   const repo = extractGitHubRepo(source);

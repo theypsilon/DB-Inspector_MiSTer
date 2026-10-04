@@ -14,14 +14,80 @@ import { expect, test } from '@playwright/test';
 //   - Tests 2 and 3 additionally look for the specific file "riscos.rom" (an ARM RISC OS ROM
 //     shipped with the Archimedes core) and the console folder names "Astrocade", "ATARI5200",
 //     and "Atari2600", which only exist in the Distribution_MiSTer database.
-//   RISCOS_REGION_ESTIMATED_TOP below is also calibrated against this database's tree layout.
+//   The live database keeps changing, so tests 2 and 3 measure where riscos.rom is at run time
+//   (see measureEstimatedRowOffset) instead of relying on a fixed scroll offset.
 //
 // Set REAL_SCROLL_URL to the large-DB app URL to run the suite:
 //   REAL_SCROLL_URL='http://localhost:5173/?database-url=...' npx playwright test real-db-scroll
 
 const DEFAULT_REAL_SCROLL_URL =
   'http://localhost:5173/?database-url=https%3A%2F%2Fraw.githubusercontent.com%2FMiSTer-devel%2FDistribution_MiSTer%2Fmain%2Fdb.json.zip';
-const RISCOS_REGION_ESTIMATED_TOP = 317809 + 1200;
+// How far past riscos.rom's estimated offset tests 2 and 3 jump: riscos.rom and the Astrocade and
+// ATARI folders after it are then rendered around the top of the viewport.
+const BEYOND_RISCOS_MARGIN = 300;
+
+// Opens the filesystem section with details shown and every folder expanded.
+async function openDetailedFilesystem(page, url) {
+  await page.goto(url, {
+    waitUntil: 'domcontentloaded',
+    timeout: 120_000,
+  });
+  await page.waitForSelector('.tree-root', { timeout: 120_000 });
+
+  const filesystemSection = page.locator('details', {
+    has: page.getByRole('heading', { name: 'Files and folders' }),
+  }).first();
+
+  await filesystemSection.evaluate((element) => {
+    const top = element.getBoundingClientRect().top + window.scrollY;
+    window.scrollTo(0, Math.max(0, top - 120));
+  });
+  await page.waitForTimeout(300);
+
+  await page.getByRole('button', { name: 'Detailed toggle' }).click();
+  await page.waitForTimeout(300);
+  await filesystemSection.getByRole('button', { name: /^Open all$/ }).click();
+  await page.waitForTimeout(1_200);
+
+  return filesystemSection;
+}
+
+// Returns a row's offset in the tree's estimated layout (rows not rendered yet use estimated
+// heights), as the tests would see it right after openDetailedFilesystem. It is measured in a
+// separate page prepared the same way: find-in-page jumps to the row, and before the row has been
+// rendered the app scrolls so that its estimated offset lands mid-viewport.
+async function measureEstimatedRowOffset(browser, url, fileName) {
+  const context = await browser.newContext({ viewport: test.info().project.use.viewport });
+  try {
+    const page = await context.newPage();
+    await page.addInitScript(() => {
+      const scrollTo = window.scrollTo.bind(window);
+      window.__treeJumps = [];
+      window.scrollTo = (...args) => {
+        const tree = document.querySelector('.tree-root');
+        window.__treeJumps.push({
+          y: typeof args[0] === 'object' ? args[0].top : args[1],
+          treeTop: tree ? tree.getBoundingClientRect().top + window.scrollY : 0,
+          viewportHalf: window.innerHeight / 2,
+        });
+        return scrollTo(...args);
+      };
+    });
+
+    await openDetailedFilesystem(page, url);
+    await page.evaluate(() => {
+      window.__treeJumps = [];
+    });
+    await page.locator('.app-footer').getByText('to search').click();
+    await page.getByLabel('Search text').fill(fileName);
+    await page.waitForFunction(() => window.__treeJumps.length > 0, null, { timeout: 30_000 });
+
+    const [jump] = await page.evaluate(() => window.__treeJumps);
+    return jump.y - jump.treeTop + jump.viewportHalf;
+  } finally {
+    await context.close();
+  }
+}
 
 test.describe('real database upward scroll regression', () => {
   test.skip(
@@ -172,38 +238,21 @@ test.describe('real database upward scroll regression', () => {
 
   test('detailed filesystem wheel-up scrolling responds promptly after jumping beyond riscos.rom', async ({
     page,
+    browser,
     browserName,
   }) => {
     test.skip(browserName !== 'chromium', 'This regression targets Chrome/Chromium scroll behavior.');
 
     const url = process.env.REAL_SCROLL_URL || DEFAULT_REAL_SCROLL_URL;
+    const riscosOffset = await measureEstimatedRowOffset(browser, url, 'riscos.rom');
 
-    await page.goto(url, {
-      waitUntil: 'domcontentloaded',
-      timeout: 120_000,
-    });
-    await page.waitForSelector('.tree-root', { timeout: 120_000 });
-
-    const filesystemSection = page.locator('details', {
-      has: page.getByRole('heading', { name: 'Files and folders' }),
-    }).first();
-
-    await filesystemSection.evaluate((element) => {
-      const top = element.getBoundingClientRect().top + window.scrollY;
-      window.scrollTo(0, Math.max(0, top - 120));
-    });
-    await page.waitForTimeout(300);
-
-    await page.getByRole('button', { name: 'Detailed toggle' }).click();
-    await page.waitForTimeout(300);
-    await filesystemSection.getByRole('button', { name: /^Open all$/ }).click();
-    await page.waitForTimeout(1_200);
+    await openDetailedFilesystem(page, url);
 
     const tree = page.locator('.tree-root').first();
     await tree.evaluate((element, offset) => {
       const top = element.getBoundingClientRect().top + window.scrollY;
       window.scrollTo(0, top + offset);
-    }, RISCOS_REGION_ESTIMATED_TOP);
+    }, riscosOffset + BEYOND_RISCOS_MARGIN);
     await page.waitForTimeout(30);
 
     await expect(page.getByRole('heading', { name: 'riscos.rom' })).toBeVisible();
@@ -244,38 +293,21 @@ test.describe('real database upward scroll regression', () => {
 
   test('detailed filesystem wheel-up scrolling does not reposition visible rows after jumping beyond riscos.rom', async ({
     page,
+    browser,
     browserName,
   }) => {
     test.skip(browserName !== 'chromium', 'This regression targets Chrome/Chromium scroll behavior.');
 
     const url = process.env.REAL_SCROLL_URL || DEFAULT_REAL_SCROLL_URL;
+    const riscosOffset = await measureEstimatedRowOffset(browser, url, 'riscos.rom');
 
-    await page.goto(url, {
-      waitUntil: 'domcontentloaded',
-      timeout: 120_000,
-    });
-    await page.waitForSelector('.tree-root', { timeout: 120_000 });
-
-    const filesystemSection = page.locator('details', {
-      has: page.getByRole('heading', { name: 'Files and folders' }),
-    }).first();
-
-    await filesystemSection.evaluate((element) => {
-      const top = element.getBoundingClientRect().top + window.scrollY;
-      window.scrollTo(0, Math.max(0, top - 120));
-    });
-    await page.waitForTimeout(300);
-
-    await page.getByRole('button', { name: 'Detailed toggle' }).click();
-    await page.waitForTimeout(300);
-    await filesystemSection.getByRole('button', { name: /^Open all$/ }).click();
-    await page.waitForTimeout(1_200);
+    await openDetailedFilesystem(page, url);
 
     const tree = page.locator('.tree-root').first();
     await tree.evaluate((element, offset) => {
       const top = element.getBoundingClientRect().top + window.scrollY;
       window.scrollTo(0, top + offset);
-    }, RISCOS_REGION_ESTIMATED_TOP);
+    }, riscosOffset + BEYOND_RISCOS_MARGIN);
     await page.waitForTimeout(30);
 
     await expect(page.getByRole('heading', { name: 'riscos.rom' })).toBeVisible();
@@ -390,26 +422,7 @@ test.describe('real database upward scroll regression', () => {
 
     const url = process.env.REAL_SCROLL_URL || DEFAULT_REAL_SCROLL_URL;
 
-    await page.goto(url, {
-      waitUntil: 'domcontentloaded',
-      timeout: 120_000,
-    });
-    await page.waitForSelector('.tree-root', { timeout: 120_000 });
-
-    const filesystemSection = page.locator('details', {
-      has: page.getByRole('heading', { name: 'Files and folders' }),
-    }).first();
-
-    await filesystemSection.evaluate((element) => {
-      const top = element.getBoundingClientRect().top + window.scrollY;
-      window.scrollTo(0, Math.max(0, top - 120));
-    });
-    await page.waitForTimeout(300);
-
-    await page.getByRole('button', { name: 'Detailed toggle' }).click();
-    await page.waitForTimeout(300);
-    await filesystemSection.getByRole('button', { name: /^Open all$/ }).click();
-    await page.waitForTimeout(1_200);
+    await openDetailedFilesystem(page, url);
 
     const tree = page.locator('.tree-root').first();
     const treeBox = await tree.boundingBox();

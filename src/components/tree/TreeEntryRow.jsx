@@ -1,9 +1,14 @@
-import { memo, useRef, useMemo, useLayoutEffect } from 'react';
+import { memo } from 'react';
 import PrimaryFieldRow from '../ui/PrimaryFieldRow.jsx';
 import MetadataList from '../ui/MetadataList.jsx';
 import EmptyState from '../ui/EmptyState.jsx';
-import { isBrowserOpenableFile, triggerFileDownload, buildVirtualRowStyle, buildTreeDepthStyle, buildTreeGuideStyle, getRowMeasurementKey } from '../../lib/utils.js';
+import { getRowFileLinks, triggerFileDownload } from '../../lib/downloads.js';
+import { buildTreeDepthStyle, buildTreeGuideStyle } from '../../lib/treeLayout.js';
+import { getRowBadge } from '../../lib/treeIndex.js';
+import { updateTooltipPlacement } from '../../lib/utils.js';
 
+// One tree row (archive, folder or file). TreeSection renders it through VirtualTreeEntryRow,
+// which supplies `containerRef` and `virtualStyle` to position and measure it.
 const TreeEntryRow = memo(function TreeEntryRow({
   row,
   collapsed,
@@ -14,43 +19,24 @@ const TreeEntryRow = memo(function TreeEntryRow({
   onSetRowState,
   onAnchorRow,
   onDownloadError,
-  onHeightChange,
-  virtualTop,
-  trimTopGuide,
-  trimBottomGuide,
+  containerRef,
+  virtualStyle,
 }) {
-  if (__VIRTUALIZE__) {
-    /* eslint-disable react-hooks/rules-of-hooks -- __VIRTUALIZE__ is a build-time constant */
-    var rowRef = useRef(null);
-    var previousMeasurementSignatureRef = useRef(null);
-    var virtualStyle = useMemo(
-      () =>
-        buildVirtualRowStyle(virtualTop, {
-          trimTopGuide,
-          trimBottomGuide,
-        }),
-      [trimBottomGuide, trimTopGuide, virtualTop],
-    );
-    /* eslint-enable react-hooks/rules-of-hooks */
-  }
   const isArchive = row.type === 'archive';
   const childIds = row.childIds;
   const showCollapseControl = isArchive || childIds.length > 0;
   const title = isArchive ? row.archive.title : row.node.name;
-  const badge = isArchive ? 'ZIP' : row.node.badge;
-  const badgeClassName = isArchive
-    ? 'node-badge archive-badge'
-    : `node-badge ${row.node.kind === 'file' ? 'file-badge' : 'folder-badge'}`;
+  const { badge, badgeClassName } = getRowBadge(row);
+  // Set when several databases are combined: the database the row comes from.
+  const dbId = isArchive ? row.archive.dbId : row.node.dbId;
   const identifier = isArchive ? row.archive.id : row.node.path;
   const identifierLabel = isArchive ? 'Archive' : 'Path';
   const showIdentifier = isArchive || identifier !== title;
-  const titleTooltip = showIdentifier ? `${title}\n${identifierLabel}: ${identifier}` : title;
   const primaryFields = isArchive ? row.archive.primaryFields : row.node.primaryFields;
   const details = isArchive ? row.archive.details : row.node.details;
   const issues = isArchive ? row.archive.issues : [];
   const isFile = !isArchive && row.node.kind === 'file';
-  const downloadUrl = isFile ? row.node.downloadUrl : null;
-  const openUrl = isFile && isBrowserOpenableFile(row.node.path) ? downloadUrl : null;
+  const { downloadUrl, openUrl } = getRowFileLinks(row);
   const bodyCollapsed = isFile && collapsed;
   const hasVisibleChildren = childIds.length > 0 && !collapsed;
   const containerClassName = [
@@ -62,42 +48,6 @@ const TreeEntryRow = memo(function TreeEntryRow({
     .filter(Boolean)
     .join(' ');
   const Container = isArchive ? 'article' : 'div';
-
-  if (__VIRTUALIZE__) {
-    /* eslint-disable react-hooks/rules-of-hooks -- __VIRTUALIZE__ is a build-time constant */
-    useLayoutEffect(() => {
-      const element = rowRef.current;
-      if (!element) {
-        return undefined;
-      }
-
-      const measurementSignature = `${collapsed ? '1' : '0'}:${detailsVisible ? '1' : '0'}`;
-      const measurementKey = getRowMeasurementKey(row.id, { collapsed, detailsVisible });
-      const previousMeasurementSignature = previousMeasurementSignatureRef.current;
-      const shouldFlushImmediately =
-        previousMeasurementSignature !== null && previousMeasurementSignature !== measurementSignature;
-      previousMeasurementSignatureRef.current = measurementSignature;
-
-      const reportHeight = (immediate = false) => {
-        onHeightChange(measurementKey, Math.ceil(element.getBoundingClientRect().height), { immediate });
-      };
-
-      reportHeight(shouldFlushImmediately);
-
-      if (typeof ResizeObserver === 'undefined') {
-        return undefined;
-      }
-
-      const observer = new ResizeObserver(() => {
-        reportHeight();
-      });
-      observer.observe(element);
-      return () => {
-        observer.disconnect();
-      };
-    }, [row.id, collapsed, detailsVisible, onHeightChange]);
-    /* eslint-enable react-hooks/rules-of-hooks */
-  }
 
   const handleToggleRowDetails = () => {
     if (isFile && collapsed && !detailsVisible) {
@@ -132,9 +82,9 @@ const TreeEntryRow = memo(function TreeEntryRow({
   return (
     <Container
       id={`row-${row.id}`}
-      ref={__VIRTUALIZE__ ? rowRef : undefined}
+      ref={containerRef}
       className={containerClassName}
-      style={__VIRTUALIZE__ ? { ...buildTreeDepthStyle(row.depth), ...virtualStyle } : buildTreeDepthStyle(row.depth)}
+      style={{ ...buildTreeDepthStyle(row.depth), ...virtualStyle }}
     >
       {row.depth || hasVisibleChildren ? (
         <div className="tree-guides" aria-hidden="true">
@@ -168,6 +118,7 @@ const TreeEntryRow = memo(function TreeEntryRow({
           <div className="tree-heading">
             <div className="tree-title-row">
               <span className={badgeClassName}>{badge}</span>
+              {dbId ? <span className="db-chip">{dbId}</span> : null}
               <button
                 type="button"
                 className="copy-link-button"
@@ -178,16 +129,16 @@ const TreeEntryRow = memo(function TreeEntryRow({
               <h3 onMouseEnter={(e) => {
                 const h3 = e.currentTarget;
                 const heading = h3.closest('.tree-heading');
-                const row = h3.closest('.tree-title-row');
+                const titleRow = h3.closest('.tree-title-row');
                 const nameTruncated = h3.scrollWidth > h3.clientWidth;
-                const idCode = row.querySelector('.tree-identifier-inline code');
+                const idCode = titleRow.querySelector('.tree-identifier-inline code');
                 const pathTruncated = idCode ? idCode.scrollWidth > idCode.clientWidth : false;
                 heading.classList.toggle('tooltip-hidden', !nameTruncated && !pathTruncated);
                 heading.classList.toggle('tooltip-name-hidden', !nameTruncated && pathTruncated);
                 if (nameTruncated || pathTruncated) {
                   const rect = heading.getBoundingClientRect();
                   heading.style.setProperty('--tooltip-x', `${e.clientX - rect.left}px`);
-                  heading.classList.toggle('tooltip-below', rect.top < 80);
+                  updateTooltipPlacement(heading, rect);
                 }
               }}>{title}</h3>
               {showIdentifier ? (

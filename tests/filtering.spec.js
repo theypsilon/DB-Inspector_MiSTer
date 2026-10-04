@@ -1,6 +1,14 @@
 import { expect, test } from '@playwright/test';
 
-test('FILTER applies downloader-style positive and negative terms across files and archive summaries', async ({
+// Opening a database while another is loaded asks whether to combine them; these flows replace it.
+function loadAlone(page) {
+  return page
+    .getByRole('dialog', { name: 'Combine with the loaded databases?' })
+    .getByRole('button', { name: 'Load alone' })
+    .click();
+}
+
+test('FILTER applies downloader-style terms across files and archive summaries, ignores inherited terms with a warning, and hides emptied sections', async ({
   page,
 }) => {
   await page.goto('/');
@@ -25,46 +33,21 @@ test('FILTER applies downloader-style positive and negative terms across files a
   await expect(page.getByRole('heading', { name: 'a.cht' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'plain.cht' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'b.cht' })).toHaveCount(0);
-});
 
-test('FILTER ignores inherited terms with a warning and keeps the remaining filter logic', async ({
-  page,
-}) => {
-  await page.goto('/');
-
-  await page.locator('#database-file-input').setInputFiles({
-    name: 'filter-smoke.json',
-    mimeType: 'application/json',
-    buffer: Buffer.from(JSON.stringify(buildFilterDatabase()), 'utf8'),
-  });
-
-  await expect(page.getByRole('heading', { name: 'filter_smoke' })).toBeVisible();
-
-  const filterInput = page.getByLabel('FILTER');
   await filterInput.fill('[mister] b');
 
+  // The warning shows once this filter applies; its summary reads the same as the previous one.
+  await expect(page.getByText('Inherited filter terms [mister] are not supported in this inspector and were ignored.')).toBeVisible();
   await expect(page.getByText('Showing 5 files, 5 folders, and 1 archives for this filter.')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'file_b.rbf' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'file_a.rbf' })).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'plain.rbf' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'essential.rbf' })).toBeVisible();
-  await expect(page.getByText('Inherited filter terms [mister] are not supported in this inspector and were ignored.')).toBeVisible();
-});
 
-test('Archives section disappears when filtering removes every archive entry', async ({ page }) => {
-  await page.goto('/');
-
-  await page.locator('#database-file-input').setInputFiles({
-    name: 'filter-smoke.json',
-    mimeType: 'application/json',
-    buffer: Buffer.from(JSON.stringify(buildFilterDatabase()), 'utf8'),
-  });
-
-  await expect(page.getByRole('heading', { name: 'filter_smoke' })).toBeVisible();
-
-  const filterInput = page.getByLabel('FILTER');
   await filterInput.fill('!all');
 
+  // The summary shows the filter applied, so the missing heading is not just an empty page.
+  await expect(page.getByText('Showing 1 files, 1 folders, and 0 archives for this filter.')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Archives' })).toHaveCount(0);
 });
 
@@ -120,14 +103,14 @@ test('missing FILTER param uses the database default, clear returns to that defa
   await expect.poll(() => page.url()).toContain('filter=');
 });
 
-test('manual FILTER survives direct URL fetches until it is cleared', async ({ page }) => {
+test('manual FILTER survives uploads and direct URL fetches of other databases', async ({ page }) => {
   const remoteUrl = 'https://example.com/filter-preserve-remote.json';
 
   await page.route(remoteUrl, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify(buildFilterDatabase({ defaultFilter: 'catalog-default' })),
+      body: JSON.stringify(buildFilterDatabase({ dbId: 'remote_filter_smoke', defaultFilter: 'catalog-default' })),
     });
   });
 
@@ -143,35 +126,26 @@ test('manual FILTER survives direct URL fetches until it is cleared', async ({ p
   await filterInput.fill('manual !keep');
   await expect(filterInput).toHaveValue('manual !keep');
 
-  await page.getByLabel('URL').fill(remoteUrl);
-  await page.getByRole('button', { name: 'Fetch database' }).click();
-
-  await expect(page.getByRole('heading', { name: 'filter_smoke' })).toBeVisible();
-  await expect(filterInput).toHaveValue('manual !keep');
-  await expect.poll(() => page.url()).toContain(`filter=${encodeURIComponent('manual !keep')}`);
-});
-
-test('manual FILTER survives uploaded databases until it is cleared', async ({ page }) => {
-  await page.goto('/');
-
-  await page.locator('#database-file-input').setInputFiles({
-    name: 'filter-smoke.json',
-    mimeType: 'application/json',
-    buffer: Buffer.from(JSON.stringify(buildFilterDatabase()), 'utf8'),
-  });
-
-  const filterInput = page.getByLabel('FILTER');
-  await filterInput.fill('manual !keep');
-  await expect(filterInput).toHaveValue('manual !keep');
-
   await page.locator('#database-file-input').setInputFiles({
     name: 'next-filter-smoke.json',
     mimeType: 'application/json',
-    buffer: Buffer.from(JSON.stringify(buildFilterDatabase({ defaultFilter: 'upload-default' })), 'utf8'),
+    buffer: Buffer.from(
+      JSON.stringify(buildFilterDatabase({ dbId: 'next_filter_smoke', defaultFilter: 'upload-default' })),
+      'utf8',
+    ),
   });
 
-  await expect(page.getByRole('heading', { name: 'filter_smoke' })).toBeVisible();
+  await loadAlone(page);
+  await expect(page.getByRole('heading', { name: 'next_filter_smoke' })).toBeVisible();
   await expect(filterInput).toHaveValue('manual !keep');
+
+  await page.getByLabel('URL').fill(remoteUrl);
+  await page.getByRole('button', { name: 'Fetch database' }).click();
+  await loadAlone(page);
+
+  await expect(page.getByRole('heading', { name: 'remote_filter_smoke' })).toBeVisible();
+  await expect(filterInput).toHaveValue('manual !keep');
+  await expect.poll(() => page.url()).toContain(`filter=${encodeURIComponent('manual !keep')}`);
 });
 
 test('single-entry INI lists apply their resolved section filter to FILTER', async ({ page }) => {
@@ -212,6 +186,7 @@ filter=arcade [mister]
     ),
   });
 
+  await loadAlone(page);
   await expect(page.getByRole('heading', { name: 'Replace the current filter?' })).toBeVisible();
   await expect(page.getByText('manual !keep')).toBeVisible();
   await expect(page.getByText('arcade ini-list-default')).toBeVisible();
@@ -258,6 +233,7 @@ filter=arcade [mister]
     ),
   });
 
+  await loadAlone(page);
   await expect(page.getByRole('heading', { name: 'Replace the current filter?' })).toBeVisible();
   await page.getByRole('button', { name: 'Keep current' }).click();
 
@@ -307,6 +283,9 @@ db_url=${secondRemoteUrl}
     ),
   });
 
+  // The list's picker starts with every database selected; open just the first one.
+  await page.getByRole('button', { name: 'Select none' }).click();
+  await page.getByRole('checkbox', { name: 'First', exact: true }).check();
   await page.getByRole('button', { name: 'Open selected database' }).click();
 
   await expect(page.getByRole('heading', { name: 'Replace the current filter?' })).toHaveCount(0);
@@ -347,9 +326,9 @@ db_url=${iniRemoteUrl}
   await expect(page.getByLabel('FILTER')).toHaveValue('arcade console !cheats');
 });
 
-function buildFilterDatabase({ defaultFilter = '' } = {}) {
+function buildFilterDatabase({ dbId = 'filter_smoke', defaultFilter = '' } = {}) {
   return {
-    db_id: 'filter_smoke',
+    db_id: dbId,
     v: 1,
     timestamp: 1710000000,
     default_options: defaultFilter

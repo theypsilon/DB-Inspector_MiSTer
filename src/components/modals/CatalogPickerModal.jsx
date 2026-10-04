@@ -1,190 +1,46 @@
-import { memo, useState, useEffect, useMemo } from 'react';
-import { flushSync } from 'react-dom';
-import ModalFrame from './ModalFrame.jsx';
-import EmptyState from '../ui/EmptyState.jsx';
-import useDebouncedValue from '../../hooks/useDebouncedValue.js';
-import { normalizeComparableUrl, runAfterNextPaint, FILTER_INPUT_DEBOUNCE_MS } from '../../lib/utils.js';
+import { memo, useMemo } from 'react';
+import DatabasePickerModal from './DatabasePickerModal.jsx';
+import { findUpdateAllDefaultKeys } from '../../lib/selection.js';
 
-const APPROXIMATE_DB_ID_TOOLTIP =
-  'The real database ID will be determined when the database is opened.';
-
-function ApproximateDbIdLabel() {
-  return (
-    <span
-      className="catalog-id-approximation info-hint"
-      aria-label={`Approximate ID. ${APPROXIMATE_DB_ID_TOOLTIP}`}
-      onMouseEnter={(event) => {
-        event.currentTarget.classList.toggle(
-          'tooltip-below',
-          event.currentTarget.getBoundingClientRect().top < 80,
-        );
-      }}
-    >
-      Approximate ID
-      <span className="info-tip" role="tooltip">
-        {APPROXIMATE_DB_ID_TOOLTIP}
-      </span>
-    </span>
-  );
-}
+const CATALOG_SEARCH = {
+  id: 'catalog-modal-search',
+  label: 'Search catalog',
+  placeholder: 'Search by ID, title, or URL',
+};
+// The catalog opens with nothing selected.
+const NO_KEYS = [];
 
 const CatalogPickerModal = memo(function CatalogPickerModal({
   options,
   status,
   error,
-  initialDatabaseUrl,
+  loadedDatabases,
   onClose,
-  onOpenDatabase,
+  onOpenDatabases,
 }) {
-  const initialSelectedKey = useMemo(() => {
-    const normalizedCurrentUrl = normalizeComparableUrl(initialDatabaseUrl);
-    return options.find((option) => normalizeComparableUrl(option.dbUrl) === normalizedCurrentUrl)?.key ?? '';
-  }, [initialDatabaseUrl, options]);
-  const [query, setQuery] = useState('');
-  const [selectedKey, setSelectedKey] = useState(initialSelectedKey);
-  const debouncedQuery = useDebouncedValue(query.trim().toLowerCase(), FILTER_INPUT_DEBOUNCE_MS);
-
-  useEffect(() => {
-    setSelectedKey(initialSelectedKey);
-  }, [initialSelectedKey]);
-
-  const filteredOptions = useMemo(() => {
-    if (!debouncedQuery) {
-      return options;
-    }
-
-    return options.filter((option) => {
-      const haystack = `${option.dbId} ${option.title} ${option.dbUrl}`.toLowerCase();
-      return haystack.includes(debouncedQuery);
-    });
-  }, [debouncedQuery, options]);
-
-  const selectedOption = useMemo(
-    () => options.find((item) => item.key === selectedKey) ?? null,
-    [options, selectedKey],
-  );
-  const hasApproximateDbIds = useMemo(
-    () => options.some((option) => option.dbIdApproximate),
-    [options],
+  const updateAllDefaultKeys = useMemo(() => findUpdateAllDefaultKeys(options), [options]);
+  const presets = useMemo(
+    () => [{ label: 'Select Update All defaults', keys: updateAllDefaultKeys }],
+    [updateAllDefaultKeys],
   );
 
   return (
-    <ModalFrame
+    <DatabasePickerModal
       label="Catalog"
       title="Browse database catalog"
+      entries={options}
+      status={status}
+      error={error}
+      search={CATALOG_SEARCH}
+      initialSelectedKeys={NO_KEYS}
+      preferredKeys={updateAllDefaultKeys}
+      presets={presets}
+      loadedDatabases={loadedDatabases}
+      listLabel="Catalog results"
+      emptyMessage="No catalog entries match the current search."
       onClose={onClose}
-      footer={
-        <>
-          <button type="button" className="secondary-button" onClick={onClose}>
-            Close
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (selectedOption) {
-                flushSync(() => {
-                  onClose();
-                });
-                runAfterNextPaint(() => {
-                  onOpenDatabase(selectedOption.dbUrl, selectedOption);
-                });
-              }
-            }}
-            disabled={!selectedOption}
-          >
-            Open selected database
-          </button>
-        </>
-      }
-    >
-      <div className="modal-toolbar">
-        <div className="catalog-search">
-          <label className="field-label" htmlFor="catalog-modal-search">
-            Search catalog
-          </label>
-          <input
-            id="catalog-modal-search"
-            type="search"
-            placeholder="Search by ID, title, or URL"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            disabled={status !== 'ready'}
-          />
-        </div>
-        <p className="catalog-count">
-          {status === 'ready'
-            ? `${filteredOptions.length} of ${options.length} entries`
-            : 'Catalog unavailable'}
-        </p>
-      </div>
-      {hasApproximateDbIds ? (
-        <p className="helper-copy catalog-approximation-note">
-          Entries marked “Approximate ID” use the folder from their database URL because their
-          catalog source does not publish a database ID.
-        </p>
-      ) : null}
-      {selectedOption ? (
-        <article className="compact-selected modal-selected">
-          <p className="section-label">Selected</p>
-          <div className="catalog-selected-grid compact-selected-grid">
-            <div>
-              <span className="catalog-meta-label">Database ID</span>
-              <div className="catalog-id-row">
-                <code>{selectedOption.dbId}</code>
-                {selectedOption.dbIdApproximate ? (
-                  <ApproximateDbIdLabel />
-                ) : null}
-              </div>
-            </div>
-            <div>
-              <span className="catalog-meta-label">Title</span>
-              <strong>{selectedOption.title}</strong>
-            </div>
-            <div className="catalog-selected-url">
-              <span className="catalog-meta-label">URL</span>
-              <a href={selectedOption.dbUrl} target="_blank" rel="noreferrer">
-                {selectedOption.dbUrl}
-              </a>
-            </div>
-          </div>
-        </article>
-      ) : null}
-      {status === 'loading' ? (
-        <p className="helper-copy">Loading catalog entries.</p>
-      ) : null}
-      {status === 'error' ? <p className="status error">{error}</p> : null}
-      {status === 'ready' ? (
-        filteredOptions.length ? (
-          <div className="catalog-list modal-list" role="listbox" aria-label="Catalog results">
-            {filteredOptions.map((option) => (
-              <button
-                key={option.key}
-                type="button"
-                className={
-                  option.key === selectedKey
-                    ? 'catalog-option catalog-option-selected'
-                    : 'catalog-option'
-                }
-                onClick={() => setSelectedKey(option.key)}
-              >
-                <div className="catalog-option-head">
-                  <div className="catalog-id-row">
-                    <code>{option.dbId}</code>
-                    {option.dbIdApproximate ? (
-                      <ApproximateDbIdLabel />
-                    ) : null}
-                  </div>
-                  <strong>{option.title}</strong>
-                </div>
-                <span className="catalog-option-url">{option.dbUrl}</span>
-              </button>
-            ))}
-          </div>
-        ) : (
-          <EmptyState message="No catalog entries match the current search." />
-        )
-      ) : null}
-    </ModalFrame>
+      onOpen={onOpenDatabases}
+    />
   );
 });
 

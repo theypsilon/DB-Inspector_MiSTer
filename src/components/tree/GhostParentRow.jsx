@@ -1,11 +1,9 @@
+import { getRowBadge } from '../../lib/treeIndex.js';
+
 function GhostParentRow({ row, containerLeft, onNavigate }) {
   if (!row) return null;
-  const isArchive = row.type === 'archive';
-  const title = isArchive ? row.archive.title : row.node.name;
-  const badge = isArchive ? 'ZIP' : row.node.badge;
-  const badgeClassName = isArchive
-    ? 'node-badge archive-badge'
-    : `node-badge ${row.node.kind === 'file' ? 'file-badge' : 'folder-badge'}`;
+  const title = row.type === 'archive' ? row.archive.title : row.node.name;
+  const { badge, badgeClassName } = getRowBadge(row);
 
   const rootFontSize = typeof document !== 'undefined'
     ? parseFloat(getComputedStyle(document.documentElement).fontSize)

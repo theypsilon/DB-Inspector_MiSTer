@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import ModalFrame from './ModalFrame.jsx';
-import { formatFilterPromptValue } from '../../lib/utils.js';
+import { formatFilterPromptValue } from '../../lib/filterDefaults.js';
 
 const FilterOverrideModal = memo(function FilterOverrideModal({
   currentFilter,
