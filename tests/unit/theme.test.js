@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-import { THEME_STORAGE_KEY, readThemeMode, resolveTheme, storeThemeMode } from '../../src/lib/theme.js';
+import { HIDDEN_THEMES, THEME_STORAGE_KEY, readThemeMode, resolveTheme, storeThemeMode } from '../../src/lib/theme.js';
 
 function memoryStorage(initial = {}) {
   const values = new Map(Object.entries(initial));
@@ -29,6 +29,15 @@ const blockedStorage = {
 test('a chosen theme stays, whatever the system says', () => {
   assert.equal(resolveTheme('light', true), 'light');
   assert.equal(resolveTheme('dark', false), 'dark');
+});
+
+test('the hidden themes are chosen themes too, written by hand', () => {
+  assert.deepEqual(HIDDEN_THEMES, ['classic', 'dot-matrix', 'phosphor']);
+  for (const theme of HIDDEN_THEMES) {
+    assert.equal(resolveTheme(theme, true), theme);
+    assert.equal(resolveTheme(theme, false), theme);
+    assert.equal(readThemeMode(memoryStorage({ [THEME_STORAGE_KEY]: theme })), theme);
+  }
 });
 
 test('matching the system shows the system\u2019s theme', () => {
@@ -79,7 +88,7 @@ function runEarlyScript({ stored, prefersDark, storageBlocked = false, matchMedi
 }
 
 test('the page draws with the same theme the rule gives, before any of its code loads', () => {
-  for (const stored of ['light', 'dark', 'sepia', undefined]) {
+  for (const stored of ['light', 'dark', ...HIDDEN_THEMES, 'sepia', undefined]) {
     for (const prefersDark of [true, false]) {
       assert.equal(
         runEarlyScript({ stored, prefersDark }),

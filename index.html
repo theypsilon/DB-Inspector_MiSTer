@@ -10,8 +10,8 @@
       content="Inspect MiSTer custom downloader databases and archive summaries in the browser."
     />
     <script>
-      // The theme, before the page draws: the visitor's choice, else their system's. The same rule
-      // as src/lib/theme.js, which the page's toggle uses from then on.
+      // The theme, before the page draws: the visitor's choice (or a hidden theme written by hand),
+      // else their system's. The same rule as src/lib/theme.js, which the theme menu uses from then on.
       (function () {
         var theme = null;
         try {
@@ -19,7 +19,7 @@
         } catch (error) {
           theme = null;
         }
-        if (theme !== 'light' && theme !== 'dark') {
+        if (['light', 'dark', 'classic', 'dot-matrix', 'phosphor'].indexOf(theme) < 0) {
           theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
         }
         document.documentElement.dataset.theme = theme;

@@ -10,10 +10,11 @@
 /* This includes: animations, tree structure, tooltips, pseudo-elements,      */
 /* backdrop-filter effects, CSS Highlights API, and component-specific styles. */
 
-/* Two themes, each one set of the variables below: 16-bit, light, after the Super Nintendo, and
-   Retrowave, dark, after 80s synthwave. index.html sets data-theme before the page draws, from the
-   visitor's choice (the toggle in the top corner) or else their system's; every color in this file
-   comes from these variables, so a new color needs a value in both. */
+/* The themes, each one set of the variables below: 16-bit, light, after the Super Nintendo, and
+   Retrowave, dark, after 80s synthwave, which the theme menu offers; and Classic (the theme before
+   them), Dot Matrix and Phosphor, which only a hand-written localStorage value picks. index.html
+   sets data-theme before the page draws, and every color in this file comes from these variables,
+   so a new color needs a value in each block. */
 :root {
   --sans: 'Space Grotesk', sans-serif;
   --mono: 'IBM Plex Mono', monospace;
@@ -136,6 +137,15 @@
   --brand-mark: radial-gradient(circle at 5px 5px, #d6322f 4.5px, transparent 5px), radial-gradient(circle at 17px 5px, #f2b41f 4.5px, transparent 5px), radial-gradient(circle at 29px 5px, #2f9e44 4.5px, transparent 5px), radial-gradient(circle at 41px 5px, #2f5fd0 4.5px, transparent 5px);
   --title-line: none;
   --title-glow: none;
+  --spinner: #4d4196;
+  --install: #4d4196;
+  --on-install: #ffffff;
+  --open-action: #ffffff;
+  --open-action-hover: #f0eefa;
+  --on-open-action: #4d4196;
+  --open-action-line: #c3bde2;
+  --panel-corner: 16px;
+  --brand-mark-display: inline-block;
 }
 
 :root[data-theme="dark"] {
@@ -255,6 +265,399 @@
   --brand-mark: linear-gradient(90deg, #ff5ea3, #ffb27a 55%, #ffd27a) 0 50% / 100% 3px no-repeat;
   --title-line: linear-gradient(90deg, #ff5ea3, #ffb27a 55%, #ffd27a);
   --title-glow: 0 0 18px rgba(255, 94, 163, 0.35);
+  --spinner: #ff5ea3;
+  --install: #ff5ea3;
+  --on-install: #1a0d2e;
+  --open-action: #211c40;
+  --open-action-hover: #282249;
+  --on-open-action: #6be6f5;
+  --open-action-line: #3f6f8f;
+  --panel-corner: 12px;
+  --brand-mark-display: inline-block;
+}
+
+:root[data-theme="classic"] {
+  color-scheme: light;
+  --page: #ede6d4;
+  --page-glow: radial-gradient(circle at top left, rgba(221, 109, 61, 0.22), transparent 28%), radial-gradient(circle at top right, rgba(15, 111, 145, 0.2), transparent 22%), linear-gradient(180deg, #fbf4e5 0%, #f1ead9 48%, #ede6d4 100%);
+  --panel: rgba(255, 250, 240, 0.82);
+  --panel-line: rgba(22, 33, 47, 0.12);
+  --panel-hover-line: rgba(15, 111, 145, 0.34);
+  --card: rgba(255, 255, 255, 0.6);
+  --card-line: rgba(22, 33, 47, 0.12);
+  --card-hover: rgba(15, 111, 145, 0.08);
+  --dialog: rgba(255, 250, 240, 0.96);
+  --backdrop: rgba(22, 33, 47, 0.34);
+  --shadow: 0 22px 60px rgba(22, 33, 47, 0.14);
+  --dialog-shadow: 0 30px 80px rgba(22, 33, 47, 0.26);
+  --ink: #16212f;
+  --muted: #59657a;
+  --faint: #7d8696;
+  --label: #b4532a;
+  --link: #1e4775;
+  --primary: linear-gradient(135deg, #0f6f91, #1e4775);
+  --on-primary: #f9f8f3;
+  --secondary: linear-gradient(135deg, rgba(22, 33, 47, 0.8), rgba(22, 33, 47, 0.64));
+  --on-secondary: #f9f8f3;
+  --secondary-line: transparent;
+  --quiet: rgba(22, 33, 47, 0.08);
+  --quiet-hover: rgba(22, 33, 47, 0.14);
+  --on-quiet: #16212f;
+  --row-action: linear-gradient(135deg, #3d8751, #1e6a5c);
+  --row-action-hover: linear-gradient(135deg, #3d8751, #1e6a5c);
+  --on-row-action: #f9f8f3;
+  --row-action-line: transparent;
+  --focus: rgba(15, 111, 145, 0.42);
+  --check: #0f6f91;
+  --toggle-on: linear-gradient(135deg, #0f6f91, #1e4775);
+  --on-toggle-on: #f9f8f3;
+  --control-line: rgba(22, 33, 47, 0.18);
+  --hover-tint: rgba(15, 111, 145, 0.06);
+  --field: rgba(255, 255, 255, 0.72);
+  --field-line: rgba(22, 33, 47, 0.18);
+  --field-hint: #757575;
+  --file: linear-gradient(135deg, #0f6f91, #1e4775);
+  --on-file: #ffffff;
+  --dir: linear-gradient(135deg, #8a5c16, #dd6d3d);
+  --on-dir: #ffffff;
+  --zip: linear-gradient(135deg, #3d8751, #1e6a5c);
+  --on-zip: #ffffff;
+  --path: linear-gradient(135deg, #b23a48, #d1495b);
+  --on-path: #ffffff;
+  --tag: rgba(15, 111, 145, 0.08);
+  --on-tag: #16212f;
+  --more: rgba(15, 111, 145, 0.16);
+  --more-hover: rgba(15, 111, 145, 0.26);
+  --on-more: #1e4775;
+  --db: rgba(106, 76, 147, 0.12);
+  --on-db: #4a3572;
+  --db-line: transparent;
+  --pill: rgba(15, 111, 145, 0.08);
+  --pill-line: rgba(15, 111, 145, 0.15);
+  --on-pill: #1e4775;
+  --code: rgba(22, 33, 47, 0.08);
+  --kbd: #f5f5f5;
+  --kbd-line: #cccccc;
+  --warn-row: rgba(157, 111, 0, 0.09);
+  --warn: rgba(22, 33, 47, 0.12);
+  --on-warn: #16212f;
+  --err-row: rgba(160, 54, 45, 0.08);
+  --err: rgba(22, 33, 47, 0.12);
+  --on-err: #a0362d;
+  --info-row: rgba(15, 111, 145, 0.08);
+  --issue-row: rgba(22, 33, 47, 0.06);
+  --ok: rgba(61, 135, 81, 0.14);
+  --on-ok: #1e5a3a;
+  --ok-tint: rgba(61, 135, 81, 0.06);
+  --approx: rgba(221, 109, 61, 0.1);
+  --approx-line: rgba(138, 92, 22, 0.22);
+  --on-approx: #72490f;
+  --selected: linear-gradient(135deg, rgba(15, 111, 145, 0.12), rgba(255, 255, 255, 0.7));
+  --selected-line: rgba(15, 111, 145, 0.35);
+  --tree-line: rgba(30, 71, 117, 0.5);
+  --tree-node: linear-gradient(135deg, rgba(22, 33, 47, 0.9), rgba(30, 71, 117, 0.82));
+  --on-tree-node: #f9f8f3;
+  --guide-hover: rgba(15, 111, 145, 0.25);
+  --tip: rgba(22, 33, 47, 0.96);
+  --on-tip: #ffffff;
+  --tip-shadow: 0 10px 24px rgba(22, 33, 47, 0.24);
+  --float: linear-gradient(135deg, rgba(22, 33, 47, 0.78), rgba(22, 33, 47, 0.6));
+  --on-float: #f9f8f3;
+  --float-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  --find: #ffffff;
+  --find-line: #cccccc;
+  --find-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  --ghost: rgb(249, 248, 243);
+  --note: linear-gradient(135deg, rgba(15, 111, 145, 0.1), rgba(30, 71, 117, 0.08));
+  --note-line: rgba(15, 111, 145, 0.16);
+  --drop: linear-gradient(135deg, rgba(15, 111, 145, 0.08), rgba(255, 255, 255, 0.5));
+  --drop-hover: linear-gradient(135deg, rgba(15, 111, 145, 0.12), rgba(255, 255, 255, 0.7));
+  --drop-line: rgba(15, 111, 145, 0.28);
+  --drop-line-hover: rgba(15, 111, 145, 0.46);
+  --drop-shadow: 0 14px 34px rgba(30, 71, 117, 0.12);
+  --flash: linear-gradient(135deg, rgba(221, 109, 61, 0.22), rgba(255, 255, 255, 0.8));
+  --flash-line: rgba(221, 109, 61, 0.52);
+  --flash-shadow: 0 18px 38px rgba(221, 109, 61, 0.16);
+  --spinner-track: rgba(15, 111, 145, 0.16);
+  --hl: #ffff00;
+  --on-hl: #000000;
+  --hl-current: #ff9632;
+  --on-hl-current: #000000;
+  --radius-lg: 28px;
+  --radius-md: 18px;
+  --radius-sm: 12px;
+  --radius-button: 999px;
+  --radius-chip: 999px;
+  --radius-badge: 999px;
+  --radius-node: 14px;
+  --brand-mark: none;
+  --title-line: none;
+  --title-glow: none;
+  --spinner: #0f6f91;
+  --install: linear-gradient(135deg, #6a4c93, #4a3572);
+  --on-install: #f9f8f3;
+  --open-action: linear-gradient(135deg, #0f6f91, #1e4775);
+  --open-action-hover: linear-gradient(135deg, #0f6f91, #1e4775);
+  --on-open-action: #f9f8f3;
+  --open-action-line: transparent;
+  --panel-corner: 28px;
+  --brand-mark-display: none;
+}
+
+:root[data-theme="dot-matrix"] {
+  color-scheme: light;
+  --page: #d3cfc7;
+  --page-glow: none;
+  --panel: #e8e5df;
+  --panel-line: #bbb6ac;
+  --panel-hover-line: #8f97c9;
+  --card: #f4f2ed;
+  --card-line: #cfcabf;
+  --card-hover: #eceae4;
+  --dialog: #ebe8e2;
+  --backdrop: rgba(40, 38, 34, 0.45);
+  --shadow: 0 1px 0 rgba(255, 255, 255, 0.55) inset, 0 8px 22px rgba(58, 52, 40, 0.12);
+  --dialog-shadow: 0 24px 60px rgba(40, 38, 34, 0.3);
+  --ink: #1c1e22;
+  --muted: #4c4f57;
+  --faint: #5c5f67;
+  --label: #2b3388;
+  --link: #2b3388;
+  --primary: #8a1c4e;
+  --on-primary: #ffffff;
+  --secondary: #dcd8cf;
+  --on-secondary: #1c1e22;
+  --secondary-line: #a9a397;
+  --quiet: #e2dfd7;
+  --quiet-hover: #d8d4cb;
+  --on-quiet: #26282c;
+  --row-action: #f4f2ed;
+  --row-action-hover: #ede7ea;
+  --on-row-action: #8a1c4e;
+  --row-action-line: #c9a3b4;
+  --focus: #2b3388;
+  --check: #2b3388;
+  --toggle-on: #2b3388;
+  --on-toggle-on: #ffffff;
+  --control-line: #a9a397;
+  --hover-tint: #e9ebf5;
+  --field: #c6d0a4;
+  --field-line: #5d6643;
+  --field-hint: #454f2e;
+  --file: #e2dfd8;
+  --on-file: #383a40;
+  --dir: #dde0f1;
+  --on-dir: #283184;
+  --zip: #dfe0e8;
+  --on-zip: #3e4157;
+  --path: #f2d9df;
+  --on-path: #85193a;
+  --tag: #e6e3dc;
+  --on-tag: #303237;
+  --more: #dde0f1;
+  --more-hover: #d0d4ec;
+  --on-more: #283184;
+  --db: #dbe2c3;
+  --on-db: #303c17;
+  --db-line: #b7c194;
+  --pill: #e3e5f2;
+  --pill-line: #c3c8e6;
+  --on-pill: #283184;
+  --code: #e2dfd7;
+  --kbd: #e2dfd7;
+  --kbd-line: #bbb6ac;
+  --warn-row: #ece3c5;
+  --warn: #ddd0a2;
+  --on-warn: #4a3900;
+  --err-row: #f1dbdb;
+  --err: #e7c5c9;
+  --on-err: #781426;
+  --info-row: #e3e5f2;
+  --issue-row: #e2dfd7;
+  --ok: #d4ddb2;
+  --on-ok: #334117;
+  --ok-tint: #e3e9cf;
+  --approx: #ece3c5;
+  --approx-line: #c9b98a;
+  --on-approx: #4a3900;
+  --selected: #e9ebf5;
+  --selected-line: #8f97c9;
+  --tree-line: #a39d91;
+  --tree-node: #4d5060;
+  --on-tree-node: #f2f1ec;
+  --guide-hover: rgba(43, 51, 136, 0.4);
+  --tip: #2f3140;
+  --on-tip: #f2f1ec;
+  --tip-shadow: 0 10px 24px rgba(40, 38, 34, 0.3);
+  --float: #4d5060;
+  --on-float: #f2f1ec;
+  --float-shadow: 0 2px 8px rgba(40, 38, 34, 0.25);
+  --find: #f4f2ed;
+  --find-line: #bbb6ac;
+  --find-shadow: 0 2px 10px rgba(40, 38, 34, 0.2);
+  --ghost: #f4f2ed;
+  --note: #e3e5f2;
+  --note-line: #c3c8e6;
+  --drop: #e0ddd6;
+  --drop-hover: #d8d4cb;
+  --drop-line: #9a9486;
+  --drop-line-hover: #2b3388;
+  --drop-shadow: 0 14px 34px rgba(43, 51, 136, 0.14);
+  --flash: #c6d0a4;
+  --flash-line: #306230;
+  --flash-shadow: 0 18px 38px rgba(48, 98, 48, 0.2);
+  --spinner-track: #dcd8cf;
+  --hl: #9bbc0f;
+  --on-hl: #0f380f;
+  --hl-current: #306230;
+  --on-hl-current: #e7f5c4;
+  --radius-lg: 12px;
+  --radius-md: 8px;
+  --radius-sm: 6px;
+  --radius-button: 8px;
+  --radius-chip: 6px;
+  --radius-badge: 5px;
+  --radius-node: 7px;
+  --brand-mark: linear-gradient(#85193a, #85193a) 0 2px / 100% 2px no-repeat, linear-gradient(#2b3388, #2b3388) 0 6px / 100% 2px no-repeat;
+  --title-line: none;
+  --title-glow: none;
+  --spinner: #8a1c4e;
+  --install: #8a1c4e;
+  --on-install: #ffffff;
+  --open-action: #f4f2ed;
+  --open-action-hover: #ede7ea;
+  --on-open-action: #8a1c4e;
+  --open-action-line: #c9a3b4;
+  --panel-corner: 40px;
+  --brand-mark-display: inline-block;
+}
+
+:root[data-theme="phosphor"] {
+  color-scheme: dark;
+  --page: #14110d;
+  --page-glow: repeating-linear-gradient(0deg, rgba(255, 176, 0, 0.035) 0px, rgba(255, 176, 0, 0.035) 1px, transparent 1px, transparent 3px);
+  --panel: #1c1813;
+  --panel-line: #33291f;
+  --panel-hover-line: #6b5532;
+  --card: #221d17;
+  --card-line: #3b3127;
+  --card-hover: #2a241d;
+  --dialog: #1f1a15;
+  --backdrop: rgba(0, 0, 0, 0.55);
+  --shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  --dialog-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+  --ink: #f3e8d6;
+  --muted: #bdab90;
+  --faint: #a8977c;
+  --label: #ffb02e;
+  --link: #ffc766;
+  --primary: #ffb000;
+  --on-primary: #1a1205;
+  --secondary: #2e271f;
+  --on-secondary: #f1e3cd;
+  --secondary-line: #55473a;
+  --quiet: #2a241d;
+  --quiet-hover: #352d24;
+  --on-quiet: #ecdcc4;
+  --row-action: #221d17;
+  --row-action-hover: #2a241d;
+  --on-row-action: #ffc766;
+  --row-action-line: #6b5532;
+  --focus: #ffd27a;
+  --check: #ffb000;
+  --toggle-on: #ffb000;
+  --on-toggle-on: #1a1205;
+  --control-line: #55473a;
+  --hover-tint: #2a241d;
+  --field: #17130f;
+  --field-line: #76644c;
+  --field-hint: #a8977c;
+  --file: #2c261f;
+  --on-file: #eadbc4;
+  --dir: #3a2d16;
+  --on-dir: #ffcf70;
+  --zip: #1e2e1c;
+  --on-zip: #a4e697;
+  --path: #3b1f19;
+  --on-path: #ffa08e;
+  --tag: #2a241d;
+  --on-tag: #e6d6bf;
+  --more: #2a241d;
+  --more-hover: #352d24;
+  --on-more: #ffc766;
+  --db: #24292e;
+  --on-db: #dde8f2;
+  --db-line: #3c444c;
+  --pill: #2c2416;
+  --pill-line: #4d3d22;
+  --on-pill: #ffcf70;
+  --code: #2a241d;
+  --kbd: #2a241d;
+  --kbd-line: #55473a;
+  --warn-row: #29210f;
+  --warn: #3e3015;
+  --on-warn: #ffcf70;
+  --err-row: #2d1915;
+  --err: #45231c;
+  --on-err: #ffa08e;
+  --info-row: #22262a;
+  --issue-row: #241f19;
+  --ok: #1e2e1c;
+  --on-ok: #a4e697;
+  --ok-tint: #1e2e1c;
+  --approx: #3e3015;
+  --approx-line: #6b5532;
+  --on-approx: #ffcf70;
+  --selected: #2b2418;
+  --selected-line: #7a5f2c;
+  --tree-line: #55483a;
+  --tree-node: #2e271f;
+  --on-tree-node: #ffc766;
+  --guide-hover: rgba(255, 176, 0, 0.35);
+  --tip: #3a3127;
+  --on-tip: #f8eedf;
+  --tip-shadow: 0 10px 24px rgba(0, 0, 0, 0.5);
+  --float: #2e271f;
+  --on-float: #ffc766;
+  --float-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+  --find: #1f1a15;
+  --find-line: #3b3127;
+  --find-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  --ghost: #221d17;
+  --note: #241f19;
+  --note-line: #3b3127;
+  --drop: #1e1a14;
+  --drop-hover: #26201a;
+  --drop-line: #6b5532;
+  --drop-line-hover: #ffb000;
+  --drop-shadow: 0 14px 34px rgba(0, 0, 0, 0.4);
+  --flash: #2b2418;
+  --flash-line: #a4e697;
+  --flash-shadow: 0 18px 38px rgba(164, 230, 151, 0.15);
+  --spinner-track: #2e271f;
+  --hl: #ffb000;
+  --on-hl: #1a1205;
+  --hl-current: #fff0c2;
+  --on-hl-current: #1a1205;
+  --radius-lg: 8px;
+  --radius-md: 6px;
+  --radius-sm: 6px;
+  --radius-button: 6px;
+  --radius-chip: 4px;
+  --radius-badge: 3px;
+  --radius-node: 4px;
+  --brand-mark: repeating-linear-gradient(90deg, #ffb000 0 6px, transparent 6px 10px);
+  --title-line: none;
+  --title-glow: 0 0 14px rgba(255, 176, 0, 0.35);
+  --spinner: #ffb000;
+  --install: #ffb000;
+  --on-install: #1a1205;
+  --open-action: #221d17;
+  --open-action-hover: #2a241d;
+  --on-open-action: #ffc766;
+  --open-action-line: #6b5532;
+  --panel-corner: 8px;
+  --brand-mark-display: inline-block;
 }
 
 * {
@@ -303,6 +706,7 @@ button, summary, a, label, [role='button'] { touch-action: manipulation; }
   padding: 1.35rem;
   border: 1px solid var(--panel-line);
   border-radius: var(--radius-lg);
+  border-bottom-right-radius: var(--panel-corner);
   background: var(--panel);
   box-shadow: var(--shadow);
   backdrop-filter: blur(18px);
@@ -313,7 +717,7 @@ button, summary, a, label, [role='button'] { touch-action: manipulation; }
 .hero h1 { position: relative; font-size: clamp(2.2rem, 5vw, 4.2rem); font-weight: 700; line-height: 1.05; max-width: 16ch; text-shadow: var(--title-glow); transition: font-size 350ms ease, line-height 350ms ease, max-width 350ms ease; }
 /* Each theme's details near the title: a mark before the label, and a line under the title. Neither takes space. */
 .hero h1::after { content: ''; position: absolute; left: 0; bottom: -0.45rem; width: min(22rem, 100%); height: 3px; border-radius: 3px; background: var(--title-line); pointer-events: none; }
-.hero-meta .eyebrow::before { content: ''; display: inline-block; width: 46px; height: 10px; margin-right: 0.65rem; vertical-align: -1px; background: var(--brand-mark); }
+.hero-meta .eyebrow::before { content: ''; display: var(--brand-mark-display); width: 46px; height: 10px; margin-right: 0.65rem; vertical-align: -1px; background: var(--brand-mark); }
 /* The label row keeps the label's height, the repository link beside it. */
 .hero-meta { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.35rem; }
 .hero-meta .eyebrow { margin: 0; }
@@ -481,7 +885,7 @@ fieldset.mister-option legend { float: left; width: 100%; padding: 0; }
 .filter-override-grid code { display: block; max-width: 100%; padding: 0.7rem 0.8rem; border-radius: var(--radius-sm); background: var(--code); overflow: auto; white-space: pre-wrap; }
 
 /* Install */
-.install-button { background: var(--primary); color: var(--on-primary); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+.install-button { background: var(--install); color: var(--on-install); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
 .install-filter-option { display: flex; align-items: baseline; gap: 0.5rem; margin: 0.8rem 0; font-size: 0.92rem; cursor: pointer; }
 .install-filter-option code { padding: 0.15rem 0.4rem; border-radius: var(--radius-sm); background: var(--code); font-size: 0.85em; }
 .install-download-row { display: flex; justify-content: center; margin-top: 1.2rem; }
@@ -571,12 +975,18 @@ fieldset.mister-option legend { float: left; width: 100%; padding: 0; }
 .tree-column-hovered::before { content: ''; position: absolute; top: 0; bottom: var(--hovered-column-bottom, 0px); left: var(--hovered-column-x); width: 2px; transform: translateX(-50%); background: repeating-linear-gradient(to bottom, var(--guide-hover) 0px, var(--guide-hover) 6px, transparent 6px, transparent 12px); z-index: 1; pointer-events: none; }
 
 /* CSS Highlights API */
-/* Highlights take literal colors, one rule per theme (--hl and --on-hl, and --hl-current and
+/* Highlights take literal colors, rules for each theme (--hl and --on-hl, and --hl-current and
    --on-hl-current, in the theme blocks): highlight pseudo-elements do not read variables in every browser. */
 ::highlight(search-match-all-filter), ::highlight(search-match-all-files), ::highlight(search-match-all-archives), ::highlight(search-match-all-collisions), ::highlight(search-match-all-tags) { background-color: #ffe066; color: #1b1b29; }
 ::highlight(search-match) { background-color: #4d4196; color: #ffffff; }
 :root[data-theme="dark"] ::highlight(search-match-all-filter), :root[data-theme="dark"] ::highlight(search-match-all-files), :root[data-theme="dark"] ::highlight(search-match-all-archives), :root[data-theme="dark"] ::highlight(search-match-all-collisions), :root[data-theme="dark"] ::highlight(search-match-all-tags) { background-color: #ffd27a; color: #1a0d2e; }
 :root[data-theme="dark"] ::highlight(search-match) { background-color: #ff5ea3; color: #1a0d2e; }
+:root[data-theme="classic"] ::highlight(search-match-all-filter), :root[data-theme="classic"] ::highlight(search-match-all-files), :root[data-theme="classic"] ::highlight(search-match-all-archives), :root[data-theme="classic"] ::highlight(search-match-all-collisions), :root[data-theme="classic"] ::highlight(search-match-all-tags) { background-color: #ffff00; color: #000000; }
+:root[data-theme="classic"] ::highlight(search-match) { background-color: #ff9632; color: #000000; }
+:root[data-theme="dot-matrix"] ::highlight(search-match-all-filter), :root[data-theme="dot-matrix"] ::highlight(search-match-all-files), :root[data-theme="dot-matrix"] ::highlight(search-match-all-archives), :root[data-theme="dot-matrix"] ::highlight(search-match-all-collisions), :root[data-theme="dot-matrix"] ::highlight(search-match-all-tags) { background-color: #9bbc0f; color: #0f380f; }
+:root[data-theme="dot-matrix"] ::highlight(search-match) { background-color: #306230; color: #e7f5c4; }
+:root[data-theme="phosphor"] ::highlight(search-match-all-filter), :root[data-theme="phosphor"] ::highlight(search-match-all-files), :root[data-theme="phosphor"] ::highlight(search-match-all-archives), :root[data-theme="phosphor"] ::highlight(search-match-all-collisions), :root[data-theme="phosphor"] ::highlight(search-match-all-tags) { background-color: #ffb000; color: #1a1205; }
+:root[data-theme="phosphor"] ::highlight(search-match) { background-color: #fff0c2; color: #1a1205; }
 
 /* Find bar */
 .find-bar { position: fixed; top: 0.5rem; right: 1rem; z-index: 10000; display: flex; align-items: center; gap: 0.25rem; color: var(--ink); background: var(--find); border: 1px solid var(--find-line); border-radius: var(--radius-sm); padding: 0.3rem 0.4rem; box-shadow: var(--find-shadow); font-size: 0.85rem; }
@@ -634,8 +1044,8 @@ fieldset.mister-option legend { float: left; width: 100%; padding: 0; }
 .node-download-actions { display: inline-flex; flex: 0 0 auto; flex-wrap: nowrap; gap: 0.45rem; }
 .inline-action-button { display: inline-flex; align-items: center; justify-content: center; padding: 0.55rem 0.9rem; border-radius: var(--radius-button); color: var(--on-quiet); background: var(--quiet); font-size: 0.86rem; font-weight: 700; box-shadow: none; text-decoration: none; }
 .inline-action-button:hover { background: var(--quiet-hover); filter: none; }
-.open-button { color: var(--on-row-action); background: var(--row-action); box-shadow: inset 0 0 0 1px var(--row-action-line); letter-spacing: 0.04em; text-transform: uppercase; }
-.open-button:hover { background: var(--row-action-hover); filter: none; }
+.open-button { color: var(--on-open-action); background: var(--open-action); box-shadow: inset 0 0 0 1px var(--open-action-line); letter-spacing: 0.04em; text-transform: uppercase; }
+.open-button:hover { background: var(--open-action-hover); filter: none; }
 .download-button { display: inline-flex; align-items: center; justify-content: center; padding: 0.55rem 0.9rem; border-radius: var(--radius-button); background: var(--row-action); box-shadow: inset 0 0 0 1px var(--row-action-line); color: var(--on-row-action); font-size: 0.86rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; text-decoration: none; }
 .download-button:hover { background: var(--row-action-hover); filter: none; }
 .tree-title-row { display: flex; align-items: baseline; flex-wrap: nowrap; flex: 1 1 auto; gap: 0.7rem; min-width: 0; overflow: hidden; }
@@ -704,7 +1114,7 @@ fieldset.mister-option legend { float: left; width: 100%; padding: 0; }
 
 /* Loading */
 .loading-screen { display: grid; justify-items: center; gap: 0.85rem; }
-.loading-spinner { width: 3rem; height: 3rem; border: 0.3rem solid var(--spinner-track); border-top-color: var(--primary); border-radius: 999px; animation: loading-spin 900ms linear infinite; }
+.loading-spinner { width: 3rem; height: 3rem; border: 0.3rem solid var(--spinner-track); border-top-color: var(--spinner); border-radius: 999px; animation: loading-spin 900ms linear infinite; }
 
 /* Animations */
 @keyframes loading-spin { to { transform: rotate(360deg); } }
@@ -777,7 +1187,7 @@ fieldset.mister-option legend { float: left; width: 100%; padding: 0; }
   /* A collision's databases go under its label, and its corners stay round on several lines (one line is still fully rounded). */
   .primary-pill { flex-wrap: wrap; border-radius: min(var(--radius-chip), 1.25rem); }
   .app-shell { width: min(100% - 1rem, 1380px); padding-top: 2.75rem; }
-  .panel { padding: 1rem; border-radius: min(var(--radius-lg), 22px); }
+  .panel { padding: 1rem; border-radius: min(var(--radius-lg), 22px); border-bottom-right-radius: min(var(--panel-corner), 22px); }
   .modal-panel { padding: 1rem; border-radius: min(var(--radius-lg), 22px); }
   .tree-row { gap: 0.6rem; }
   .tree-entry { --tree-indent-step: 1rem; padding-left: calc(var(--tree-depth, 0) * var(--tree-indent-step)); }

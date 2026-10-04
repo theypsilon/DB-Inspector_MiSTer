@@ -3,7 +3,7 @@ import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import ThemeMenu from '../../src/components/ui/ThemeMenu.jsx';
-import { THEME_STORAGE_KEY } from '../../src/lib/theme.js';
+import { HIDDEN_THEMES, THEME_STORAGE_KEY, readThemeMode } from '../../src/lib/theme.js';
 
 // The system's light or dark setting, which a test can change.
 function systemScheme(prefersDark) {
@@ -32,10 +32,14 @@ const checked = () => choices().filter((item) => item.getAttribute('aria-checked
 
 describe('the theme menu', () => {
   const originalMatchMedia = window.matchMedia;
+  // Opening the menu writes to the console, kept out of the test output.
+  let log;
   beforeEach(() => {
     localStorage.clear();
+    log = vi.spyOn(console, 'log').mockImplementation(() => {});
   });
   afterEach(() => {
+    log.mockRestore();
     window.matchMedia = originalMatchMedia;
     delete document.documentElement.dataset.theme;
     localStorage.clear();
@@ -89,6 +93,52 @@ describe('the theme menu', () => {
     expect(theme()).toBe('dark');
     system.change(false);
     expect(theme()).toBe('light');
+  });
+
+  test('a hidden theme written by hand stays whatever the system says, until the menu replaces it', async () => {
+    localStorage.setItem(THEME_STORAGE_KEY, 'phosphor');
+    const system = systemScheme(false);
+    const user = userEvent.setup();
+    render(<ThemeMenu />);
+    expect(theme()).toBe('phosphor');
+    system.change(true);
+    system.change(false);
+    expect(theme()).toBe('phosphor');
+
+    // The menu does not offer it: none of its modes is checked, and the first one takes focus.
+    await user.click(menuButton('Phosphor'));
+    expect(choices().map((item) => item.textContent)).toEqual(['Match system', 'Light', 'Dark']);
+    expect(checked()).toEqual([]);
+    expect(document.activeElement).toBe(choices()[0]);
+    await user.click(screen.getByRole('menuitemradio', { name: 'Light' }));
+    expect(theme()).toBe('light');
+    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe('light');
+  });
+
+  test('each opening tells the console how to pick the hidden themes, with a line that picks one', async () => {
+    systemScheme(false);
+    const user = userEvent.setup();
+    render(<ThemeMenu />);
+    expect(log).not.toHaveBeenCalled();
+
+    await user.click(menuButton('Match system'));
+    expect(log).toHaveBeenCalledTimes(1);
+    const hint = log.mock.calls[0][0];
+    for (const id of HIDDEN_THEMES) {
+      expect(hint).toContain(`'${id}'`);
+    }
+    const line = hint.split('\n').find((entry) => entry.startsWith('localStorage.setItem('));
+    new Function(line)();
+    expect(readThemeMode()).toBe(HIDDEN_THEMES[0]);
+
+    // Closing it says nothing; opening it again, here from the keyboard, says it again.
+    await user.click(menuButton('Match system'));
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(log).toHaveBeenCalledTimes(1);
+    await user.keyboard('{ArrowDown}');
+    expect(screen.getByRole('menu', { name: 'Theme' })).toBeTruthy();
+    expect(log).toHaveBeenCalledTimes(2);
+    expect(log.mock.calls[1][0]).toBe(hint);
   });
 
   test('works from the keyboard: the arrow keys open it and move, Enter picks, and Escape closes it', async () => {

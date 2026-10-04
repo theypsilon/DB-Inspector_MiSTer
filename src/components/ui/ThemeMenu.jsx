@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { readThemeMode, resolveTheme, storeThemeMode } from '../../lib/theme.js';
+import { THEME_STORAGE_KEY, readThemeMode, resolveTheme, storeThemeMode } from '../../lib/theme.js';
 
 const DARK_SCHEME = '(prefers-color-scheme: dark)';
 
@@ -10,13 +10,28 @@ const MODES = [
   { mode: 'dark', label: 'Dark' },
 ];
 
+// The themes only a hand-written localStorage value picks: the button names them, and none of the
+// menu's modes is checked (see src/lib/theme.js).
+const HIDDEN_LABELS = { classic: 'Classic', 'dot-matrix': 'Dot Matrix', phosphor: 'Phosphor' };
+
+// What opening the menu writes to the browser's console: how to pick the themes it does not offer.
+const HIDDEN_THEMES_HINT = (() => {
+  const themes = Object.entries(HIDDEN_LABELS).map(([id, label]) => `${label} ('${id}')`);
+  return [
+    `More themes, not in this menu: ${themes.slice(0, -1).join(', ')} and ${themes.at(-1)}.`,
+    'To pick one, run this here, with its id, then reload the page:',
+    `localStorage.setItem('${THEME_STORAGE_KEY}', '${Object.keys(HIDDEN_LABELS)[0]}')`,
+    'A choice in the menu replaces it.',
+  ].join('\n');
+})();
+
 function systemPrefersDark() {
   return Boolean(window.matchMedia?.(DARK_SCHEME)?.matches);
 }
 
 /** @param {{ mode: string }} props */
 function ModeIcon({ mode }) {
-  if (mode === 'light') {
+  if (mode === 'light' || mode === 'classic' || mode === 'dot-matrix') {
     return (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
         <circle cx="12" cy="12" r="4" />
@@ -24,7 +39,7 @@ function ModeIcon({ mode }) {
       </svg>
     );
   }
-  if (mode === 'dark') {
+  if (mode === 'dark' || mode === 'phosphor') {
     return (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M20.5 13.3A8.5 8.5 0 1 1 10.7 3.5a6.6 6.6 0 0 0 9.8 9.8Z" />
@@ -72,7 +87,7 @@ function ThemeMenu() {
     if (!open) {
       return undefined;
     }
-    menuRef.current?.querySelector('[aria-checked="true"]')?.focus();
+    (menuRef.current?.querySelector('[aria-checked="true"]') ?? menuRef.current?.querySelector('[role="menuitemradio"]'))?.focus();
     /** @param {PointerEvent} event */
     const closeOutside = (event) => {
       const target = /** @type {Node} */ (event.target);
@@ -83,6 +98,14 @@ function ThemeMenu() {
     document.addEventListener('pointerdown', closeOutside);
     return () => document.removeEventListener('pointerdown', closeOutside);
   }, [open]);
+
+  // Each opening, by a click or the arrow keys, also tells the console how to pick the hidden themes.
+  const openMenu = () => {
+    if (!open) {
+      console.log(HIDDEN_THEMES_HINT);
+    }
+    setOpen(true);
+  };
 
   const close = () => {
     setOpen(false);
@@ -121,7 +144,7 @@ function ThemeMenu() {
     }
   };
 
-  const current = MODES.find((entry) => entry.mode === mode) ?? MODES[0];
+  const current = MODES.find((entry) => entry.mode === mode) ?? { mode, label: HIDDEN_LABELS[mode] ?? MODES[0].label };
   return (
     <div className="theme-menu">
       <button
@@ -133,11 +156,11 @@ function ThemeMenu() {
         aria-controls={open ? menuId : undefined}
         aria-label={`Theme: ${current.label}`}
         title={`Theme: ${current.label}`}
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => (open ? setOpen(false) : openMenu())}
         onKeyDown={(event) => {
           if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
             event.preventDefault();
-            setOpen(true);
+            openMenu();
           }
         }}
       >

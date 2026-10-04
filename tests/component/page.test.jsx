@@ -150,8 +150,10 @@ describe('the page and the app model', () => {
     await user.keyboard('{Control>}f{/Control}');
     expect(await screen.findByRole('search', { name: 'Find in tree' })).toBeTruthy();
 
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     await user.click(screen.getByRole('button', { name: 'Theme: Match system' }));
     expect(screen.getByRole('menu', { name: 'Theme' })).toBeTruthy();
+    expect(log).toHaveBeenCalledTimes(1);
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('menu')).toBeNull();
     expect(screen.getByRole('search', { name: 'Find in tree' })).toBeTruthy();

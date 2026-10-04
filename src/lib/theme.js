@@ -3,11 +3,26 @@
 // by hand or on a schedule), or always light, or always dark. A chosen theme is remembered in this
 // browser; matching the system is remembered as no choice. index.html applies the same rule before
 // the page draws: keep the two in step.
+//
+// Three more themes are there to try, but not offered: Classic (the theme before these two), Dot
+// Matrix and Phosphor. Only a value written by hand picks one, from the browser's developer tools:
+// localStorage.setItem('inspector-theme', 'phosphor'), then reload. Opening the menu writes how in
+// the console. A choice in the menu replaces it.
 
 export const THEME_STORAGE_KEY = 'inspector-theme';
+export const HIDDEN_THEMES = ['classic', 'dot-matrix', 'phosphor'];
+const THEMES = ['light', 'dark', ...HIDDEN_THEMES];
 
-/** @typedef {'light' | 'dark'} Theme */
+/** @typedef {'light' | 'dark' | 'classic' | 'dot-matrix' | 'phosphor'} Theme */
 /** @typedef {'system' | Theme} ThemeMode */
+
+/**
+ * @param {unknown} value
+ * @returns {value is Theme}
+ */
+function isTheme(value) {
+  return THEMES.includes(/** @type {string} */ (value));
+}
 
 /**
  * The theme to show for a mode: a chosen theme, else the system's.
@@ -16,7 +31,7 @@ export const THEME_STORAGE_KEY = 'inspector-theme';
  * @returns {Theme}
  */
 export function resolveTheme(mode, systemPrefersDark) {
-  if (mode === 'light' || mode === 'dark') {
+  if (isTheme(mode)) {
     return mode;
   }
   return systemPrefersDark ? 'dark' : 'light';
@@ -39,7 +54,7 @@ function browserStorage() {
 export function readThemeMode(storage = browserStorage()) {
   try {
     const value = storage?.getItem(THEME_STORAGE_KEY);
-    return value === 'light' || value === 'dark' ? value : 'system';
+    return isTheme(value) ? value : 'system';
   } catch {
     return 'system';
   }
@@ -53,7 +68,7 @@ export function readThemeMode(storage = browserStorage()) {
  */
 export function storeThemeMode(mode, storage = browserStorage()) {
   try {
-    if (mode === 'light' || mode === 'dark') {
+    if (isTheme(mode)) {
       storage?.setItem(THEME_STORAGE_KEY, mode);
     } else {
       storage?.removeItem(THEME_STORAGE_KEY);

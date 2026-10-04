@@ -248,6 +248,22 @@ test('a shared link opens its database, and the page around it works', async ({ 
     await page.emulateMedia({ colorScheme: 'light' });
     await expect.poll(theme).toBe('light');
     await expect.poll(pageColor).toBe('rgb(220, 220, 229)');
+
+    // The hidden themes, picked only by a value written by hand, draw with their own colors.
+    for (const [hidden, name, color] of [
+      ['classic', 'Classic', 'rgb(237, 230, 212)'],
+      ['dot-matrix', 'Dot Matrix', 'rgb(211, 207, 199)'],
+      ['phosphor', 'Phosphor', 'rgb(20, 17, 13)'],
+    ]) {
+      await page.evaluate((value) => localStorage.setItem('inspector-theme', value), hidden);
+      await page.reload();
+      await expect(heading('shared_db')).toBeVisible();
+      expect(await theme()).toBe(hidden);
+      expect(await pageColor()).toBe(color);
+      await expect(page.getByRole('button', { name: `Theme: ${name}` })).toBeVisible();
+    }
+    await chooseTheme('Phosphor', 'Match system');
+    await expect.poll(theme).toBe('light');
   });
 });
 
