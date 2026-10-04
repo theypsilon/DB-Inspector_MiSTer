@@ -3,3 +3,7 @@ dist/
 .DS_Store
 test-results
 custom_database.rs
+
+# Output of local tools: Playwright MCP screenshots, and Claude Code agent worktrees.
+.playwright-mcp/
+.claude/worktrees/
