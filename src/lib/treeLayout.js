@@ -1,7 +1,6 @@
 // Tree row styling and the virtualization layout math (row offsets, visible window, scroll
 // anchoring). Changes here must be re-verified in a real browser, including against a real database.
 
-export const TREE_LIST_GAP_PX = 13;
 export const TREE_OVERSCAN_PX = 900;
 
 // Row styles set CSS custom properties, which React's style type does not list.
@@ -15,8 +14,15 @@ export function buildTreeGuideStyle(depth) {
   return /** @type {import('react').CSSProperties} */ ({ '--tree-guide-depth': depth });
 }
 
+const CORNER_RADII = { outer: 'var(--tree-corner-outer)', step: 'var(--tree-corner-step)', none: '0px' };
+
+// A row at `top`, drawn over `height` (its place in the list) with the lines and corners `rowOutline`
+// gives it. Without a height (a row outside the virtual list), it is drawn as a card on its own.
 /** @returns {import('react').CSSProperties} */
-export function buildVirtualRowStyle(top, { trimTopGuide = false, trimBottomGuide = false } = {}) {
+export function buildVirtualRowStyle(
+  top,
+  { trimTopGuide = false, trimBottomGuide = false, height = null, topLine = true, bottomLine = true, corners = null } = {},
+) {
   return /** @type {import('react').CSSProperties} */ ({
     position: 'absolute',
     top: `${top}px`,
@@ -24,7 +30,37 @@ export function buildVirtualRowStyle(top, { trimTopGuide = false, trimBottomGuid
     right: 0,
     '--tree-guide-top-overlap': trimTopGuide ? '0px' : 'var(--tree-guide-overlap)',
     '--tree-guide-bottom-overlap': trimBottomGuide ? '0px' : 'var(--tree-guide-overlap)',
+    ...(height == null ? {} : { '--tree-row-height': `${height}px` }),
+    '--tree-row-top-line': topLine ? '1px' : '0px',
+    '--tree-row-bottom-line': bottomLine ? '1px' : '0px',
+    ...(corners == null ? {} : { '--tree-row-corners': corners.split(' ').map((corner) => CORNER_RADII[corner]).join(' ') }),
   });
+}
+
+// How a row draws its part of the outline around the list. The rows touch, and each line between
+// two rows is drawn by one of them only, so it is as thick as the rows' sides at any zoom: the
+// wider row draws it (a row is wider the less it is indented), or the lower one when both are as
+// wide. A row owns the corners it draws, and the outline's outer corners are rounded: the list's
+// four (`outer`), and those where it steps in under a row or back out after one (`step`). Corners
+// run top left, top right, bottom right, bottom left.
+export function rowOutline(rowIds, rowsById, index) {
+  const depthAt = (at) => rowsById.get(rowIds[at])?.depth ?? 0;
+  const depth = depthAt(index);
+  const first = index === 0;
+  const last = index === rowIds.length - 1;
+  const stepsIn = !first && depth > depthAt(index - 1);
+  const stepsOut = !first && depth < depthAt(index - 1);
+  const nextStepsIn = !last && depthAt(index + 1) > depth;
+  return {
+    topLine: !stepsIn,
+    bottomLine: last || nextStepsIn,
+    corners: [
+      first ? 'outer' : stepsOut ? 'step' : 'none',
+      first ? 'outer' : 'none',
+      last ? 'outer' : 'none',
+      last ? 'outer' : nextStepsIn ? 'step' : 'none',
+    ].join(' '),
+  };
 }
 
 // A row's measured height depends on what it shows: open or collapsed, its details, and all its
@@ -71,13 +107,10 @@ export function buildVirtualRowLayout({
     const rowHeight =
       measuredHeight ?? estimateRowHeight(row, { collapsed, detailsVisible });
 
+    // Rows touch: each one starts where the one above ends.
     offsets[index] = totalHeight;
     bottoms[index] = totalHeight + rowHeight;
     totalHeight += rowHeight;
-
-    if (index < rowIds.length - 1) {
-      totalHeight += TREE_LIST_GAP_PX;
-    }
   }
 
   return {
@@ -145,6 +178,8 @@ export function buildVirtualRows({
     items.push({
       rowId: rowIds[index],
       top: offsets[index],
+      height: bottoms[index] - offsets[index],
+      ...rowOutline(rowIds, rowsById, index),
       trimTopGuide: index === sortedIndexes[0] && sortedIndexes[0] > 0,
       trimBottomGuide:
         index === sortedIndexes[sortedIndexes.length - 1] &&

@@ -35,17 +35,17 @@ test('virtualized filesystem and archive trees still behave correctly', async ({
   await firstFileRow.getByRole('button', { name: 'Show details' }).click();
   await expect(firstFileRow.getByText('MD5 HASH', { exact: true })).toBeVisible();
   await expect
-    .poll(async () => Math.abs(Math.round(await measureReservedGap(firstFileRow)) - 13))
+    .poll(async () => Math.abs(Math.round(await measureReservedGap(firstFileRow)) - 0))
     .toBeLessThanOrEqual(1);
   await firstFileRow.getByRole('button', { name: 'Hide details' }).click();
   await expect(firstFileRow.getByText('MD5 HASH', { exact: true })).toHaveCount(0);
   await expect
-    .poll(async () => Math.abs(Math.round(await measureReservedGap(firstFileRow)) - 13))
+    .poll(async () => Math.abs(Math.round(await measureReservedGap(firstFileRow)) - 0))
     .toBeLessThanOrEqual(1);
   await firstFileRow.getByRole('button', { name: 'Show details' }).click();
   await expect(firstFileRow.getByText('MD5 HASH', { exact: true })).toBeVisible();
   await expect
-    .poll(async () => Math.abs(Math.round(await measureReservedGap(firstFileRow)) - 13))
+    .poll(async () => Math.abs(Math.round(await measureReservedGap(firstFileRow)) - 0))
     .toBeLessThanOrEqual(1);
 
   await scrollVirtualListNearBottom(page, '.tree-root');

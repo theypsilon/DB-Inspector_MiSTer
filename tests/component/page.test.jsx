@@ -71,6 +71,29 @@ describe('the page and the app model', () => {
     await waitFor(() => expect(window.location.hash).toBe(`#db=${url}&filter=essential`), { timeout: 3000 });
   });
 
+  test('the rows of a tree draw one outline around the list: each line once, rounded at its outer corners', async () => {
+    const url = 'https://example.com/outline.json';
+    openPage(`/#db=${url}`, { [url]: { body: database('outline_db') } });
+    expect(await screen.findByRole('heading', { name: 'outline_db' })).toBeTruthy();
+
+    const rows = await waitFor(() => {
+      const found = [...document.querySelectorAll('.tree-root .tree-entry')];
+      expect(found).toHaveLength(3);
+      return found;
+    });
+    const drawn = (row) => ['--tree-row-top-line', '--tree-row-bottom-line', '--tree-row-corners'].map((name) => row.style.getPropertyValue(name));
+    expect(rows.map((row) => [row.querySelector('h3').textContent, ...drawn(row)])).toEqual([
+      // The folder draws the list's top and the line under it, where its files step in.
+      ['cores', '1px', '1px', 'var(--tree-corner-outer) var(--tree-corner-outer) 0px var(--tree-corner-step)'],
+      ['arcade.rbf', '0px', '0px', '0px 0px 0px 0px'],
+      ['essential.rbf', '1px', '1px', '0px 0px var(--tree-corner-outer) var(--tree-corner-outer)'],
+    ]);
+    // Each is drawn over its place in the list.
+    for (const row of rows) {
+      expect(row.style.getPropertyValue('--tree-row-height')).toMatch(/^\d+px$/);
+    }
+  });
+
   test('an anchor to a row outside the rendered ones scrolls the page to it', async () => {
     const files = {};
     for (let index = 0; index < 600; index += 1) {

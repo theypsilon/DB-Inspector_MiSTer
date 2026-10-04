@@ -59,7 +59,7 @@ function treeSection(index) {
       });
       this.measuredHeights = mergeMeasuredHeights(this.measuredHeights, [[key, height]]);
     },
-    // The space between a row and the next one.
+    // The space between a row and the next one: none, since rows touch.
     gapAfter(rowId, height) {
       const { offsets, rowIndexById } = this.layout;
       const index = rowIndexById.get(rowId);
@@ -85,9 +85,9 @@ test('virtualized filesystem and archive trees still behave correctly', async ()
   // Files have no collapse button: they have no rows inside.
   assert.equal(firstFileRow.childIds.length, 0);
 
-  // Show details shows the hash (an open row's details list), Hide details hides it, and the row
-  // keeps the list's 13px gap at its measured height each time. Showing details again uses the
-  // height measured with details right away.
+  // Show details shows the hash (an open row's details list), Hide details hides it, and the next
+  // row starts right where the row ends, at its measured height each time. Showing details again
+  // uses the height measured with details right away.
   const showsHash = () =>
     files.detailsVisible(firstFileRow.id) &&
     !files.collapsedIds.has(firstFileRow.id) &&
@@ -102,7 +102,7 @@ test('virtualized filesystem and archive trees still behave correctly', async ()
     if (measuresAgain) {
       files.measure(firstFileRow.id, height);
     }
-    assert.equal(files.gapAfter(firstFileRow.id, height), 13);
+    assert.equal(files.gapAfter(firstFileRow.id, height), 0);
   }
 
   const filesHeight = files.layout.totalHeight;
@@ -142,7 +142,7 @@ test('a row showing all its tags keeps the list spacing, and the height measured
   const files = treeSection(app.view.filesystemIndex);
   const row = [...files.index.rowsById.values()].find((candidate) => candidate.node.name === 'file_000.rbf');
   files.measure(row.id, 151);
-  assert.equal(files.gapAfter(row.id, 151), 13);
+  assert.equal(files.gapAfter(row.id, 151), 0);
 
   // Its first tags and all of them have their own heights: each is measured once, then used again.
   for (const [expanded, height, measuresAgain] of [
@@ -154,7 +154,7 @@ test('a row showing all its tags keeps the list spacing, and the height measured
     if (measuresAgain) {
       files.measure(row.id, height);
     }
-    assert.equal(files.gapAfter(row.id, height), 13);
+    assert.equal(files.gapAfter(row.id, height), 0);
   }
 });
 

@@ -1,8 +1,9 @@
 import { expect, test } from '@playwright/test';
 
 // The virtualized trees of a large database in a real browser: only rows near the viewport render,
-// rows keep their spacing as details and tags open and close, the last rows can be reached, and URL
-// anchors, find-in-page and ghost parent rows bring far rows into view.
+// rows keep touching as details and tags open and close, with each line between two rows drawn
+// once, the last rows can be reached, and URL anchors, find-in-page and ghost parent rows bring far
+// rows into view.
 
 const FILE_COUNT = 600;
 const ARCHIVE_COUNT = 220;
@@ -31,20 +32,21 @@ test('large trees render near the viewport, keep their spacing, and reach far ro
     await expect(page.locator('.ghost-parent-row')).toHaveCount(0);
   });
 
-  await test.step('rows keep the list spacing as their details and tags open and close', async () => {
+  await test.step('rows keep touching as their details and tags open and close, and draw each line between them once', async () => {
     const row = rowNamed(page, 'file_00000.rbf');
     await expect(row.locator('.collapse-button')).toHaveCount(0);
+    expect(await linesDrawnTwiceOrNot(page)).toEqual([]);
     const urlBefore = page.url();
     for (const [button, hashCount] of [['Show details', 1], ['Hide details', 0], ['Show details', 1]]) {
       await row.getByRole('button', { name: button }).click();
       await expect(row.getByText('MD5 HASH', { exact: true })).toHaveCount(hashCount);
-      await expect.poll(async () => Math.abs(Math.round(await gapAfter(row)) - 13)).toBeLessThanOrEqual(1);
+      await expect.poll(() => meetsNextRow(row)).toBe(true);
     }
     await row.getByRole('button', { name: 'Hide details' }).click();
     for (const [button, chips] of [['+7 more tags', 11], ['Show fewer', 4]]) {
       await row.getByRole('button', { name: button }).click();
       await expect(row.locator('.tag-chip')).toHaveCount(chips);
-      await expect.poll(async () => Math.abs(Math.round(await gapAfter(row)) - 13)).toBeLessThanOrEqual(1);
+      await expect.poll(() => meetsNextRow(row)).toBe(true);
     }
     // Only a row's link icon puts it in the address.
     expect(page.url()).toBe(urlBefore);
@@ -193,13 +195,34 @@ function afterTwoFrames(page) {
   return page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
 }
 
-// The space between a row and the next one.
-function gapAfter(row) {
+// Whether a row reaches the next one: the box it draws ends right where the next row starts, and its
+// content fits in that box (rows are placed at whole pixels, so it is up to a pixel taller).
+function meetsNextRow(row) {
   return row.evaluate((element) => {
     const next = element.nextElementSibling;
     if (!(next instanceof HTMLElement)) {
-      return Number.NaN;
+      return false;
     }
-    return parseFloat(next.style.top || '0') - parseFloat(element.style.top || '0') - element.getBoundingClientRect().height;
+    const place = parseFloat(next.style.top) - parseFloat(element.style.top);
+    const slack = place - element.getBoundingClientRect().height;
+    return parseFloat(getComputedStyle(element, '::before').height) === place && slack >= 0 && slack < 1;
+  });
+}
+
+// The lines between two rendered rows that are drawn twice, or not at all: each should be drawn by
+// exactly one of the two rows, the one's bottom border or the other's top border.
+function linesDrawnTwiceOrNot(page) {
+  return page.locator('.tree-root').evaluate((root) => {
+    const rows = [...root.querySelectorAll(':scope > .tree-entry')];
+    const border = (element, side) => parseFloat(getComputedStyle(element, '::before').getPropertyValue(`border-${side}-width`));
+    return rows.slice(1).flatMap((row, at) => {
+      const above = rows[at];
+      // Only rows next to each other in the list share a line.
+      if (parseFloat(row.style.top) !== parseFloat(above.style.top) + parseFloat(above.style.getPropertyValue('--tree-row-height'))) {
+        return [];
+      }
+      const drawn = border(above, 'bottom') + border(row, 'top');
+      return drawn === 1 ? [] : [`${above.querySelector('h3').textContent} / ${row.querySelector('h3').textContent}: ${drawn}px`];
+    });
   });
 }

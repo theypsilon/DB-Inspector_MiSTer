@@ -951,7 +951,7 @@ fieldset.mister-option legend { float: left; width: 100%; padding: 0; }
 /* Highlights */
 .compact-heading { margin-bottom: 0.9rem; }
 .highlight-row { display: grid; grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: 0.85rem; }
-.highlight-card, .metadata-card, .tree-card, .archive-surface { border-radius: var(--radius-md); border: 1px solid var(--card-line); }
+.highlight-card, .metadata-card { border-radius: var(--radius-md); border: 1px solid var(--card-line); }
 .highlight-card { min-width: 0; padding: 1rem 1.1rem; background: var(--card); }
 .highlight-card span, .highlight-card small { display: block; color: var(--muted); }
 .highlight-card strong { display: block; margin: 0.35rem 0; font-size: 1.1rem; }
@@ -1018,23 +1018,29 @@ fieldset.mister-option legend { float: left; width: 100%; padding: 0; }
 .ghost-parent-name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--ghost); padding: 0.1rem 0.4rem; border-radius: 0.3rem; }
 
 /* Tree entry */
-.tree-entry { position: relative; --tree-indent-step: 1.55rem; --tree-control-size: 2.25rem; --tree-control-center: calc(var(--tree-control-size) / 2); --tree-guide-overlap: 0.44rem; --tree-guide-join-overlap: 0.08rem; --tree-guide-top-overlap: var(--tree-guide-overlap); --tree-guide-bottom-overlap: var(--tree-guide-overlap); padding-left: calc(var(--tree-depth, 0) * var(--tree-indent-step)); }
+.tree-entry { position: relative; --tree-indent-step: 1.55rem; --tree-control-size: 2.25rem; --tree-control-center: calc(var(--tree-control-size) / 2); --tree-control-offset: 0.4rem; --tree-control-y: calc(var(--tree-control-center) + var(--tree-control-offset)); --tree-row-gap: 0.9rem; --tree-corner-outer: var(--radius-md); --tree-corner-step: min(var(--radius-md), calc(var(--tree-indent-step) / 2)); --tree-guide-overlap: 1px; --tree-guide-join-overlap: 0.08rem; --tree-guide-top-overlap: var(--tree-guide-overlap); --tree-guide-bottom-overlap: var(--tree-guide-overlap); padding-left: calc(var(--tree-depth, 0) * var(--tree-indent-step)); }
+/* The rows touch, and together draw one outline around the list, stepping in and out with the
+   indentation. Each row draws its card's background and its part of the outline on this layer, the
+   height of its place in the list (--tree-row-height) rather than of its content, so it reaches
+   exactly where the next row starts; which lines and rounded corners are its own comes from the
+   rows around it (rowOutline in treeLayout.js). A row outside the list is drawn as a card. */
+.tree-entry::before { content: ''; position: absolute; top: 0; left: calc(var(--tree-depth, 0) * var(--tree-indent-step) + var(--tree-control-size) + var(--tree-row-gap)); right: 0; height: var(--tree-row-height, 100%); box-sizing: border-box; border: 1px solid var(--card-line); border-top-width: var(--tree-row-top-line, 1px); border-bottom-width: var(--tree-row-bottom-line, 1px); border-radius: var(--tree-row-corners, var(--tree-corner-outer)); background: var(--card); }
 .copy-link-button { all: unset; cursor: pointer; font-size: 0.7em; line-height: 1; color: var(--ink); opacity: 1; margin-inline: -0.35rem; visibility: hidden; }
 .tree-entry:hover .copy-link-button, .copy-link-button:focus-visible { visibility: visible; }
-.tree-row { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.9rem; align-items: start; }
+.tree-row { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--tree-row-gap); align-items: start; }
 .tree-guides { position: absolute; inset: 0; pointer-events: none; }
 .tree-guide-vertical, .tree-guide-parent, .tree-guide-child, .tree-guide-elbow { position: absolute; }
 .tree-guide-vertical, .tree-guide-parent, .tree-guide-child { left: calc((var(--tree-guide-depth, 0) * var(--tree-indent-step)) + var(--tree-control-center)); width: 2px; transform: translateX(-50%); border-radius: 999px; background: var(--tree-line); }
 .tree-guide-vertical { top: calc(var(--tree-guide-top-overlap) * -1); bottom: calc(var(--tree-guide-bottom-overlap) * -1); }
-.tree-guide-parent { top: calc(var(--tree-guide-top-overlap) * -1); height: calc(var(--tree-control-center) + var(--tree-guide-top-overlap) + var(--tree-guide-join-overlap)); }
+.tree-guide-parent { top: calc(var(--tree-guide-top-overlap) * -1); height: calc(var(--tree-control-y) + var(--tree-guide-top-overlap) + var(--tree-guide-join-overlap)); }
 .tree-guide-parent-continue { bottom: calc(var(--tree-guide-bottom-overlap) * -1); height: auto; }
-.tree-guide-child { top: calc(var(--tree-control-center) - var(--tree-guide-join-overlap)); bottom: calc(var(--tree-guide-bottom-overlap) * -1); }
-.tree-guide-elbow { left: calc(((var(--tree-guide-depth, 0) - 1) * var(--tree-indent-step)) + var(--tree-control-center)); top: calc(var(--tree-control-center) - var(--tree-guide-join-overlap)); width: var(--tree-indent-step); border-top: 2px solid var(--tree-line); }
-.collapse-button, .collapse-spacer { position: relative; width: var(--tree-control-size); height: var(--tree-control-size); flex: 0 0 auto; }
+.tree-guide-child { top: calc(var(--tree-control-y) - var(--tree-guide-join-overlap)); bottom: calc(var(--tree-guide-bottom-overlap) * -1); }
+.tree-guide-elbow { left: calc(((var(--tree-guide-depth, 0) - 1) * var(--tree-indent-step)) + var(--tree-control-center)); top: calc(var(--tree-control-y) - var(--tree-guide-join-overlap)); width: var(--tree-indent-step); border-top: 2px solid var(--tree-line); }
+.collapse-button, .collapse-spacer { position: relative; width: var(--tree-control-size); height: var(--tree-control-size); flex: 0 0 auto; margin-top: var(--tree-control-offset); }
 .collapse-button { padding: 0; border-radius: var(--radius-node); color: var(--on-tree-node); background: var(--tree-node); }
 .collapse-spacer { display: inline-flex; align-items: center; justify-content: center; }
 .leaf-marker { position: relative; z-index: 1; width: 0.52rem; height: 0.52rem; border-radius: 999px; background: var(--tree-line); box-shadow: 0 0 0 4px var(--panel); }
-.tree-card, .archive-surface { padding: 0.75rem 1rem; background: var(--card); }
+.tree-card, .archive-surface { padding: 0.75rem 1rem; border: 1px solid transparent; }
 .tree-heading { position: relative; display: flex; justify-content: space-between; align-items: start; gap: 0.8rem; margin-bottom: 0.6rem; }
 /* A row ends at its last line: no space is kept for what it does not show. */
 .tree-heading:last-child, .primary-row:last-child { margin-bottom: 0; }
@@ -1189,8 +1195,7 @@ fieldset.mister-option legend { float: left; width: 100%; padding: 0; }
   .app-shell { width: min(100% - 1rem, 1380px); padding-top: 2.75rem; }
   .panel { padding: 1rem; border-radius: min(var(--radius-lg), 22px); border-bottom-right-radius: min(var(--panel-corner), 22px); }
   .modal-panel { padding: 1rem; border-radius: min(var(--radius-lg), 22px); }
-  .tree-row { gap: 0.6rem; }
-  .tree-entry { --tree-indent-step: 1rem; padding-left: calc(var(--tree-depth, 0) * var(--tree-indent-step)); }
+  .tree-entry { --tree-indent-step: 1rem; --tree-row-gap: 0.6rem; padding-left: calc(var(--tree-depth, 0) * var(--tree-indent-step)); }
   .tree-guide-elbow { width: var(--tree-indent-step); }
   .database-filter-row { grid-template-columns: minmax(0, 1fr) auto; }
   .database-filter-row .db-chip { grid-column: 1 / -1; justify-self: start; }

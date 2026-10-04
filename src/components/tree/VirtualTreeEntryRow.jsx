@@ -2,14 +2,19 @@ import { memo, useLayoutEffect, useMemo, useRef } from 'react';
 import TreeEntryRow from './TreeEntryRow.jsx';
 import { buildVirtualRowStyle, getRowMeasurementKey } from '../../lib/treeLayout.js';
 
-// A TreeEntryRow placed at its virtual offset. It reports its rendered height so the list can
-// replace the estimated height with the measured one. Keeping this apart from TreeEntryRow means
+// A TreeEntryRow placed at its virtual offset, and drawn over its place in the list with its part
+// of the list's outline (see rowOutline). It reports its rendered height so the list can replace
+// the estimated height with the measured one. Keeping this apart from TreeEntryRow means
 // a new `onHeightChange` (which changes as the page scrolls) re-measures the row without
 // re-rendering its content.
 /**
  * @typedef {object} VirtualRowProps
  * @property {(rowId: string, height: number, options?: { immediate?: boolean }) => void} onHeightChange
  * @property {number} virtualTop
+ * @property {number} virtualHeight
+ * @property {boolean} topLine
+ * @property {boolean} bottomLine
+ * @property {string} corners
  * @property {boolean} [trimTopGuide]
  * @property {boolean} [trimBottomGuide]
  */
@@ -18,6 +23,10 @@ const VirtualTreeEntryRow = memo(
   function VirtualTreeEntryRow({
   onHeightChange,
   virtualTop,
+  virtualHeight,
+  topLine,
+  bottomLine,
+  corners,
   trimTopGuide,
   trimBottomGuide,
   ...rowProps
@@ -31,8 +40,12 @@ const VirtualTreeEntryRow = memo(
       buildVirtualRowStyle(virtualTop, {
         trimTopGuide,
         trimBottomGuide,
+        height: virtualHeight,
+        topLine,
+        bottomLine,
+        corners,
       }),
-    [trimBottomGuide, trimTopGuide, virtualTop],
+    [bottomLine, corners, topLine, trimBottomGuide, trimTopGuide, virtualHeight, virtualTop],
   );
 
   useLayoutEffect(() => {

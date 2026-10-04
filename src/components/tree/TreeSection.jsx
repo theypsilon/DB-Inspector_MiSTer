@@ -156,7 +156,7 @@ const TreeSection = memo(/** @param {TreeSectionProps} props */ function TreeSec
           onMouseMove={ghost.handleTreeMouseMove}
           onMouseLeave={ghost.handleTreeMouseLeave}
         >
-          {virtualRows.items.map(({ rowId, top, trimTopGuide, trimBottomGuide }) => {
+          {virtualRows.items.map(({ rowId, top, height, topLine, bottomLine, corners, trimTopGuide, trimBottomGuide }) => {
             const row = index.rowsById.get(rowId);
             if (!row) {
               return null;
@@ -179,6 +179,10 @@ const TreeSection = memo(/** @param {TreeSectionProps} props */ function TreeSec
                 onDownloadError={onDownloadError}
                 onHeightChange={handleRowHeightChange}
                 virtualTop={top}
+                virtualHeight={height}
+                topLine={topLine}
+                bottomLine={bottomLine}
+                corners={corners}
                 trimTopGuide={trimTopGuide}
                 trimBottomGuide={trimBottomGuide}
               />
