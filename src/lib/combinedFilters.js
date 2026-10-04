@@ -21,6 +21,31 @@ export function describeAppliedFilter({ effectiveFilter, filterSource }) {
 }
 export const NO_COMBINED_FILTERS = Object.freeze({ shared: UNSET_FILTER, overrides: Object.freeze({}) });
 
+// The applied filters to list for combined databases ({ dbId, effectiveFilter, filterSource }):
+// each one's, or, unless `listEach`, only those that have a filter of their own or a default of
+// their own, with the rest grouped by the filter they get ({ filter, source, count }).
+export function listAppliedFilters(databases, { listEach }) {
+  if (listEach) {
+    return { listed: databases, rest: [] };
+  }
+
+  const listed = databases.filter(({ filterSource }) => filterSource === 'own' || filterSource === 'default');
+  const groups = new Map();
+  for (const database of databases) {
+    if (listed.includes(database)) {
+      continue;
+    }
+
+    const { filter, source } = describeAppliedFilter(database);
+    const key = `${source}\n${filter}`;
+    const group = groups.get(key) ?? { filter, source, count: 0 };
+    group.count += 1;
+    groups.set(key, group);
+  }
+
+  return { listed, rest: [...groups.values()] };
+}
+
 // What decides the filter Downloader would give one of several databases.
 export function downloaderFilterInputs(filters, inspection) {
   const dbId = inspection.overview.dbId;

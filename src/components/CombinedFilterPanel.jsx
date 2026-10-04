@@ -2,7 +2,19 @@ import CollapsibleSection from './ui/CollapsibleSection.jsx';
 import FilterInput from './FilterInput.jsx';
 import FilterHelp from './FilterHelp.jsx';
 import FilterResults from './FilterResults.jsx';
-import { describeAppliedFilter } from '../lib/combinedFilters.js';
+import { describeAppliedFilter, listAppliedFilters } from '../lib/combinedFilters.js';
+import { COMBINED_DATABASES_IN_FULL_MAX } from '../lib/utils.js';
+
+// How a group of databases that get the same filter is named in the applied filter list.
+function describeRest(count, { others, grouped }) {
+  if (grouped) {
+    return `${count} ${count === 1 ? 'database' : 'databases'}`;
+  }
+  if (!others) {
+    return `All ${count} databases`;
+  }
+  return count === 1 ? 'The other database' : `The other ${count} databases`;
+}
 
 // FILTER for combined databases, as in downloader.ini: a shared filter for all of them (the
 // [mister] filter), filters of their own for some, and the filter that ends up applying to each.
@@ -26,6 +38,9 @@ function CombinedFilterPanel({
 }) {
   const withOwnFilter = databases.filter(({ dbId }) => Object.hasOwn(overrides, dbId));
   const withoutOwnFilter = databases.filter(({ dbId }) => !Object.hasOwn(overrides, dbId));
+  // With many databases, only those with a filter or a default of their own are listed; the rest,
+  // which all get the shared filter (or none), are counted in a line.
+  const applied = listAppliedFilters(databases, { listEach: databases.length <= COMBINED_DATABASES_IN_FULL_MAX });
 
   return (
     <CollapsibleSection
@@ -97,16 +112,25 @@ function CombinedFilterPanel({
       </div>
 
       <ul className="effective-filter-list" aria-label="Filter applied to each database">
-        {databases.map((database) => {
-          const applied = describeAppliedFilter(database);
+        {applied.listed.map((database) => {
+          const { filter, source } = describeAppliedFilter(database);
           return (
             <li key={database.dbId}>
               <span className="db-chip">{database.dbId}</span>
-              <code>{applied.filter}</code>
-              <span className="effective-filter-source">{applied.source}</span>
+              <code>{filter}</code>
+              <span className="effective-filter-source">{source}</span>
             </li>
           );
         })}
+        {applied.rest.map(({ filter, source, count }) => (
+          <li key={`${source}:${filter}`} className="effective-filter-rest">
+            <span className="effective-filter-count">
+              {describeRest(count, { others: applied.listed.length > 0, grouped: applied.rest.length > 1 })}
+            </span>
+            <code>{filter}</code>
+            <span className="effective-filter-source">{source}</span>
+          </li>
+        ))}
       </ul>
 
       <FilterHelp

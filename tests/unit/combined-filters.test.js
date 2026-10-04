@@ -8,6 +8,7 @@ import {
   buildCombinedUrlState,
   downloaderFilterInputs,
   findLoadedDbIdConflicts,
+  listAppliedFilters,
   startCombinedFilters,
   startSession,
 } from '../../src/lib/combinedFilters.js';
@@ -152,6 +153,28 @@ test('a conflict reloads the loaded database only when it comes from the same UR
   assert.deepEqual(reloads(inspection('first', '', 'url', 'https://example.com/fork/first.json')), [false]);
   assert.deepEqual(reloads(inspection('first', '', 'upload', 'first.json')), [false]);
   assert.deepEqual(reloads(inspection('second')), []);
+});
+
+test('with many databases, the applied filters list only those of their own, and group the rest by the filter they get', () => {
+  const applied = (dbId, filterSource, effectiveFilter = '') => ({ dbId, filterSource, effectiveFilter });
+  const databases = [
+    applied('a', 'none'),
+    applied('b', 'default', '!console'),
+    applied('c', 'own', 'arcade'),
+    applied('d', 'none'),
+    applied('e', 'shared', 'x'),
+    applied('f', 'none'),
+    applied('g', 'own', ''),
+  ];
+
+  assert.deepEqual(listAppliedFilters(databases, { listEach: true }), { listed: databases, rest: [] });
+  const { listed, rest } = listAppliedFilters(databases, { listEach: false });
+  // An own filter that is empty still stands out: the user set it.
+  assert.deepEqual(listed.map(({ dbId }) => dbId), ['b', 'c', 'g']);
+  assert.deepEqual(rest, [
+    { filter: 'Everything', source: 'no filter', count: 3 },
+    { filter: 'x', source: 'shared filter', count: 1 },
+  ]);
 });
 
 test('no sequence of openings, combinations and replacements loads two databases with one db_id', () => {

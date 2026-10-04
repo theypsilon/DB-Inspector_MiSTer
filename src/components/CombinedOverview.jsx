@@ -3,11 +3,11 @@ import DetailedToggle from './ui/DetailedToggle.jsx';
 import SectionAnchor from './ui/SectionAnchor.jsx';
 import GitHubRepoLink from './ui/GitHubRepoLink.jsx';
 import MetadataList from './ui/MetadataList.jsx';
+import { COMBINED_DATABASES_IN_FULL_MAX } from '../lib/utils.js';
 
-// Up to this many combined databases show as cards. More show as a compact list, a row each that
-// opens on its own, in a section that collapses. A row shows only what tells it apart, so the
-// whole row opens it; its links and buttons are inside.
-export const COMBINED_DATABASE_CARDS_MAX = 3;
+// Up to COMBINED_DATABASES_IN_FULL_MAX combined databases show as cards. More show as a compact
+// list, a row each that opens on its own, in a section that collapses. A row shows only what tells
+// it apart, so the whole row opens it; its links and buttons are inside.
 
 function formatCounts(counts) {
   return (
@@ -65,7 +65,7 @@ function CombinedOverview({ databases, detailed, onDetailedChange, onInstall }) 
     </div>
   );
 
-  if (databases.length > COMBINED_DATABASE_CARDS_MAX) {
+  if (databases.length > COMBINED_DATABASES_IN_FULL_MAX) {
     return (
       <CollapsibleSection
         label="Databases"

@@ -497,6 +497,7 @@ fieldset.mister-option legend { float: left; width: 100%; padding: 0; }
 .effective-filter-list { display: grid; gap: 0.45rem; margin: 0 0 0.9rem; padding: 0; list-style: none; }
 .effective-filter-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
 .effective-filter-source { color: var(--muted); font-size: 0.85rem; }
+.effective-filter-count { color: var(--muted); font-size: 0.85rem; font-weight: 700; }
 .tag-groups { display: grid; gap: 1.2rem; }
 
 @media (max-width: 960px) {

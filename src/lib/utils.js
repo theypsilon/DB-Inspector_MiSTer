@@ -7,6 +7,9 @@ export const CLUSTER_SIZE_TIP =
   'SD cards over 32 GB are usually formatted with 128 KB clusters (exFAT default). ' +
   'Cards of 32 GB or smaller typically use 32 KB clusters (FAT32 default).';
 export const CLUSTER_SIZE_OPTIONS = [4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576];
+// Up to this many combined databases, the page shows each one in full: a card each, and the filter
+// each one gets. With more, it lists them compactly.
+export const COMBINED_DATABASES_IN_FULL_MAX = 3;
 export const isTouchDevice = typeof window !== 'undefined' && (window.matchMedia?.('(pointer: coarse)').matches || navigator.maxTouchPoints > 0);
 
 const TOOLTIP_FLIP_THRESHOLD_PX = 80;

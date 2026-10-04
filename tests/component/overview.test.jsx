@@ -222,6 +222,50 @@ describe('combined databases', () => {
     expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull();
   });
 
+  test('with more than three databases, list only those with a filter or a default of their own, and count the rest', async () => {
+    const item = async (dbId, extra = {}) => ({ inspection: await fromUrl(database(dbId, {}, extra), `https://example.com/${dbId}.json`), filterDefaults: {} });
+    const items = [await item('alpha'), await item('beta', { default_options: { filter: '!console' } }), await item('gamma'), await item('delta'), await item('epsilon')];
+    const listed = (filters) => {
+      const view = buildCombinedView(items, filters);
+      const { unmount } = render(
+        <CombinedFilterPanel
+          databases={view.databases}
+          sharedFilter={filters.shared}
+          overrides={filters.overrides}
+          hasEssentialHint={false}
+          hasUntaggedItems={false}
+          onSearchEssential={() => {}}
+          filterPending={false}
+          summary=""
+          storageSummary={null}
+          clusterSizeBytes={131072}
+          onClusterSizeChange={() => {}}
+          onSharedFilterChange={() => {}}
+          onSharedFilterReset={() => {}}
+          onOverrideChange={() => {}}
+          onOverrideAdd={() => {}}
+          onOverrideRemove={() => {}}
+        />,
+      );
+      const rows = within(screen.getByRole('list', { name: 'Filter applied to each database' })).getAllByRole('listitem').map(text);
+      unmount();
+      return rows;
+    };
+
+    // Beta's default and gamma's own filter stand out; the other databases get everything.
+    expect(listed({ shared: NO_COMBINED_FILTERS.shared, overrides: { gamma: 'arcade' } })).toEqual([
+      'beta!consoledatabase default',
+      'gammaarcadeits own filter',
+      'The other 3 databasesEverythingno filter',
+    ]);
+    // A shared filter replaces beta's default, which does not include [mister].
+    expect(listed({ shared: { isSet: true, value: 'arcade' }, overrides: { gamma: 'console' } })).toEqual([
+      'gammaconsoleits own filter',
+      'The other 4 databasesarcadeshared filter',
+    ]);
+    expect(listed({ shared: { isSet: true, value: 'arcade' }, overrides: {} })).toEqual(['All 5 databasesarcadeshared filter']);
+  });
+
   test('issues name their database', async () => {
     render(<IssuesSection issues={[{ id: 'c', level: 'warning', context: 'collisions', message: '1 path is claimed by more than one database: alpha, beta.', dbId: null }, { id: 'd', level: 'error', context: 'files', message: 'Broken.', dbId: 'beta' }]} />);
     const items = [...document.querySelectorAll('#section-issues .issue')];
