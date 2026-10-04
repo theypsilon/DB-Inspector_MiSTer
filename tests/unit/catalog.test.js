@@ -41,6 +41,22 @@ test('MultiDatabases catalog entries come from README Inspect links', () => {
   assert.ok(entries.every((entry) => entry.key.startsWith('multidatabases:')));
 });
 
+test('MultiDatabases Inspect links can name their database after the # too', () => {
+  const entries = parseMultiDatabasesCatalog(`
+| [Existing title](existing-db/) | Existing database | [Inspect](https://theypsilon.github.io/DB-Inspector_MiSTer/#db=${EXISTING_DATABASE_URL}) |
+| [Combined](combined/) | Two databases | [Inspect](https://theypsilon.github.io/DB-Inspector_MiSTer/#db=${EXISTING_DATABASE_URL}&db=${NEW_DATABASE_URL}) |
+| [New title](new-db/) | New database | [Inspect](${buildInspectUrl(NEW_DATABASE_URL)}) |
+  `);
+
+  assert.deepEqual(
+    entries.map(({ dbUrl, title }) => ({ dbUrl, title })),
+    [
+      { dbUrl: EXISTING_DATABASE_URL, title: 'Existing title' },
+      { dbUrl: NEW_DATABASE_URL, title: 'New title' },
+    ],
+  );
+});
+
 test('Update_All entries win URL collisions and only new MultiDatabases entries are appended', () => {
   const updateAllEntry = {
     key: 'UPDATE_ALL_EXISTING',

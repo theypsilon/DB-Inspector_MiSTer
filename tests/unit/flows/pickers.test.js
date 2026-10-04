@@ -121,11 +121,7 @@ test('the catalog starts with nothing selected and selects the Update All defaul
     'jtcores',
     'Coin-OpCollection/Distribution-MiSTerFPGA',
   ]);
-  assert.equal(
-    app.search,
-    `?database-url[update_all_mister]=${UPDATE_ALL_URL}&database-url[distribution_mister]=${PINNED_URL}` +
-      `&database-url[jtcores]=${JTCORES_URL}&database-url[Coin-OpCollection/Distribution-MiSTerFPGA]=${COIN_OP_URL}`,
-  );
+  assert.equal(app.hash, `#db=${UPDATE_ALL_URL}&db=${PINNED_URL}&db=${JTCORES_URL}&db=${COIN_OP_URL}`);
 });
 
 test('choosing a database whose db_id is selected asks whether to replace it', async () => {
@@ -229,7 +225,7 @@ test('opening a selection asks first only when it would close a loaded database'
   await app.loadAlone();
   assert.equal(app.view.heading, 'jtcores');
   assert.equal(app.view.combined, null);
-  assert.equal(app.search, `?database-url=${JTCORES_URL}`);
+  assert.equal(app.hash, `#db=${JTCORES_URL}`);
 });
 
 test('databases opened together from the catalog share the current FILTER', async () => {
@@ -248,10 +244,7 @@ test('databases opened together from the catalog share the current FILTER', asyn
   assert.equal(app.view.heading, '2 combined databases');
   assert.equal(app.sharedFilter, 'console');
   assert.deepEqual(app.view.appliedFilters, ['update_all_misterconsoleshared filter', 'jtcoresconsoleshared filter']);
-  assert.equal(
-    app.search,
-    `?database-url[update_all_mister]=${UPDATE_ALL_URL}&database-url[jtcores]=${JTCORES_URL}&filter=console`,
-  );
+  assert.equal(app.hash, `#db=${UPDATE_ALL_URL}&db=${JTCORES_URL}&filter=console`);
 });
 
 test('a database list opens with all its databases selected and its [mister] filter applied', async () => {
@@ -278,11 +271,7 @@ test('a database list opens with all its databases selected and its [mister] fil
   assert.deepEqual(app.view.appliedFilters, ['jtcoresarcade consoleits own filter', 'arcade_roms_dbarcadeshared filter']);
   assert.equal(app.sharedFilter, 'arcade');
   assert.equal(app.ownFilter('jtcores'), '[mister] console');
-  assert.equal(
-    app.search,
-    `?database-url[jtcores]=${JTCORES_URL}&database-url[arcade_roms_db]=${ARCADE_URL}` +
-      '&filter=arcade&filter[jtcores]=[mister] console',
-  );
+  assert.equal(app.hash, `#db=${JTCORES_URL}&db=${ARCADE_URL}&filter=arcade&filter.jtcores=[mister]+console`);
 });
 
 test('a database list can be opened without its [mister] filter', async () => {
@@ -297,10 +286,7 @@ test('a database list can be opened without its [mister] filter', async () => {
 
   assert.equal(app.view.heading, '2 combined databases');
   assert.deepEqual(app.view.appliedFilters, ['jtcoresconsoleits own filter', 'arcade_roms_dbEverythingno filter']);
-  assert.equal(
-    app.search,
-    `?database-url[jtcores]=${JTCORES_URL}&database-url[arcade_roms_db]=${ARCADE_URL}&filter[jtcores]=[mister] console`,
-  );
+  assert.equal(app.hash, `#db=${JTCORES_URL}&db=${ARCADE_URL}&filter.jtcores=[mister]+console`);
 });
 
 test('a database list read while databases are loaded asks to combine only once its databases are chosen', async () => {
@@ -344,7 +330,8 @@ test('uploaded databases open again from the catalog, alone or combined', async 
   await app.loadAlone();
   assert.equal(app.view.heading, 'mine_db');
   assert.equal(app.errorMessage, '');
-  assert.equal(new URL(app.url).searchParams.has('database-url'), false);
+  // Uploaded databases cannot be shared, so the link is empty.
+  assert.equal(app.hash, '');
 
   catalog = openCatalog(9);
   assert.ok(catalog.loaded.includes('Uploaded: mine.json (mine_db)'));

@@ -22,10 +22,10 @@ test.skip(!process.env.LEGACY_E2E, 'Replaced by the journeys in tests/journeys/;
 //   (see measureEstimatedRowOffset) instead of relying on a fixed scroll offset.
 //
 // Set REAL_SCROLL_URL to the large-DB app URL to run the suite:
-//   REAL_SCROLL_URL='http://localhost:5173/?database-url=...' npx playwright test real-db-scroll
+//   REAL_SCROLL_URL='http://localhost:5173/#db=...' npx playwright test real-db-scroll
 
 const DEFAULT_REAL_SCROLL_URL =
-  'http://localhost:5173/?database-url=https%3A%2F%2Fraw.githubusercontent.com%2FMiSTer-devel%2FDistribution_MiSTer%2Fmain%2Fdb.json.zip';
+  'http://localhost:5173/#db=https://raw.githubusercontent.com/MiSTer-devel/Distribution_MiSTer/main/db.json.zip';
 // How far past riscos.rom's estimated offset tests 2 and 3 jump: riscos.rom and the Astrocade and
 // ATARI folders after it are then rendered around the top of the viewport.
 const BEYOND_RISCOS_MARGIN = 300;

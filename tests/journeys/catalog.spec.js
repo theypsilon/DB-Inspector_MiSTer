@@ -169,7 +169,7 @@ test('the catalog lists known databases and opens them alone or together', async
     await again.getByRole('button', { name: 'Open 6 selected databases' }).click();
     await expect(page.getByRole('heading', { name: '6 combined databases' })).toBeVisible();
     await expect(loadMode).toHaveCount(0);
-    await expect.poll(() => decodeURIComponent(new URL(page.url()).search)).toContain(`database-url[jtcores]=${JTCORES_URL}`);
+    await expect.poll(() => new URLSearchParams(new URL(page.url()).hash.slice(1)).getAll('db')).toContain(JTCORES_URL);
   });
 
   await test.step('more than three databases list compactly, each opening on its own, in a section that collapses', async () => {
@@ -215,7 +215,7 @@ test('the catalog lists known databases and opens them alone or together', async
     await catalog.getByRole('button', { name: 'Open selected database' }).click();
     await loadMode.getByRole('button', { name: 'Load alone' }).click();
     await expect(page.getByRole('heading', { name: 'jtcores', exact: true })).toBeVisible();
-    await expect.poll(() => decodeURIComponent(new URL(page.url()).search)).toBe(`?database-url=${JTCORES_URL}`);
+    await expect.poll(() => new URL(page.url()).hash).toBe(`#db=${JTCORES_URL}`);
   });
 });
 

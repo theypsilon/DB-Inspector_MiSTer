@@ -60,8 +60,7 @@ test.describe('INI list picker', () => {
 
     await expect(page.getByRole('heading', { name: 'with_filter_db' })).toBeVisible();
     await expect(page.getByLabel('FILTER')).toHaveValue('arcade ini-list-default');
-    await expect.poll(() => page.url()).toContain(`database-url=${encodeURIComponent(ENTRY_WITH_FILTER_URL)}`);
-    await expect.poll(() => page.url()).not.toContain('filter=');
+    await expect.poll(() => new URL(page.url()).hash).toBe(`#db=${ENTRY_WITH_FILTER_URL}`);
   });
 
   test('keeps the current FILTER when the replacement is declined', async ({ page }) => {
@@ -77,7 +76,7 @@ test.describe('INI list picker', () => {
 
     await expect(page.getByRole('heading', { name: 'with_filter_db' })).toBeVisible();
     await expect(page.getByLabel('FILTER')).toHaveValue('manual !keep');
-    await expect.poll(() => page.url()).toContain(`filter=${encodeURIComponent('manual !keep')}`);
+    await expect.poll(() => new URL(page.url()).hash).toBe(`#db=${ENTRY_WITH_FILTER_URL}&filter=manual+!keep`);
   });
 
   test('opens entries without their own filter while keeping the current FILTER without asking', async ({
@@ -108,17 +107,14 @@ test.describe('INI list picker', () => {
 
     await expect(page.getByRole('heading', { name: 'Choose databases from this list' })).toBeVisible();
     await expect(page.getByText(`${listUrl} contains 2 entries.`)).toBeVisible();
-    await expect.poll(() => page.url()).toContain(`database-url=${encodeURIComponent(listUrl)}`);
+    await expect.poll(() => new URL(page.url()).hash).toBe(`#db=${listUrl}`);
 
     await chooseOnly(page, 'WithoutFilter');
     await page.getByRole('button', { name: 'Open selected database' }).click();
 
     await expect(page.getByRole('heading', { name: 'without_filter_db' })).toBeVisible();
     await expect(page.getByLabel('FILTER')).toHaveValue('ini-list-default');
-    await expect.poll(() => page.url()).toContain(
-      `database-url=${encodeURIComponent(ENTRY_WITHOUT_FILTER_URL)}`,
-    );
-    await expect.poll(() => page.url()).not.toContain('filter=');
+    await expect.poll(() => new URL(page.url()).hash).toBe(`#db=${ENTRY_WITHOUT_FILTER_URL}`);
   });
 });
 
@@ -162,7 +158,7 @@ test.describe('remote loading', () => {
     const githubUrl = 'https://raw.githubusercontent.com/example-owner/example-repo/main/db.json';
     await page.route(githubUrl, (route) => fulfillJson(route, buildDatabase('github_db')));
 
-    await page.goto(`/?database-url=${encodeURIComponent(githubUrl)}`);
+    await page.goto(`/#db=${githubUrl}`);
 
     await expect(page.getByRole('heading', { name: 'github_db' })).toBeVisible();
     const repoLink = page.locator('.github-repo-link');
@@ -307,7 +303,7 @@ test.describe('navigation in large trees', () => {
   });
 
   test('URL anchors open a row far outside the rendered rows', async ({ page }) => {
-    await page.goto(`/#files:${encodeURIComponent(FAR_FILE_PATH)}`);
+    await page.goto(`/#at=files:${FAR_FILE_PATH}`);
     await uploadJson(page, 'large.json', buildLargeDatabase());
     await expect(page.getByRole('heading', { name: 'large_db' })).toBeVisible();
 

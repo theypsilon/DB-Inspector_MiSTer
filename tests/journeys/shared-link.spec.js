@@ -1,8 +1,9 @@
 import { expect, test } from '@playwright/test';
 
-// A database opened from a shared link, in a real browser: its default FILTER and the address,
-// the detailed toggle, size hints and downloads, find-in-page with its highlights and row flash,
-// section and row anchors across a reload, and back/forward between databases.
+// A database opened from a shared link, in a real browser: an old link becoming its #db= link, its
+// default FILTER and the link, the detailed toggle, size hints and downloads, find-in-page with its
+// highlights and row flash, section and row anchors across a reload, back/forward between
+// databases, and a link typed in the address bar of the open page.
 
 const SHARED_URL = 'https://raw.githubusercontent.com/example-owner/example-repo/main/db.json';
 const SECOND_URL = 'https://example.com/second.json';
@@ -44,47 +45,50 @@ test.beforeEach(async ({ page }) => {
 test('a shared link opens its database, and the page around it works', async ({ page }) => {
   // The page clock runs normally, except while the find step stops it to time the row flash.
   await page.clock.install();
+  // A link from before the #, as READMEs still have them.
   await page.goto(`/?database-url=${encodeURIComponent(SHARED_URL)}`);
   const filter = page.getByLabel('FILTER');
   const heading = (name) => page.getByRole('heading', { name, exact: true });
+  const link = () => new URL(page.url()).hash;
 
-  await test.step('the database opens with its default FILTER and a link to its repository', async () => {
+  await test.step('an old link opens its database as its #db= link, with its default FILTER and a link to its repository', async () => {
     await expect(heading('shared_db')).toBeVisible();
+    expect(new URL(page.url()).search).toBe('');
     await expect(page.locator('.github-repo-link')).toHaveText('example-owner/example-repo');
     await expect(page.locator('.github-repo-link')).toHaveAttribute('href', 'https://github.com/example-owner/example-repo');
     await expect(filter).toHaveValue('arcade');
     await expect(heading('arcade.rbf')).toBeVisible();
     await expect(heading('console.rbf')).toHaveCount(0);
-    expect(page.url()).not.toContain('filter=');
+    expect(link()).toBe(`#db=${SHARED_URL}`);
   });
 
-  await test.step('FILTER follows into the address, Clear restores the default, and an empty FILTER shows everything', async () => {
+  await test.step('FILTER follows into the link, Clear restores the default, and an empty FILTER shows everything', async () => {
     await filter.fill('console');
     await expect(heading('console.rbf')).toBeVisible();
     await expect(heading('arcade.rbf')).toHaveCount(0);
-    await expect.poll(() => page.url()).toContain('filter=console');
+    await expect.poll(link).toBe(`#db=${SHARED_URL}&filter=console`);
 
     await page.getByRole('button', { name: 'Clear' }).click();
     await expect(filter).toHaveValue('arcade');
-    await expect.poll(() => page.url()).not.toContain('filter=');
+    await expect.poll(link).toBe(`#db=${SHARED_URL}`);
 
     await filter.fill('');
     await expect(page.getByText(/^Showing the full database: \d+ files/)).toBeVisible();
     await expect(heading('console.rbf')).toBeVisible();
-    await expect.poll(() => page.url()).toContain('filter=');
+    await expect.poll(link).toBe(`#db=${SHARED_URL}&filter=`);
     await page.getByRole('button', { name: 'Clear' }).click();
     await expect(filter).toHaveValue('arcade');
   });
 
-  await test.step('the detailed toggle shows details and keeps the choice in the address', async () => {
+  await test.step('the detailed toggle shows details and keeps the choice in the link', async () => {
     const toggle = page.locator('.overview-controls').getByRole('button', { name: 'Detailed toggle' });
     await toggle.click();
     await expect(toggle).toHaveAttribute('aria-pressed', 'true');
-    await expect.poll(() => new URL(page.url()).searchParams.has('detailed')).toBe(true);
+    await expect.poll(link).toBe(`#db=${SHARED_URL}&detailed`);
     await expect(page.locator('.tree-entry', { has: heading('arcade.rbf') }).getByText('MD5 HASH')).toBeVisible();
     await toggle.click();
     await expect(toggle).toHaveAttribute('aria-pressed', 'false');
-    await expect.poll(() => new URL(page.url()).searchParams.has('detailed')).toBe(false);
+    await expect.poll(link).toBe(`#db=${SHARED_URL}`);
   });
 
   await test.step('size hints open on click and close when the pointer leaves, and the cluster size changes the estimate', async () => {
@@ -168,14 +172,14 @@ test('a shared link opens its database, and the page around it works', async ({ 
     await issues.locator('h2').hover();
     await issues.locator('h2 .section-anchor-button').click();
     await expect(issues).toHaveAttribute('open', '');
-    expect(new URL(page.url()).hash).toBe('#issues');
+    expect(link()).toBe(`#db=${SHARED_URL}&at=issues`);
     // The section scrolls into view smoothly, and a row's link icon shows only under the pointer.
     await untilScrollStops(page);
 
     const consoleRow = page.locator('.tree-entry', { has: heading('essential.rbf') });
     await consoleRow.hover();
     await consoleRow.locator('.copy-link-button').click();
-    await expect.poll(() => new URL(page.url()).hash).toBe(`#files:${encodeURIComponent('cores/essential.rbf')}`);
+    await expect.poll(link).toBe(`#db=${SHARED_URL}&at=files:cores/essential.rbf`);
     await page.reload();
     await expect(heading('shared_db')).toBeVisible();
     await expect(page.locator('[id="row-database:file:cores/essential.rbf"]')).toBeInViewport();
@@ -193,6 +197,17 @@ test('a shared link opens its database, and the page around it works', async ({ 
     await page.goForward();
     await expect(heading('second_db')).toBeVisible();
     await expect(page.getByLabel('URL')).toHaveValue(SECOND_URL);
+  });
+
+  await test.step('a link typed in the address bar of the open page opens there', async () => {
+    await page.evaluate(() => {
+      window.notReloaded = true;
+    });
+    await page.goto(`/#db=${SHARED_URL}&filter=console`);
+    await expect(heading('shared_db')).toBeVisible();
+    await expect(filter).toHaveValue('console');
+    await expect(heading('arcade.rbf')).toHaveCount(0);
+    expect(await page.evaluate(() => window.notReloaded)).toBe(true);
   });
 });
 

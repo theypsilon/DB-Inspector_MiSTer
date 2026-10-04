@@ -58,7 +58,7 @@ test('combining shows both databases, lists the paths they share as collisions, 
     app.view.issues.some((message) => message.includes('1 path is claimed by more than one database: alpha, beta.')),
     app.view.issues.join('\n'),
   );
-  assert.equal(app.search, `?database-url[alpha]=${ALPHA_URL}&database-url[beta]=${BETA_URL}`);
+  assert.equal(app.hash, `#db=${ALPHA_URL}&db=${BETA_URL}`);
 
   // Collided paths can be found like any other row.
   assert.equal(app.find('shared.rom').length, 3);
@@ -108,13 +108,13 @@ test('the load prompt can be cancelled, asks which database stays when its db_id
   assert.deepEqual(app.view.cards, ['alpha', 'beta']);
   assert.ok(app.view.files.includes('twin.rbf'));
   assert.ok(!app.view.files.includes('alpha.rbf'));
-  assert.equal(app.search, `?database-url[alpha]=${ALPHA_TWIN_URL}&database-url[beta]=${BETA_URL}`);
+  assert.equal(app.hash, `#db=${ALPHA_TWIN_URL}&db=${BETA_URL}`);
 
   await app.fetch(ALPHA_TWIN_URL);
   await app.loadAlone();
   assert.ok(app.view.files.includes('twin.rbf'));
   assert.equal(app.view.combined, null);
-  assert.equal(app.search, `?database-url=${ALPHA_TWIN_URL}`);
+  assert.equal(app.hash, `#db=${ALPHA_TWIN_URL}`);
 });
 
 test('combined databases share a [mister] filter and can have their own, kept in the URL and in history', async () => {
@@ -134,10 +134,7 @@ test('combined databases share a [mister] filter and can have their own, kept in
   await app.typeOwnFilter('beta', '[mister] console');
   assert.deepEqual(app.view.appliedFilters, ['alphaarcadeshared filter', 'betaarcade consoleits own filter']);
   assert.ok(app.view.files.includes('beta.rbf'));
-  assert.equal(
-    app.search,
-    `?database-url[alpha]=${ALPHA_URL}&database-url[beta]=${BETA_URL}&filter=arcade&filter[beta]=[mister] console`,
-  );
+  assert.equal(app.hash, `#db=${ALPHA_URL}&db=${BETA_URL}&filter=arcade&filter.beta=[mister]+console`);
 
   await app.reload();
   assert.equal(app.view.heading, '2 combined databases');
@@ -175,7 +172,7 @@ test('uploads and database list entries can be combined too, and uploads stay ou
   assert.equal(app.view.heading, '3 combined databases');
   // Gamma keeps the filter its list gives it ([mister] = arcade) as its own.
   assert.equal(app.view.appliedFilters[2], 'gammaarcadeits own filter');
-  assert.equal(app.search, `?database-url[alpha]=${ALPHA_URL}&database-url[gamma]=${GAMMA_URL}&filter[gamma]=arcade`);
+  assert.equal(app.hash, `#db=${ALPHA_URL}&db=${GAMMA_URL}&filter.gamma=arcade`);
 });
 
 test('databases chosen together leave out those whose db_id is taken, and report what failed', async () => {
@@ -239,7 +236,7 @@ test('databases chosen together leave out those whose db_id is taken, and report
   assert.equal(app.view.heading, 'gamma');
   assert.equal(app.view.combined, null);
   assert.ok(app.errorMessage.includes(`${missingUrl}: Request failed with 404 Not Found.`), app.errorMessage);
-  assert.equal(app.search, `?database-url=${GAMMA_URL}`);
+  assert.equal(app.hash, `#db=${GAMMA_URL}`);
 });
 
 test('fetching the only loaded database again asks just whether to reload it', async () => {
@@ -304,7 +301,59 @@ test('fetching one of several loaded databases again asks whether to combine, th
   await app.fetch(ALPHA_URL);
   await app.loadAlone();
   assert.equal(app.view.heading, 'alpha');
-  assert.equal(app.search, `?database-url=${ALPHA_URL}`);
+  assert.equal(app.hash, `#db=${ALPHA_URL}`);
+});
+
+test('a long session is packed into its link, and opens again from it', async () => {
+  const urls = Array.from({ length: 40 }, (_, index) => `https://example.com/combine/many/database_${index}.json`);
+  const routes = {
+    ...ROUTES,
+    ...Object.fromEntries(urls.map((url, index) => [url, { body: database(`many_${index}`, { [`many_${index}.rbf`]: { size: 1, tags: [index % 2] } }) }])),
+  };
+  app = await openApp('/', { routes });
+  await app.upload(file('many.ini', urls.map((url, index) => `[many_${index}]\ndb_url=${url}\n`).join('\n')));
+  await openAllSelected(40);
+  await app.typeSharedFilter('arcade');
+  await app.giveOwnFilter('many_3');
+  await app.typeOwnFilter('many_3', '[mister] console');
+
+  assert.equal(app.view.heading, '40 combined databases');
+  assert.match(app.hash, /^#z=[A-Za-z0-9_-]+$/);
+  assert.ok(app.url.length <= 2000, `${app.url.length}`);
+
+  await app.reload();
+  assert.equal(app.view.heading, '40 combined databases');
+  assert.deepEqual(app.view.cards, urls.map((_, index) => `many_${index}`));
+  assert.equal(app.sharedFilter, 'arcade');
+  assert.equal(app.ownFilter('many_3'), '[mister] console');
+  assert.ok(app.view.files.includes('many_3.rbf'));
+  assert.ok(!app.view.files.includes('many_5.rbf'));
+});
+
+test('when only one of combined databases can be shared, its link keeps the filter it had', async () => {
+  const inheritsUrl = 'https://example.com/combine/inherits.json';
+  const inherits = database(
+    'inherits',
+    { 'inherits-arcade.rbf': { size: 1, tags: [0] }, 'inherits-console.rbf': { size: 1, tags: [1] } },
+    { default_options: { filter: '[mister] !console' } },
+  );
+  app = await openApp('/', { routes: { ...ROUTES, [inheritsUrl]: { body: inherits } } });
+  await app.fetch(inheritsUrl);
+  await app.upload(file('beta.json', BETA));
+  await app.combine();
+  await app.typeSharedFilter('arcade console');
+  assert.equal(app.view.appliedFilters[0], 'inheritsarcade console !consoledatabase default');
+
+  // Shown alone with the shared filter as FILTER, it would lose its default's terms.
+  assert.equal(app.hash, `#db=${inheritsUrl}&filter=arcade+console&filter.inherits=arcade+console+!console`);
+
+  await app.reload();
+  assert.equal(app.view.heading, 'inherits');
+  assert.equal(app.filter, 'arcade console !console');
+  assert.ok(app.view.files.includes('inherits-arcade.rbf'));
+  assert.ok(!app.view.files.includes('inherits-console.rbf'));
+  await app.pause();
+  assert.equal(app.hash, `#db=${inheritsUrl}&filter=arcade+console+!console`);
 });
 
 // A list's picker starts with one database per db_id selected.

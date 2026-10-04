@@ -19,7 +19,7 @@ import {
   mergeMeasuredHeights,
   shouldApplyScrollAnchor,
 } from '../../../src/lib/treeLayout.js';
-import { parseNodeAnchor } from '../../../src/lib/urlState.js';
+import { parseNodeAnchor, readLink } from '../../../src/lib/urlState.js';
 import {
   CLUSTER_SIZE_OPTIONS,
   CLUSTER_SIZE_TIP,
@@ -90,8 +90,7 @@ describe('INI list picker', () => {
     assert.equal(app.view.heading, 'with_filter_db');
     assert.equal(app.filter, 'arcade ini-list-default');
     await app.pause();
-    assert.ok(app.url.includes(`database-url=${encodeURIComponent(ENTRY_WITH_FILTER_URL)}`), app.url);
-    assert.doesNotMatch(app.url, /filter=/);
+    assert.equal(app.hash, `#db=${ENTRY_WITH_FILTER_URL}`);
   });
 
   test('keeps the current FILTER when the replacement is declined', async () => {
@@ -107,7 +106,7 @@ describe('INI list picker', () => {
     assert.equal(app.view.heading, 'with_filter_db');
     assert.equal(app.filter, 'manual !keep');
     await app.pause();
-    assert.ok(app.url.includes(`filter=${encodeURIComponent('manual !keep')}`), app.url);
+    assert.equal(app.hash, `#db=${ENTRY_WITH_FILTER_URL}&filter=manual+!keep`);
   });
 
   test('opens entries without their own filter while keeping the current FILTER without asking', async () => {
@@ -132,15 +131,14 @@ describe('INI list picker', () => {
 
     assert.equal(app.view.choice.title, 'Choose databases from this list');
     assert.equal(app.view.choice.description, `${listUrl} contains 2 entries.`);
-    assert.ok(app.url.includes(`database-url=${encodeURIComponent(listUrl)}`), app.url);
+    assert.equal(app.hash, `#db=${listUrl}`);
 
     await openOnly('WithoutFilter');
 
     assert.equal(app.view.heading, 'without_filter_db');
     assert.equal(app.filter, 'ini-list-default');
     await app.pause();
-    assert.ok(app.url.includes(`database-url=${encodeURIComponent(ENTRY_WITHOUT_FILTER_URL)}`), app.url);
-    assert.doesNotMatch(app.url, /filter=/);
+    assert.equal(app.hash, `#db=${ENTRY_WITHOUT_FILTER_URL}`);
   });
 });
 
@@ -177,7 +175,7 @@ describe('remote loading', () => {
     const releaseUrl = 'https://github.com/example-owner/example-repo/releases/latest/download/db.json.zip';
     const guidance = `GitHub does not let websites read release downloads, so ${releaseUrl} cannot be opened in the browser. Download db.json.zip and drag it into Upload to inspect it.`;
     // GitHub sends no CORS headers for them, so the browser blocks them: there is no route.
-    app = await openApp(`/?database-url=${encodeURIComponent(releaseUrl)}`, { routes: ROUTES });
+    app = await openApp(`/#db=${releaseUrl}`, { routes: ROUTES });
     assert.equal(app.view.heading, null);
     assert.equal(app.errorMessage, guidance);
 
@@ -190,12 +188,56 @@ describe('remote loading', () => {
 
   test('GitHub-hosted databases link to their source repository', async () => {
     const githubUrl = 'https://raw.githubusercontent.com/example-owner/example-repo/main/db.json';
-    app = await openApp(`/?database-url=${encodeURIComponent(githubUrl)}`, {
+    app = await openApp(`/#db=${githubUrl}`, {
       routes: { [githubUrl]: { body: buildDatabase('github_db') } },
     });
 
     assert.equal(app.view.heading, 'github_db');
     assert.equal(extractGitHubRepo(app.view.inspection.source), 'example-owner/example-repo');
+  });
+});
+
+describe('links', () => {
+  test('old links open their database as #db=, and nothing else they named', async () => {
+    app = await openApp(`/?database-url=${encodeURIComponent(ENTRY_WITH_FILTER_URL)}&filter=arcade&detailed#files:cores/arcade.rbf`, {
+      routes: ROUTES,
+    });
+
+    assert.equal(app.url, `http://localhost/#db=${ENTRY_WITH_FILTER_URL}`);
+    assert.equal(app.historyLength, 1);
+    assert.equal(app.view.heading, 'with_filter_db');
+    assert.equal(app.databaseUrl, ENTRY_WITH_FILTER_URL);
+    assert.equal(app.filter, '');
+  });
+
+  test('a link typed in the address bar of the open page opens what it names, and back returns', async () => {
+    app = await openApp(`/#db=${ENTRY_WITH_FILTER_URL}`, { routes: ROUTES });
+    assert.equal(app.view.heading, 'with_filter_db');
+
+    await app.openLink(`#db=${ENTRY_WITHOUT_FILTER_URL}&filter=arcade`);
+    assert.equal(app.view.heading, 'without_filter_db');
+    assert.equal(app.databaseUrl, ENTRY_WITHOUT_FILTER_URL);
+    assert.equal(app.filter, 'arcade');
+
+    await app.back();
+    assert.equal(app.view.heading, 'with_filter_db');
+    assert.equal(app.filter, '');
+  });
+
+  test('a damaged link says so, and the page works as usual', async () => {
+    app = await openApp('/#z=damaged!&at=issues', { routes: ROUTES });
+    assert.equal(app.errorMessage, 'This link is damaged, so what it names could not be opened.');
+    assert.equal(app.view.heading, null);
+
+    await app.fetch(ENTRY_WITH_FILTER_URL);
+    assert.equal(app.view.heading, 'with_filter_db');
+    assert.equal(app.errorMessage, '');
+    assert.equal(app.hash, `#db=${ENTRY_WITH_FILTER_URL}&at=issues`);
+
+    // Back at the damaged link, it says so again.
+    await app.back();
+    assert.equal(app.errorMessage, 'This link is damaged, so what it names could not be opened.');
+    assert.equal(app.view.heading, null);
   });
 });
 
@@ -401,11 +443,11 @@ describe('navigation in large trees', () => {
   });
 
   test('URL anchors open a row far outside the rendered rows', async () => {
-    app = await openApp(`/#files:${encodeURIComponent(FAR_FILE_PATH)}`);
+    app = await openApp(`/#at=files:${FAR_FILE_PATH}`);
     await app.upload(file('large.json', buildLargeDatabase()));
     assert.equal(app.view.heading, 'large_db');
 
-    const anchor = parseNodeAnchor();
+    const anchor = parseNodeAnchor(readLink().at);
     assert.equal(anchor.section, 'filesystem');
     assert.equal(anchor.rowId, FAR_ROW_ID);
     // The row's folders open (games is not listed among the folders, so it shows as missing), and

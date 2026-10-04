@@ -64,8 +64,8 @@ test('combining shows both databases, lists the paths they share as collisions, 
     '1 path is claimed by more than one database: alpha, beta.',
   );
   await expect
-    .poll(() => decodeURIComponent(new URL(page.url()).search))
-    .toBe(`?database-url[alpha]=${ALPHA_URL}&database-url[beta]=${BETA_URL}`);
+    .poll(() => new URL(page.url()).hash)
+    .toBe(`#db=${ALPHA_URL}&db=${BETA_URL}`);
 
   // Collided paths can be found like any other row.
   await page.locator('.app-footer').getByText('to search').click();
@@ -118,14 +118,14 @@ test('the load prompt can be cancelled, asks which database stays when its db_id
   await expect(page.getByRole('heading', { name: 'twin.rbf' })).toBeVisible();
   await expect(page.locator('#section-files').getByRole('heading', { name: 'alpha.rbf' })).toHaveCount(0);
   await expect
-    .poll(() => decodeURIComponent(new URL(page.url()).search))
-    .toBe(`?database-url[alpha]=${ALPHA_TWIN_URL}&database-url[beta]=${BETA_URL}`);
+    .poll(() => new URL(page.url()).hash)
+    .toBe(`#db=${ALPHA_TWIN_URL}&db=${BETA_URL}`);
 
   await fetchDatabase(page, ALPHA_TWIN_URL);
   await loadModeDialog(page).getByRole('button', { name: 'Load alone' }).click();
   await expect(page.getByRole('heading', { name: 'twin.rbf' })).toBeVisible();
   await expect(page.getByRole('heading', { name: '2 combined databases' })).toHaveCount(0);
-  await expect.poll(() => decodeURIComponent(new URL(page.url()).search)).toBe(`?database-url=${ALPHA_TWIN_URL}`);
+  await expect.poll(() => new URL(page.url()).hash).toBe(`#db=${ALPHA_TWIN_URL}`);
 });
 
 test('combined databases share a [mister] filter and can have their own, kept in the URL and in history', async ({
@@ -149,8 +149,8 @@ test('combined databases share a [mister] filter and can have their own, kept in
   await expect(applied).toHaveText(['alphaarcadeshared filter', 'betaarcade consoleits own filter']);
   await expect(page.locator('#section-files').getByRole('heading', { name: 'beta.rbf' })).toBeVisible();
   await expect
-    .poll(() => decodeURIComponent(new URL(page.url()).search))
-    .toBe(`?database-url[alpha]=${ALPHA_URL}&database-url[beta]=${BETA_URL}&filter=arcade&filter[beta]=[mister] console`);
+    .poll(() => new URL(page.url()).hash)
+    .toBe(`#db=${ALPHA_URL}&db=${BETA_URL}&filter=arcade&filter.beta=[mister]+console`);
 
   await page.reload();
   await expect(page.getByRole('heading', { name: '2 combined databases' })).toBeVisible();
@@ -187,8 +187,8 @@ test('uploads and database list entries can be combined too, and uploads stay ou
     page.getByRole('list', { name: 'Filter applied to each database' }).getByRole('listitem').nth(2),
   ).toHaveText('gammaarcadeits own filter');
   await expect
-    .poll(() => decodeURIComponent(new URL(page.url()).search))
-    .toBe(`?database-url[alpha]=${ALPHA_URL}&database-url[gamma]=${GAMMA_URL}&filter[gamma]=arcade`);
+    .poll(() => new URL(page.url()).hash)
+    .toBe(`#db=${ALPHA_URL}&db=${GAMMA_URL}&filter.gamma=arcade`);
 });
 
 test('databases chosen together leave out those whose db_id is taken, and report what failed', async ({ page }) => {
@@ -254,7 +254,7 @@ test('databases chosen together leave out those whose db_id is taken, and report
   await expect(page.getByRole('heading', { name: 'gamma', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: /combined databases/ })).toHaveCount(0);
   await expect(page.getByText(`${missingUrl}: Request failed with 404 Not Found.`)).toBeVisible();
-  await expect.poll(() => decodeURIComponent(new URL(page.url()).search)).toBe(`?database-url=${GAMMA_URL}`);
+  await expect.poll(() => new URL(page.url()).hash).toBe(`#db=${GAMMA_URL}`);
 });
 
 // No two loaded databases ever share a db_id.

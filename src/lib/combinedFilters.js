@@ -1,4 +1,9 @@
-import { normalizeFilterPromptValue, resolveDownloaderFilter, resolveEffectiveDefaultFilter } from './filterDefaults.js';
+import {
+  NO_FILTER_DEFAULTS,
+  normalizeFilterPromptValue,
+  resolveDownloaderFilter,
+  resolveEffectiveDefaultFilter,
+} from './filterDefaults.js';
 import { isReloadOf } from './selection.js';
 
 // The filters of combined databases, as in downloader.ini: a shared filter (the [mister] filter)
@@ -58,14 +63,35 @@ export function downloaderFilterInputs(filters, inspection) {
   };
 }
 
-export function buildCombinedUrlState(databases, filters) {
+// The link of combined databases (see urlState.js): the URLs of those loaded from one, in order,
+// the shared filter, and their own filters. Uploaded databases cannot be shared. A link with only
+// one database shows it alone, so when only one can be shared, it keeps the filter it gets among the
+// others as its own, unless it would get the same FILTER alone.
+export function buildCombinedLink(databases, filters) {
+  const shared = databases
+    .map(({ inspection }) => inspection)
+    .filter((inspection) => inspection.source.sourceKind === 'url');
+  const overrides = Object.fromEntries(
+    shared
+      .filter((inspection) => Object.hasOwn(filters.overrides, inspection.overview.dbId))
+      .map((inspection) => [inspection.overview.dbId, filters.overrides[inspection.overview.dbId]]),
+  );
+
+  if (shared.length === 1 && !Object.keys(overrides).length) {
+    const [inspection] = shared;
+    const filter = resolveDownloaderFilter(downloaderFilterInputs(filters, inspection));
+    const filterAlone = filters.shared.isSet
+      ? filters.shared.value
+      : resolveEffectiveDefaultFilter({ ...NO_FILTER_DEFAULTS, databaseDefaultFilter: inspection.overview.defaultFilter || '' });
+    if (filter !== filterAlone) {
+      overrides[inspection.overview.dbId] = filter;
+    }
+  }
+
   return {
-    databases: databases.map(({ inspection }) => ({
-      dbId: inspection.overview.dbId,
-      url: inspection.source.sourceKind === 'url' ? inspection.source.sourceLabel : null,
-    })),
-    sharedFilter: filters.shared,
-    overrides: filters.overrides,
+    databases: shared.map((inspection) => inspection.source.sourceLabel),
+    filter: filters.shared,
+    overrides,
   };
 }
 

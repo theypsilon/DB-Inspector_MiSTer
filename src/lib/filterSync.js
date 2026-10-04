@@ -1,8 +1,8 @@
-// Keeps the FILTER box and the shared `filter` URL param in step with the loaded source.
+// Keeps the FILTER box and the `filter` of the page's link in step with the loaded source.
 //
 // - When a new source (or a new default filter) arrives, FILTER is reset to a filter preserved
-//   from before the load, else the `filter` URL param, else the effective default.
-// - URL writes wait until the debounced FILTER has caught up with that reset value, so a stale
+//   from before the load, else the link's `filter`, else the effective default.
+// - Link writes wait until the debounced FILTER has caught up with that reset value, so a stale
 //   filter from the previous source is never shared for the new one.
 //
 // The app keeps this state in a ref rather than React state: effects running in the same commit

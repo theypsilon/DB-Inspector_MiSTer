@@ -1,4 +1,5 @@
 import { strFromU8, unzipSync } from 'fflate';
+import { linkedDatabaseUrl, parseLink } from './urlState.js';
 
 const DISTRIBUTION_MISTER_DB_ID = 'distribution_mister';
 const NO_DISTRIBUTION_MISTER_INVALID_PATHS = new Set([
@@ -755,8 +756,10 @@ export function parseMultiDatabasesCatalog(source) {
 
     let databaseUrl;
     try {
+      // Inspect links name their database as ?database-url=<url>, or as #db=<url>.
       const inspectUrl = new URL(inspectLinkMatch[1]);
-      const databaseUrlParam = inspectUrl.searchParams.get('database-url');
+      const databaseUrlParam =
+        inspectUrl.searchParams.get('database-url') || linkedDatabaseUrl(parseLink(inspectUrl.hash.slice(1)));
       if (!databaseUrlParam) {
         continue;
       }

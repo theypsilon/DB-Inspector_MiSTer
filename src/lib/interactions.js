@@ -1,3 +1,5 @@
+import { writeLinkAnchor } from './urlState.js';
+
 // Small interactions of the page, kept out of the components so they can be tested.
 
 // Enter in a FILTER box applies it by leaving the box, instead of adding a new line.
@@ -17,10 +19,10 @@ export function nextInfoHintOpen(open, eventType) {
   return eventType === 'click' ? !open : false;
 }
 
-// A section's anchor puts the section in the address, opens it when it is collapsed, and scrolls
-// to it. `section` is the section's element, if any.
-export function activateSectionAnchor({ anchor, section, history }) {
-  history.replaceState(null, '', `#${anchor}`);
+// A section's anchor puts the section in the page's link, opens it when it is collapsed, and
+// scrolls to it. `section` is the section's element, if any.
+export function activateSectionAnchor({ anchor, section }) {
+  writeLinkAnchor(anchor);
   if (section) {
     if (section.tagName === 'DETAILS' && !section.open) {
       section.open = true;

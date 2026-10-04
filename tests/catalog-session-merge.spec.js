@@ -178,7 +178,7 @@ test('catalog selections keep the active filter until the user clears it', async
 
   await expect(page.getByRole('heading', { name: 'distribution_mister' })).toBeVisible();
   await expect(filterInput).toHaveValue('manual !keep');
-  await expect.poll(() => page.url()).toContain(`filter=${encodeURIComponent('manual !keep')}`);
+  await expect.poll(() => new URL(page.url()).hash).toBe(`#db=${PRIMARY_DATABASE_URL}&filter=manual+!keep`);
 });
 
 test('a catalog database can be combined with the loaded one', async ({ page }) => {

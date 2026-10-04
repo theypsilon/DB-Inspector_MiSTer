@@ -50,8 +50,9 @@ test('several chosen files offer their databases, and other files are skipped wi
     'betaarcadeshared filter',
     'gammaarcadeshared filter',
   ]);
-  // Uploaded databases cannot be shared, so only the list's remote database is in the address.
-  assert.equal(app.search, `?database-url[gamma]=${GAMMA_URL}&filter=arcade`);
+  // Uploaded databases cannot be shared, so only the list's remote database is in the link. Shown
+  // alone with the shared filter as FILTER, it gets the filter it has here.
+  assert.equal(app.hash, `#db=${GAMMA_URL}&filter=arcade`);
 
   // Files with the same content as loaded databases are marked as loaded.
   await app.upload(file('again.json', ALPHA), file('again.json.zip', BETA_ZIP), file('fork.json', ALPHA_FORK));

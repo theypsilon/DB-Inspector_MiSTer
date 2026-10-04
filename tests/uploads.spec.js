@@ -52,8 +52,8 @@ test('several chosen files offer their databases, and other files are skipped wi
   ]);
   // Uploaded databases cannot be shared, so only the list's remote database is in the address.
   await expect
-    .poll(() => decodeURIComponent(new URL(page.url()).search))
-    .toBe(`?database-url[gamma]=${GAMMA_URL}&filter=arcade`);
+    .poll(() => new URL(page.url()).hash)
+    .toBe(`#db=${GAMMA_URL}&filter=arcade`);
 
   // Files with the same content as loaded databases are marked as loaded.
   await page.locator('#database-file-input').setInputFiles([

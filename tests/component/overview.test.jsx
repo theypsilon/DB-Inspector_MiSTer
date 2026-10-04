@@ -64,7 +64,7 @@ describe('the database overview', () => {
     section.open = false;
     const user = userEvent.setup();
     await user.click(section.querySelector('.section-anchor-button'));
-    expect(window.location.hash).toBe('#issues');
+    expect(window.location.hash).toBe('#at=issues');
     expect(section.open).toBe(true);
   });
 });

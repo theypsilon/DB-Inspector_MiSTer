@@ -3,15 +3,14 @@ import { strToU8, zipSync } from 'fflate';
 import ModalFrame from './ModalFrame.jsx';
 import CopyLinkButton from '../ui/CopyLinkButton.jsx';
 import { triggerBrowserDownload } from '../../lib/downloads.js';
+import { buildLinkUrl } from '../../lib/urlState.js';
 
 export default function InstallModal({ dbId, dbUrl, activeFilter, onClose, showInstallLink = true }) {
   const [includeFilter, setIncludeFilter] = useState(false);
   const trimmedFilter = String(activeFilter || '').trim();
   const hasFilter = trimmedFilter.length > 0;
   const iniFileName = `downloader_${dbId}.ini`;
-  const installUrl = typeof window !== 'undefined'
-    ? window.location.origin + window.location.pathname + window.location.search + '#install'
-    : '';
+  const installUrl = buildLinkUrl({ at: 'install' });
 
   const handleDownload = () => {
     let content = `[${dbId}]\ndb_url=${dbUrl}\n`;

@@ -18,16 +18,18 @@ import { expect, test } from '@playwright/test';
 //   (see measureEstimatedRowOffset) instead of relying on a fixed scroll offset.
 //
 // Set REAL_SCROLL_URL to the large-DB app URL to run this journey:
-//   REAL_SCROLL_URL='http://[::1]:4173/?database-url=...' npx playwright test journeys/real-database
+//   REAL_SCROLL_URL='http://[::1]:4173/#db=...' npx playwright test journeys/real-database
 
 const DEFAULT_REAL_SCROLL_URL =
-  'http://localhost:5173/?database-url=https%3A%2F%2Fraw.githubusercontent.com%2FMiSTer-devel%2FDistribution_MiSTer%2Fmain%2Fdb.json.zip';
+  'http://localhost:5173/#db=https://raw.githubusercontent.com/MiSTer-devel/Distribution_MiSTer/main/db.json.zip';
 // How far past riscos.rom's estimated offset tests 2 and 3 jump: riscos.rom and the Astrocade and
 // ATARI folders after it are then rendered around the top of the viewport.
 const BEYOND_RISCOS_MARGIN = 300;
 
-// Opens the filesystem section with details shown and every folder expanded.
+// Opens the filesystem section with details shown and every folder expanded, in a new page: going
+// to the same address with only another # would not load it again.
 async function openDetailedFilesystem(page, url) {
+  await page.goto('about:blank');
   await page.goto(url, {
     waitUntil: 'domcontentloaded',
     timeout: 120_000,
@@ -105,6 +107,7 @@ test('the detailed filesystem of the live Distribution_MiSTer database scrolls w
   const url = process.env.REAL_SCROLL_URL || DEFAULT_REAL_SCROLL_URL;
 
   await test.step('detailed filesystem wheel-up scrolling does not snap back', async () => {
+      await page.goto('about:blank');
       await page.goto(url, {
         waitUntil: 'domcontentloaded',
         timeout: 120_000,

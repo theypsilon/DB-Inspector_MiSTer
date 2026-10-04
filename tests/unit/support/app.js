@@ -287,9 +287,9 @@ function startApp(browser) {
     },
     settle,
     pause,
-    // The address, decoded as the end-to-end tests read it.
-    get search() {
-      return decodeURIComponent(browser.window.location.search);
+    // The page's link, after the #, as written.
+    get hash() {
+      return browser.window.location.hash;
     },
     get url() {
       return browser.window.location.href;
@@ -469,6 +469,11 @@ function startApp(browser) {
       }
       picker = createPicker('choice');
       return picker;
+    },
+    // Types a link to another # of this page in the address bar.
+    async openLink(hash) {
+      browser.window.navigate(hash);
+      await settle();
     },
     async back() {
       browser.window.history.back();

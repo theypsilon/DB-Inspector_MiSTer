@@ -5,7 +5,7 @@ import {
   NO_COMBINED_FILTERS,
   addDatabasesToSession,
   addIncomingDatabaseFilters,
-  buildCombinedUrlState,
+  buildCombinedLink,
   downloaderFilterInputs,
   findLoadedDbIdConflicts,
   listAppliedFilters,
@@ -65,21 +65,41 @@ test('a database joining from a list keeps the filter its list gives it, only wh
   });
 });
 
-test('only databases loaded from a URL go in the address bar', () => {
-  const filters = { shared: { isSet: true, value: 'arcade' }, overrides: { b: '' } };
-  const state = buildCombinedUrlState(
-    [{ inspection: inspection('a') }, { inspection: inspection('b', '', 'upload') }],
+test('only databases loaded from a URL go in the link, with their own filters', () => {
+  const filters = { shared: { isSet: true, value: 'arcade' }, overrides: { b: '', c: 'console' } };
+  const link = buildCombinedLink(
+    [{ inspection: inspection('a') }, { inspection: inspection('b', '', 'upload') }, { inspection: inspection('c') }],
     filters,
   );
 
-  assert.deepEqual(state, {
-    databases: [
-      { dbId: 'a', url: 'https://example.com/a.json' },
-      { dbId: 'b', url: null },
-    ],
-    sharedFilter: filters.shared,
-    overrides: filters.overrides,
+  assert.deepEqual(link, {
+    databases: ['https://example.com/a.json', 'https://example.com/c.json'],
+    filter: filters.shared,
+    overrides: { c: 'console' },
   });
+});
+
+test('when only one of combined databases can be shared, it keeps the filter it gets among them', () => {
+  const linkOf = (database, shared, overrides = {}) =>
+    buildCombinedLink([{ inspection: database }, { inspection: inspection('uploaded', '', 'upload') }], { shared, overrides });
+  const arcade = { isSet: true, value: 'arcade' };
+
+  // Shown alone with the shared filter as FILTER, it gets the same filter: nothing to keep.
+  assert.deepEqual(linkOf(inspection('a'), arcade), { databases: ['https://example.com/a.json'], filter: arcade, overrides: {} });
+  assert.deepEqual(linkOf(inspection('a', '!cheats'), arcade).overrides, {});
+  assert.deepEqual(linkOf(inspection('a', '!cheats'), NO_COMBINED_FILTERS.shared).overrides, {});
+  // Its default inherits [mister], so alone it would lose the shared terms.
+  assert.deepEqual(linkOf(inspection('a', '[mister] !cheats'), arcade).overrides, { a: 'arcade !cheats' });
+  // Its own filter is kept as it is.
+  assert.deepEqual(linkOf(inspection('a'), arcade, { a: '[mister] snes', uploaded: 'x' }).overrides, { a: '[mister] snes' });
+  // Nothing can be shared.
+  assert.deepEqual(
+    buildCombinedLink([{ inspection: inspection('b', '', 'upload') }, { inspection: inspection('c', '', 'upload') }], {
+      shared: arcade,
+      overrides: { b: 'x' },
+    }),
+    { databases: [], filter: arcade, overrides: {} },
+  );
 });
 
 test('a new session keeps one database per db_id, with their section filters as written', () => {

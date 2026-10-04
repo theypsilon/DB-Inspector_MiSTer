@@ -17,7 +17,7 @@ import {
   NO_COMBINED_FILTERS,
   UNSET_FILTER,
   addDatabasesToSession,
-  buildCombinedUrlState,
+  buildCombinedLink,
   downloaderFilterInputs,
   findLoadedDbIdConflicts,
   startSession,
@@ -39,12 +39,13 @@ import {
   scanUploads,
 } from '../lib/uploads.js';
 import {
-  parseCombinedSearch,
-  readDatabaseUrlSearchParam,
-  readFilterSearchParam,
-  writeCombinedSearch,
-  writeDatabaseUrlSearchParam,
-  writeFilterSearchParam,
+  isCombinedLink,
+  linkedDatabaseUrl,
+  readLink,
+  rewriteOldLink,
+  writeLinkDatabase,
+  writeLinkFilter,
+  writeLinkSession,
 } from '../lib/urlState.js';
 import { FILTER_INPUT_DEBOUNCE_MS, settleWithConcurrency } from '../lib/utils.js';
 import {
@@ -86,7 +87,7 @@ function dismissAnswer(prompt) {
 function initialState() {
   return {
     // The URL box of the Fetch card.
-    databaseUrl: readDatabaseUrlSearchParam(),
+    databaseUrl: linkedDatabaseUrl(readLink()),
     loadingMessage: '',
     addingMessage: '',
     errorMessage: '',
@@ -126,6 +127,7 @@ function initialState() {
 // FILTER) comes from `refs`, which follow the renders with the effects and which showing databases
 // updates at once.
 export function createAppModel() {
+  rewriteOldLink();
   let state = initialState();
   let committed = state;
   const INITIAL_CTX = Object.freeze({
@@ -210,10 +212,11 @@ export function createAppModel() {
       // A new source (or a new default filter) resets FILTER.
       deps: (s) => [selectEffectiveDefaultFilter(s), selectInspectionKeyBase(s)],
       run: (s) => {
+        const linkFilter = readLink().filter;
         const filterToApply = updateFilterSync({
           type: 'sourceChanged',
           hasInspection: Boolean(selectInspection(s)),
-          sharedFilter: readFilterSearchParam(),
+          sharedFilter: { isPresent: linkFilter.isSet, value: linkFilter.value },
           effectiveDefaultFilter: selectEffectiveDefaultFilter(s),
         });
         if (filterToApply !== null) {
@@ -254,11 +257,11 @@ export function createAppModel() {
         }
 
         if (inspection.source.sourceKind !== 'url' || s.debouncedFilterInput === selectEffectiveDefaultFilter(s)) {
-          writeFilterSearchParam('', { isPresent: false });
+          writeLinkFilter('', { isPresent: false });
           return;
         }
 
-        writeFilterSearchParam(s.debouncedFilterInput, { isPresent: true });
+        writeLinkFilter(s.debouncedFilterInput, { isPresent: true });
       },
     },
     {
@@ -278,7 +281,7 @@ export function createAppModel() {
       deps: (s) => [selectIsCombined(s), s.databases, s.debouncedCombinedFilters],
       run: (s) => {
         if (selectIsCombined(s)) {
-          writeCombinedSearch(buildCombinedUrlState(s.databases, s.debouncedCombinedFilters));
+          writeLinkSession(buildCombinedLink(s.databases, s.debouncedCombinedFilters));
         }
       },
     },
@@ -509,7 +512,7 @@ export function createAppModel() {
       if (!keepLoaded) {
         // Uploads cannot be shared, so the address no longer names a database.
         setState({ databaseUrl: '' });
-        writeDatabaseUrlSearchParam('', { pushHistory: true });
+        writeLinkDatabase('', { pushHistory: true });
       }
     } catch (error) {
       setState({ errorMessage: error.message });
@@ -596,27 +599,29 @@ export function createAppModel() {
       debouncedCombinedFilters: NO_COMBINED_FILTERS,
       databaseUrl: sharedUrl,
     });
-    writeDatabaseUrlSearchParam(sharedUrl, { pushHistory: true, preserveFilter });
+    writeLinkDatabase(sharedUrl, { pushHistory: true, preserveFilter });
   }
 
-  // Shows several databases together, with their filters, and puts them in the address bar.
+  // Shows several databases together, with their filters, and puts them in the link.
   function showCombinedSession({ databases, filters }, { pushHistory = false } = {}) {
     refs.databases = databases;
     refs.combinedFilters = filters;
     setState({ databases, combinedFilters: filters, debouncedCombinedFilters: filters });
-    writeCombinedSearch(buildCombinedUrlState(databases, filters), { pushHistory });
+    writeLinkSession(buildCombinedLink(databases, filters), { pushHistory });
   }
 
-  // Opens a combined session from the address bar (a shared link, or back/forward navigation).
-  async function loadCombinedSession(ctx, { databases: requested, sharedFilter, overrides }) {
-    setState({ loadingMessage: `Fetching ${requested.length} databases...`, errorMessage: '' });
+  // Opens combined databases from the page's link (a shared link, or back/forward navigation). Own
+  // filters go to the loaded databases with their db_id.
+  async function loadCombinedSession(ctx, { databases: requested, filter: sharedFilter, overrides }) {
+    const count = requested.length === 1 ? '1 database' : `${requested.length} databases`;
+    setState({ loadingMessage: `Fetching ${count}...`, errorMessage: '' });
     clearLoadedSource();
 
-    const results = await Promise.allSettled(requested.map(({ url }) => loadDatabaseSourceUrl(url)));
+    const results = await Promise.allSettled(requested.map((url) => loadDatabaseSourceUrl(url)));
     const loaded = [];
     const errors = [];
     results.forEach((result, index) => {
-      const { key, url } = requested[index];
+      const url = requested[index];
       if (result.status === 'rejected') {
         errors.push(result.reason?.message || `Could not load ${url}.`);
       } else if (result.value.kind !== 'database') {
@@ -626,7 +631,7 @@ export function createAppModel() {
           `A database with db_id ${result.value.inspection.overview.dbId} is already loaded, so ${url} was not combined.`,
         );
       } else {
-        loaded.push({ key, loadedSource: result.value, inspection: result.value.inspection });
+        loaded.push({ loadedSource: result.value, inspection: result.value.inspection });
       }
     });
 
@@ -643,8 +648,9 @@ export function createAppModel() {
       shared: sharedFilter,
       overrides: Object.fromEntries(
         loaded
-          .filter(({ key }) => Object.hasOwn(overrides, key))
-          .map(({ key, inspection }) => [inspection.overview.dbId, overrides[key]]),
+          .map(({ inspection }) => inspection.overview.dbId)
+          .filter((dbId) => Object.hasOwn(overrides, dbId))
+          .map((dbId) => [dbId, overrides[dbId]]),
       ),
     };
     const next = loaded.map(({ inspection }) => ({ inspection, filterDefaults: NO_FILTER_DEFAULTS }));
@@ -656,7 +662,7 @@ export function createAppModel() {
         filter: resolveDownloaderFilter(downloaderFilterInputs(filters, inspection)),
       });
       setState({ databases: next, databaseUrl: inspection.source.sourceLabel });
-      writeDatabaseUrlSearchParam(inspection.source.sourceLabel, { preserveFilter: false });
+      writeLinkDatabase(inspection.source.sourceLabel, { preserveFilter: false });
       return;
     }
 
@@ -787,7 +793,7 @@ export function createAppModel() {
   /**
    * @param {any} ctx
    * @param {any} loadedSource
-   * @param {{ origin?: string, requestedUrl?: string, syncSearchParam?: boolean, visitedUrls?: Set<string>, registerInCatalog?: boolean, filterDefaults?: import('../lib/filterDefaults.js').FilterDefaults, preserveCurrentFilter?: boolean, mode?: string }} [options]
+   * @param {{ origin?: string, requestedUrl?: string, syncLink?: boolean, visitedUrls?: Set<string>, registerInCatalog?: boolean, filterDefaults?: import('../lib/filterDefaults.js').FilterDefaults, preserveCurrentFilter?: boolean, mode?: string }} [options]
    */
   async function handleLoadedSource(
     ctx,
@@ -795,7 +801,7 @@ export function createAppModel() {
     {
       origin,
       requestedUrl = '',
-      syncSearchParam = true,
+      syncLink = true,
       visitedUrls = new Set(),
       registerInCatalog = true,
       filterDefaults = NO_FILTER_DEFAULTS,
@@ -821,12 +827,12 @@ export function createAppModel() {
 
       if (origin === 'upload') {
         setState({ databaseUrl: '' });
-        writeDatabaseUrlSearchParam('', { pushHistory: true, preserveFilter: preserveCurrentFilter });
+        writeLinkDatabase('', { pushHistory: true, preserveFilter: preserveCurrentFilter });
       } else {
         const sharedUrl = loadedSource.inspection.source.sourceLabel;
         setState({ databaseUrl: sharedUrl });
-        if (syncSearchParam) {
-          writeDatabaseUrlSearchParam(sharedUrl, { pushHistory: true, preserveFilter: preserveCurrentFilter });
+        if (syncLink) {
+          writeLinkDatabase(sharedUrl, { pushHistory: true, preserveFilter: preserveCurrentFilter });
         }
       }
 
@@ -852,7 +858,7 @@ export function createAppModel() {
       const shouldPreserveCurrentFilter = preserveCurrentFilter && !entry.defaultFilterExplicit;
       const loadEntry = (preserveEntryFilter) =>
         loadRemoteSource(ctx, entry.dbUrl, {
-          syncSearchParam: origin === 'url' ? syncSearchParam : true,
+          syncLink: origin === 'url' ? syncLink : true,
           visitedUrls,
           registerInCatalog: false,
           filterDefaults: buildListEntryFilterDefaults(entry, listMisterFilter(loadedSource)),
@@ -892,13 +898,13 @@ export function createAppModel() {
 
     if (origin === 'upload') {
       setState({ databaseUrl: '' });
-      writeDatabaseUrlSearchParam('', { pushHistory: true, preserveFilter: preserveCurrentFilter });
+      writeLinkDatabase('', { pushHistory: true, preserveFilter: preserveCurrentFilter });
       return;
     }
 
     setState({ databaseUrl: requestedUrl });
-    if (syncSearchParam) {
-      writeDatabaseUrlSearchParam(requestedUrl, { pushHistory: true, preserveFilter: preserveCurrentFilter });
+    if (syncLink) {
+      writeLinkDatabase(requestedUrl, { pushHistory: true, preserveFilter: preserveCurrentFilter });
     }
   }
 
@@ -994,7 +1000,7 @@ export function createAppModel() {
     ctx,
     input,
     {
-      syncSearchParam = true,
+      syncLink = true,
       visitedUrls = new Set(),
       skipPrepare = false,
       registerInCatalog = true,
@@ -1034,7 +1040,7 @@ export function createAppModel() {
       await handleLoadedSource(ctx, loadedSource, {
         origin: 'url',
         requestedUrl,
-        syncSearchParam,
+        syncLink,
         visitedUrls: addVisitedUrls(visitedUrls, requestedUrl, loadedSource),
         registerInCatalog,
         filterDefaults,
@@ -1174,25 +1180,24 @@ export function createAppModel() {
     });
   }
 
-  // Back/forward navigation: opens what the address names, as when the page was first opened.
+  // Back/forward navigation: opens what the link names, as when the page was first opened.
   function handlePopState() {
-    const combinedSession = parseCombinedSearch(window.location.search);
-    if (combinedSession) {
-      void loadCombinedSession(INITIAL_CTX, combinedSession);
+    const link = readLink();
+    if (isCombinedLink(link)) {
+      void loadCombinedSession(INITIAL_CTX, link);
       return;
     }
 
-    const sharedDatabaseUrl = readDatabaseUrlSearchParam();
-    const sharedFilter = readFilterSearchParam();
+    const sharedDatabaseUrl = linkedDatabaseUrl(link);
     setState({
       databaseUrl: sharedDatabaseUrl,
-      filterInput: sharedFilter.isPresent ? sharedFilter.value : '',
-      debouncedFilterInput: sharedFilter.isPresent ? sharedFilter.value : '',
-      errorMessage: '',
+      filterInput: link.filter.value,
+      debouncedFilterInput: link.filter.value,
+      errorMessage: link.error,
     });
 
     if (sharedDatabaseUrl) {
-      void loadRemoteSource(INITIAL_CTX, sharedDatabaseUrl, { syncSearchParam: false });
+      void loadRemoteSource(INITIAL_CTX, sharedDatabaseUrl, { syncLink: false });
       return;
     }
 
@@ -1211,15 +1216,19 @@ export function createAppModel() {
 
   // Opens what a shared link names, once.
   function loadSharedDatabase() {
-    const combinedSession = parseCombinedSearch(window.location.search);
-    if (combinedSession) {
-      void loadCombinedSession(INITIAL_CTX, combinedSession);
+    const link = readLink();
+    if (link.error) {
+      setState({ errorMessage: link.error });
+    }
+
+    if (isCombinedLink(link)) {
+      void loadCombinedSession(INITIAL_CTX, link);
       return;
     }
 
-    const sharedDatabaseUrl = readDatabaseUrlSearchParam();
+    const sharedDatabaseUrl = linkedDatabaseUrl(link);
     if (sharedDatabaseUrl) {
-      void loadRemoteSource(INITIAL_CTX, sharedDatabaseUrl, { syncSearchParam: false });
+      void loadRemoteSource(INITIAL_CTX, sharedDatabaseUrl, { syncLink: false });
     }
   }
 

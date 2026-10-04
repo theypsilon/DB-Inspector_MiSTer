@@ -119,11 +119,8 @@ test('the catalog starts with nothing selected and selects the Update All defaul
     'Coin-OpCollection/Distribution-MiSTerFPGA',
   ]);
   await expect
-    .poll(() => decodeURIComponent(new URL(page.url()).search))
-    .toBe(
-      `?database-url[update_all_mister]=${UPDATE_ALL_URL}&database-url[distribution_mister]=${PINNED_URL}` +
-        `&database-url[jtcores]=${JTCORES_URL}&database-url[Coin-OpCollection/Distribution-MiSTerFPGA]=${COIN_OP_URL}`,
-    );
+    .poll(() => new URL(page.url()).hash)
+    .toBe(`#db=${UPDATE_ALL_URL}&db=${PINNED_URL}&db=${JTCORES_URL}&db=${COIN_OP_URL}`);
 });
 
 test('choosing a database whose db_id is selected asks whether to replace it', async ({ page }) => {
@@ -228,7 +225,7 @@ test('opening a selection asks first only when it would close a loaded database'
   await prompt.getByRole('button', { name: 'Load alone' }).click();
   await expect(page.getByRole('heading', { name: 'jtcores', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: /combined databases/ })).toHaveCount(0);
-  await expect.poll(() => decodeURIComponent(new URL(page.url()).search)).toBe(`?database-url=${JTCORES_URL}`);
+  await expect.poll(() => new URL(page.url()).hash).toBe(`#db=${JTCORES_URL}`);
 });
 
 test('databases opened together from the catalog share the current FILTER', async ({ page }) => {
@@ -248,8 +245,8 @@ test('databases opened together from the catalog share the current FILTER', asyn
   await expect(page.getByLabel('FILTER', { exact: true })).toHaveValue('console');
   await expect(appliedFilters(page)).toHaveText(['update_all_misterconsoleshared filter', 'jtcoresconsoleshared filter']);
   await expect
-    .poll(() => decodeURIComponent(new URL(page.url()).search))
-    .toBe(`?database-url[update_all_mister]=${UPDATE_ALL_URL}&database-url[jtcores]=${JTCORES_URL}&filter=console`);
+    .poll(() => new URL(page.url()).hash)
+    .toBe(`#db=${UPDATE_ALL_URL}&db=${JTCORES_URL}&filter=console`);
 });
 
 test('a database list opens with all its databases selected and its [mister] filter applied', async ({ page }) => {
@@ -274,11 +271,8 @@ test('a database list opens with all its databases selected and its [mister] fil
   await expect(page.getByLabel('FILTER', { exact: true })).toHaveValue('arcade');
   await expect(page.getByLabel('FILTER for jtcores')).toHaveValue('[mister] console');
   await expect
-    .poll(() => decodeURIComponent(new URL(page.url()).search))
-    .toBe(
-      `?database-url[jtcores]=${JTCORES_URL}&database-url[arcade_roms_db]=${ARCADE_URL}` +
-        '&filter=arcade&filter[jtcores]=[mister] console',
-    );
+    .poll(() => new URL(page.url()).hash)
+    .toBe(`#db=${JTCORES_URL}&db=${ARCADE_URL}&filter=arcade&filter.jtcores=[mister]+console`);
 });
 
 test('a database list can be opened without its [mister] filter', async ({ page }) => {
@@ -292,8 +286,8 @@ test('a database list can be opened without its [mister] filter', async ({ page 
   await expect(page.getByRole('heading', { name: '2 combined databases' })).toBeVisible();
   await expect(appliedFilters(page)).toHaveText(['jtcoresconsoleits own filter', 'arcade_roms_dbEverythingno filter']);
   await expect
-    .poll(() => decodeURIComponent(new URL(page.url()).search))
-    .toBe(`?database-url[jtcores]=${JTCORES_URL}&database-url[arcade_roms_db]=${ARCADE_URL}&filter[jtcores]=[mister] console`);
+    .poll(() => new URL(page.url()).hash)
+    .toBe(`#db=${JTCORES_URL}&db=${ARCADE_URL}&filter.jtcores=[mister]+console`);
 });
 
 test('a database list read while databases are loaded asks to combine only once its databases are chosen', async ({
@@ -340,7 +334,8 @@ test('uploaded databases open again from the catalog, alone or combined', async 
   await prompt.getByRole('button', { name: 'Load alone' }).click();
   await expect(page.getByRole('heading', { name: 'mine_db', exact: true })).toBeVisible();
   await expect(page.locator('.status.error')).toHaveCount(0);
-  expect(new URL(page.url()).searchParams.has('database-url')).toBe(false);
+  // Uploaded databases cannot be shared, so the link is empty.
+  expect(new URL(page.url()).hash).toBe('');
 
   catalog = await openCatalog(page, 9);
   await expect(catalog.locator('.catalog-option').filter({ hasText: 'Uploaded: mine.json' })).toContainText('Loaded');

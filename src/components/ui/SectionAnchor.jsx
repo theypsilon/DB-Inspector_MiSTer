@@ -11,7 +11,6 @@ function SectionAnchor({ anchor }) {
         activateSectionAnchor({
           anchor,
           section: event.currentTarget.closest('.panel, .overview-panel'),
-          history: window.history,
         });
       }}
     >

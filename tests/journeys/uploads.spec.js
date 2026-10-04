@@ -54,8 +54,8 @@ test('uploads offer the databases they hold, and open them alone or combined', a
     await picker.getByRole('button', { name: 'Open 3 selected databases' }).click();
     await expect(page.getByRole('heading', { name: '3 combined databases' })).toBeVisible();
     await expect(appliedFilters(page)).toHaveText(['alphaarcadeshared filter', 'betaarcadeshared filter', 'gammaarcadeshared filter']);
-    // Uploaded databases cannot be shared, so only the list's remote database is in the address.
-    await expect.poll(() => decodeURIComponent(new URL(page.url()).search)).toBe(`?database-url[gamma]=${GAMMA_URL}&filter=arcade`);
+    // Uploaded databases cannot be shared, so only the list's remote database is in the link.
+    await expect.poll(() => new URL(page.url()).hash).toBe(`#db=${GAMMA_URL}&filter=arcade`);
   });
 
   await test.step('files with the content of loaded databases are marked as loaded', async () => {
@@ -117,7 +117,8 @@ test('uploads offer the databases they hold, and open them alone or combined', a
     await loadMode.getByRole('button', { name: 'Load alone' }).click();
     await expect(page.getByRole('heading', { name: 'beta', exact: true })).toBeVisible();
     await expect(page.locator('.status.error')).toHaveCount(0);
-    expect(new URL(page.url()).searchParams.has('database-url')).toBe(false);
+    // Uploaded databases cannot be shared, so the link is empty.
+    expect(new URL(page.url()).hash).toBe('');
 
     catalog = await openCatalog(page);
     await expect(catalog.locator('.catalog-option').filter({ hasText: 'Uploaded: beta.json' })).toContainText('Loaded');

@@ -60,7 +60,7 @@ afterEach(() => {
 describe('the page and the app model', () => {
   test('a shared link opens its database with its default FILTER, and FILTER follows into the address', async () => {
     const url = 'https://example.com/rich.json';
-    const user = openPage(`/?database-url=${encodeURIComponent(url)}`, { [url]: { body: database('rich_db', { default_options: { filter: 'arcade' } }) } });
+    const user = openPage(`/#db=${url}`, { [url]: { body: database('rich_db', { default_options: { filter: 'arcade' } }) } });
 
     expect(await screen.findByRole('heading', { name: 'rich_db' })).toBeTruthy();
     const filter = screen.getByLabelText('FILTER');
@@ -68,7 +68,7 @@ describe('the page and the app model', () => {
 
     await user.clear(filter);
     await user.type(filter, 'essential');
-    await waitFor(() => expect(window.location.search).toContain('filter=essential'), { timeout: 3000 });
+    await waitFor(() => expect(window.location.hash).toBe(`#db=${url}&filter=essential`), { timeout: 3000 });
   });
 
   test('an anchor to a row outside the rendered ones scrolls the page to it', async () => {
@@ -78,7 +78,7 @@ describe('the page and the app model', () => {
     }
     const url = 'https://example.com/large.json';
     const scrolls = vi.spyOn(window, 'scrollTo');
-    openPage(`/?database-url=${encodeURIComponent(url)}#files:${encodeURIComponent('games/folder_14/file_00599.rbf')}`, {
+    openPage(`/#db=${url}&at=files:games/folder_14/file_00599.rbf`, {
       [url]: { body: { db_id: 'large_db', v: 1, timestamp: 1, base_files_url: 'https://example.com/', files, folders: {} } },
     });
 
@@ -89,7 +89,7 @@ describe('the page and the app model', () => {
   test('opening another database asks first, and Combine combines them', async () => {
     const alpha = 'https://example.com/alpha.json';
     const beta = 'https://example.com/beta.json';
-    const user = openPage(`/?database-url=${encodeURIComponent(alpha)}`, { [alpha]: { body: database('alpha') }, [beta]: { body: database('beta') } });
+    const user = openPage(`/#db=${alpha}`, { [alpha]: { body: database('alpha') }, [beta]: { body: database('beta') } });
     expect(await screen.findByRole('heading', { name: 'alpha' })).toBeTruthy();
 
     const urlBox = screen.getByLabelText('URL');
@@ -100,7 +100,7 @@ describe('the page and the app model', () => {
     await user.click(within(question).getByRole('button', { name: 'Combine' }));
 
     expect(await screen.findByRole('heading', { name: '2 combined databases' })).toBeTruthy();
-    await waitFor(() => expect(decodeURIComponent(window.location.search)).toBe(`?database-url[alpha]=${alpha}&database-url[beta]=${beta}`));
+    await waitFor(() => expect(window.location.hash).toBe(`#db=${alpha}&db=${beta}`));
   });
 
   test('Escape on a db_id question in the catalog closes only the question', async () => {
@@ -132,7 +132,7 @@ describe('the page and the app model', () => {
 
   test('the essential hint opens the find bar on it', async () => {
     const url = 'https://example.com/essential.json';
-    const user = openPage(`/?database-url=${encodeURIComponent(url)}`, { [url]: { body: database('essential_db') } });
+    const user = openPage(`/#db=${url}`, { [url]: { body: database('essential_db') } });
     expect(await screen.findByRole('heading', { name: 'essential_db' })).toBeTruthy();
 
     await user.click(screen.getByRole('button', { name: 'essential' }));
@@ -146,7 +146,7 @@ describe('the page and the app model', () => {
   test('fetching the loaded database again asks only whether to reload it, and reloading shows its new version', async () => {
     const url = 'https://example.com/reload.json';
     const routes = { [url]: { body: database('reload_db') } };
-    const user = openPage(`/?database-url=${encodeURIComponent(url)}`, routes);
+    const user = openPage(`/#db=${url}`, routes);
     expect(await screen.findByRole('heading', { name: 'reload_db' })).toBeTruthy();
     routes[url] = { body: database('reload_db', { files: { 'cores/new.rbf': { size: 1, hash: 'n1', tags: [1] } } }) };
 
@@ -162,7 +162,7 @@ describe('the page and the app model', () => {
 
   test('a GitHub release download says why the page cannot open it, with a link to download it', async () => {
     const url = 'https://github.com/giancarloerra/Degauss/releases/latest/download/degauss.json.zip';
-    openPage(`/?database-url=${encodeURIComponent(url)}`, {});
+    openPage(`/#db=${url}`, {});
 
     const link = await screen.findByRole('link', { name: 'Download degauss.json.zip' });
     expect(link.getAttribute('href')).toBe(url);
@@ -172,7 +172,7 @@ describe('the page and the app model', () => {
   test('the FILTER help follows what the loaded database holds', async () => {
     const essential = 'https://example.com/essential-help.json';
     const untagged = 'https://example.com/untagged-help.json';
-    const user = openPage(`/?database-url=${encodeURIComponent(essential)}`, {
+    const user = openPage(`/#db=${essential}`, {
       [essential]: { body: database('essential_help') },
       [untagged]: { body: database('untagged_help', { tag_dictionary: {} }) },
     });
@@ -205,7 +205,7 @@ describe('the page and the app model', () => {
         summary_inline: { files: { 'games/page/untagged.bin': { arc_id: 'page_archive', arc_at: 'untagged.bin', size: 100 } }, folders: {} },
       },
     };
-    const user = openPage(`/?database-url=${encodeURIComponent(url)}`, { [url]: { body: database('archives_db', { archives }) } });
+    const user = openPage(`/#db=${url}`, { [url]: { body: database('archives_db', { archives }) } });
     expect(await screen.findByRole('heading', { name: 'archives_db' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Archives' })).toBeTruthy();
     expect(document.querySelector('#section-archives')).not.toBeNull();
@@ -218,9 +218,9 @@ describe('the page and the app model', () => {
     expect(screen.getByRole('heading', { name: 'archives_db' })).toBeTruthy();
   });
 
-  test('the detailed param shows every row’s details from the start', async () => {
+  test('detailed in the link shows every row’s details from the start', async () => {
     const url = 'https://example.com/detailed-at-load.json';
-    openPage(`/?detailed&database-url=${encodeURIComponent(url)}`, { [url]: { body: database('detailed_at_load') } });
+    openPage(`/#db=${url}&detailed`, { [url]: { body: database('detailed_at_load') } });
     expect(await screen.findByRole('heading', { name: 'detailed_at_load' })).toBeTruthy();
 
     expect(screen.getByRole('button', { name: 'Detailed toggle' }).getAttribute('aria-pressed')).toBe('true');
@@ -229,14 +229,68 @@ describe('the page and the app model', () => {
 
   test('the detailed toggle shows every row’s details and keeps the choice in the address', async () => {
     const url = 'https://example.com/detailed.json';
-    const user = openPage(`/?database-url=${encodeURIComponent(url)}`, { [url]: { body: database('detailed_db') } });
+    const user = openPage(`/#db=${url}`, { [url]: { body: database('detailed_db') } });
     expect(await screen.findByRole('heading', { name: 'detailed_db' })).toBeTruthy();
-    const detailedParam = () => new URLSearchParams(window.location.search).has('detailed');
-    expect(detailedParam()).toBe(false);
+    expect(window.location.hash).toBe(`#db=${url}`);
 
     await user.click(screen.getByRole('button', { name: 'Detailed toggle' }));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Detailed toggle' }).getAttribute('aria-pressed')).toBe('true'));
-    expect(detailedParam()).toBe(true);
+    expect(window.location.hash).toBe(`#db=${url}&detailed`);
     await waitFor(() => expect(text(document.querySelector('#section-files'))).toContain('MD5 HASH'));
+  });
+
+  test('an anchor to an archive of combined databases opens at its row', async () => {
+    const alpha = 'https://example.com/anchor-alpha.json';
+    const beta = 'https://example.com/anchor-beta.json';
+    const archives = {
+      cheats: {
+        description: 'Cheats',
+        format: 'zip',
+        extract: 'selective',
+        target_folder: 'games/cheats/',
+        archive_file: { url: 'https://example.com/cheats.zip', size: 4096, hash: 'ah' },
+        summary_inline: { files: { 'games/cheats/a.bin': { arc_id: 'cheats', arc_at: 'a.bin', size: 1 } }, folders: {} },
+      },
+    };
+    // Rows are below the window, so the page scrolls to the anchored one.
+    const scrolledTo = [];
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ top: 5000, bottom: 5040, left: 0, right: 0, width: 0, height: 40, x: 0, y: 5000 });
+    vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(function scrollIntoView() {
+      scrolledTo.push(this.id);
+    });
+    openPage(`/#db=${alpha}&db=${beta}&at=archives:alpha:cheats`, {
+      [alpha]: { body: database('alpha', { archives }) },
+      [beta]: { body: database('beta') },
+    });
+
+    expect(await screen.findByRole('heading', { name: '2 combined databases' })).toBeTruthy();
+    await waitFor(() => expect(scrolledTo).toContain('row-archive[alpha]:cheats'));
+  });
+
+  test('an old link opens its database, and the address becomes its link', async () => {
+    const url = 'https://example.com/old-link.json';
+    openPage(`/?database-url=${encodeURIComponent(url)}&filter=arcade`, { [url]: { body: database('old_link_db') } });
+    expect(await screen.findByRole('heading', { name: 'old_link_db' })).toBeTruthy();
+
+    expect(window.location.search).toBe('');
+    expect(window.location.hash).toBe(`#db=${url}`);
+    expect(screen.getByLabelText('FILTER').value).toBe('');
+  });
+
+  test('the install dialog has its own link, which opens it, and closing the dialog takes it out of the link', async () => {
+    const url = 'https://example.com/install.json';
+    const user = openPage(`/#db=${url}&filter=arcade&at=install`, { [url]: { body: database('install_db') } });
+    const dialog = await screen.findByRole('dialog', { name: 'Install \u201Cinstall_db\u201D on MiSTer' });
+
+    await user.click(within(dialog).getByRole('button', { name: 'Copy install link to clipboard' }));
+    expect(await navigator.clipboard.readText()).toBe(`${window.location.origin}/#db=${url}&filter=arcade&at=install`);
+
+    await user.click(document.querySelector('.modal-overlay'));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(window.location.hash).toBe(`#db=${url}&filter=arcade`);
+
+    await user.click(screen.getByRole('button', { name: 'Install' }));
+    expect(await screen.findByRole('dialog', { name: 'Install \u201Cinstall_db\u201D on MiSTer' })).toBeTruthy();
+    expect(window.location.hash).toBe(`#db=${url}&filter=arcade&at=install`);
   });
 });

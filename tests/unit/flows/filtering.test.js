@@ -39,7 +39,7 @@ test('FILTER applies downloader-style terms across files and archive summaries, 
 
 test('FILTER syncs with the URL for shared remote databases', async () => {
   const remoteUrl = 'https://example.com/filter-shared.json';
-  app = await openApp(`/?database-url=${encodeURIComponent(remoteUrl)}&filter=${encodeURIComponent('a !b')}`, {
+  app = await openApp(`/#db=${remoteUrl}&filter=a+!b`, {
     routes: { [remoteUrl]: { body: buildFilterDatabase() } },
   });
 
@@ -49,30 +49,30 @@ test('FILTER syncs with the URL for shared remote databases', async () => {
 
   await app.typeFilter('b');
   assert.equal(app.view.summary, 'Showing 5 files, 5 folders, and 1 archives for this filter.');
-  assert.ok(app.url.includes(`filter=${encodeURIComponent('b')}`), app.url);
+  assert.equal(app.hash, `#db=${remoteUrl}&filter=b`);
 });
 
 test('missing FILTER param uses the database default, clear returns to that default, and explicit empty FILTER still overrides it', async () => {
   const remoteUrl = 'https://example.com/filter-default.json';
-  app = await openApp(`/?database-url=${encodeURIComponent(remoteUrl)}`, {
+  app = await openApp(`/#db=${remoteUrl}`, {
     routes: { [remoteUrl]: { body: buildFilterDatabase({ defaultFilter: 'a' }) } },
   });
 
   assert.equal(app.view.heading, 'filter_smoke');
   assert.equal(app.filter, 'a');
   await app.pause();
-  assert.doesNotMatch(app.url, /filter=/);
+  assert.equal(app.hash, `#db=${remoteUrl}`);
 
   await app.typeFilter('b', { pause: false });
   assert.equal(app.canResetFilter, true);
   await app.clearFilter();
   assert.equal(app.filter, 'a');
-  assert.doesNotMatch(app.url, /filter=/);
+  assert.equal(app.hash, `#db=${remoteUrl}`);
 
   await app.typeFilter('');
   assert.equal(app.filter, '');
   assert.equal(app.view.summary, 'Showing the full database: 7 files, 7 folders, 1 archives.');
-  assert.match(app.url, /filter=/);
+  assert.equal(app.hash, `#db=${remoteUrl}&filter=`);
 });
 
 test('manual FILTER survives uploads and direct URL fetches of other databases', async () => {
@@ -100,7 +100,7 @@ test('manual FILTER survives uploads and direct URL fetches of other databases',
   assert.equal(app.view.heading, 'remote_filter_smoke');
   assert.equal(app.filter, 'manual !keep');
   await app.pause();
-  assert.ok(app.url.includes(`filter=${encodeURIComponent('manual !keep')}`), app.url);
+  assert.equal(app.hash, `#db=${remoteUrl}&filter=manual+!keep`);
 });
 
 test('single-entry INI lists apply their resolved section filter to FILTER', async () => {

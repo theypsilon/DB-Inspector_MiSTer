@@ -96,9 +96,9 @@ test('large trees render near the viewport, keep their spacing, and reach far ro
   });
 
   await test.step('a URL anchor opens a far row', async () => {
-    // A fresh page: going to the same address with only another hash would not reload it.
+    // A fresh page: going to the same address with only another # would not load it again.
     await page.goto('about:blank');
-    await page.goto(`/#files:${encodeURIComponent(FAR_FILE_PATH)}`);
+    await page.goto(`/#at=files:${FAR_FILE_PATH}`);
     await upload(page, 'large.json', buildLargeDatabase());
     await expect(page.getByRole('heading', { name: 'large_db' })).toBeVisible();
     await expect(page.locator(`[id="row-database:file:${FAR_FILE_PATH}"]`)).toBeInViewport();

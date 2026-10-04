@@ -66,7 +66,7 @@ test('FILTER syncs with the URL for shared remote databases', async ({ page }) =
     });
   });
 
-  await page.goto(`/?database-url=${encodeURIComponent(remoteUrl)}&filter=${encodeURIComponent('a !b')}`);
+  await page.goto(`/#db=${remoteUrl}&filter=a+!b`);
 
   await expect(page.getByRole('heading', { name: 'filter_smoke' })).toBeVisible();
   await expect(page.getByLabel('FILTER')).toHaveValue('a !b');
@@ -74,7 +74,7 @@ test('FILTER syncs with the URL for shared remote databases', async ({ page }) =
 
   await page.getByLabel('FILTER').fill('b');
   await expect(page.getByText('Showing 5 files, 5 folders, and 1 archives for this filter.')).toBeVisible();
-  await expect.poll(() => page.url()).toContain(`filter=${encodeURIComponent('b')}`);
+  await expect.poll(() => new URL(page.url()).hash).toBe(`#db=${remoteUrl}&filter=b`);
 });
 
 test('missing FILTER param uses the database default, clear returns to that default, and explicit empty FILTER still overrides it', async ({
@@ -90,7 +90,7 @@ test('missing FILTER param uses the database default, clear returns to that defa
     });
   });
 
-  await page.goto(`/?database-url=${encodeURIComponent(remoteUrl)}`);
+  await page.goto(`/#db=${remoteUrl}`);
 
   await expect(page.getByRole('heading', { name: 'filter_smoke' })).toBeVisible();
   await expect(page.getByLabel('FILTER')).toHaveValue('a');
@@ -149,7 +149,7 @@ test('manual FILTER survives uploads and direct URL fetches of other databases',
 
   await expect(page.getByRole('heading', { name: 'remote_filter_smoke' })).toBeVisible();
   await expect(filterInput).toHaveValue('manual !keep');
-  await expect.poll(() => page.url()).toContain(`filter=${encodeURIComponent('manual !keep')}`);
+  await expect.poll(() => new URL(page.url()).hash).toBe(`#db=${remoteUrl}&filter=manual+!keep`);
 });
 
 test('single-entry INI lists apply their resolved section filter to FILTER', async ({ page }) => {

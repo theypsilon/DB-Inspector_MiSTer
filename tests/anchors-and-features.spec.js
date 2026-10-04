@@ -57,15 +57,14 @@ test.describe('node anchors', () => {
 
     await fileRow.hover();
     await fileRow.locator('.copy-link-button').click();
-    await expect.poll(() => page.url()).toContain('#files:');
-    expect(page.url()).toContain('core_a.rbf');
+    await expect.poll(() => new URL(page.url()).hash).toBe('#at=files:core_a.rbf');
 
     const archiveRow = page.locator('.tree-entry.archive-card', {
       has: page.getByRole('heading', { name: 'test_archive' }),
     }).first();
     await archiveRow.hover();
     await archiveRow.locator('.copy-link-button').click();
-    await expect.poll(() => page.url()).toContain('#archives:test_archive');
+    await expect.poll(() => new URL(page.url()).hash).toBe('#at=archives:test_archive');
   });
 });
 
@@ -85,7 +84,7 @@ test.describe('section anchors', () => {
     const filterHeading = page.locator('h2', { hasText: 'Enter terms to filter by' });
     await filterHeading.hover();
     await filterHeading.locator('.section-anchor-button').click();
-    await expect.poll(() => page.url()).toContain('#filter');
+    await expect.poll(() => new URL(page.url()).hash).toBe('#at=filter');
 
     const issuesSection = page.locator('#section-issues');
     await issuesSection.locator('summary').click();
@@ -98,8 +97,8 @@ test.describe('section anchors', () => {
   });
 });
 
-test.describe('detailed URL param', () => {
-  test('the detailed toggle adds and removes the search param, and the param turns details on at load', async ({
+test.describe('detailed in the link', () => {
+  test('the detailed toggle adds and removes detailed in the link, which turns details on at load', async ({
     page,
   }) => {
     await page.goto('/');
@@ -118,7 +117,9 @@ test.describe('detailed URL param', () => {
     await expect(toggle).toHaveAttribute('aria-pressed', 'false');
     await expect.poll(() => page.url()).not.toContain('detailed');
 
-    await page.goto('/?detailed');
+    // A new page: going to another # of the same page would not load it again.
+    await page.goto('about:blank');
+    await page.goto('/#detailed');
     await uploadDatabase(page);
     await expect(page.getByRole('heading', { name: 'anchor_test' })).toBeVisible();
 

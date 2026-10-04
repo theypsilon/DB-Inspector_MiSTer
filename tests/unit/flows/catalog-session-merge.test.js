@@ -143,7 +143,7 @@ test('catalog selections keep the active filter until the user clears it', async
   assert.equal(app.view.heading, 'distribution_mister');
   assert.equal(app.filter, 'manual !keep');
   await app.pause();
-  assert.ok(app.url.includes(`filter=${encodeURIComponent('manual !keep')}`), app.url);
+  assert.equal(app.hash, `#db=${PRIMARY_DATABASE_URL}&filter=manual+!keep`);
 });
 
 test('a catalog database can be combined with the loaded one', async () => {

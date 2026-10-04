@@ -1,5 +1,5 @@
 import { startTransition, useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { parseNodeAnchor, writeDetailedSearchParam, readDetailedSearchParam } from './lib/urlState.js';
+import { parseNodeAnchor, readLink, writeLinkAnchor, writeLinkDetailed } from './lib/urlState.js';
 import { DEFAULT_CLUSTER_SIZE_BYTES, buildCombinedFilterSummaryCopy, collectTextMatchRanges, runAfterNextPaint } from './lib/utils.js';
 import { createAppModel } from './model/appModel.js';
 import {
@@ -93,7 +93,7 @@ export default function App() {
   const catalogReady = catalogOptions.length > 0;
   const catalogDisplayStatus = selectCatalogStatus(state);
   const [clusterSizeBytes, setClusterSizeBytes] = useState(DEFAULT_CLUSTER_SIZE_BYTES);
-  const [databaseDetailed, setDatabaseDetailed] = useState(readDetailedSearchParam);
+  const [databaseDetailed, setDatabaseDetailed] = useState(() => readLink().detailed);
   const [installModalOpen, setInstallModalOpen] = useState(false);
   const [downloadError, setDownloadError] = useState(null);
   const [installDbId, setInstallDbId] = useState(null);
@@ -103,7 +103,7 @@ export default function App() {
     startTransition(() => {
       setDatabaseDetailed(next);
     });
-    writeDetailedSearchParam(next);
+    writeLinkDetailed(next);
   }, []);
   const handleDownloadError = useCallback((error) => {
     setDownloadError(error);
@@ -193,45 +193,40 @@ export default function App() {
     };
   }, []);
 
-  const openLocationHash = useEffectEvent(() => {
+  // Goes where the link's anchor points: a row, a section, or the install dialog.
+  const openLinkAnchor = useEffectEvent(() => {
     if (!inspection && !isCombined) {
       return;
     }
 
-    if (
-      inspection?.source.sourceKind === 'url' &&
-      inspection.source.requestedUrl &&
-      window.location.hash === '#install'
-    ) {
+    const { at } = readLink();
+    if (inspection?.source.sourceKind === 'url' && inspection.source.requestedUrl && at === 'install') {
       setInstallModalOpen(true);
       return;
     }
 
-    const anchor = parseNodeAnchor();
+    const anchor = parseNodeAnchor(at, isCombined ? databases.map(({ inspection: database }) => database.overview.dbId) : null);
     if (anchor) {
       setNodeAnchor(anchor);
-    } else {
-      const sectionHash = window.location.hash.slice(1);
-      if (sectionHash) {
-        runAfterNextPaint(() => {
-          const target = /** @type {(HTMLElement & { open?: boolean }) | null} */ (document.getElementById(`section-${sectionHash}`));
-          if (!target) return;
+    } else if (at) {
+      runAfterNextPaint(() => {
+        const target = /** @type {(HTMLElement & { open?: boolean }) | null} */ (document.getElementById(`section-${at}`));
+        if (!target) return;
 
-          if (target.tagName === 'DETAILS' && !target.open) {
-            target.open = true;
-          }
+        if (target.tagName === 'DETAILS' && !target.open) {
+          target.open = true;
+        }
 
+        target.scrollIntoView({ block: 'start' });
+        window.setTimeout(() => {
           target.scrollIntoView({ block: 'start' });
-          window.setTimeout(() => {
-            target.scrollIntoView({ block: 'start' });
-          }, 300);
-        });
-      }
+        }, 300);
+      });
     }
   });
 
   useEffect(() => {
-    openLocationHash();
+    openLinkAnchor();
   }, [inspectionKeyBase]);
 
   // The model's reactions run with the page's effects, after the anchor above, as the effects they
@@ -290,7 +285,7 @@ export default function App() {
 
   function openInstallModal() {
     setInstallModalOpen(true);
-    history.replaceState(null, '', '#install');
+    writeLinkAnchor('install');
   }
 
   function searchForEssential() {
@@ -563,8 +558,8 @@ export default function App() {
           activeFilter={debouncedFilterInput}
           onClose={() => {
             setInstallModalOpen(false);
-            if (window.location.hash === '#install') {
-              history.replaceState(null, '', window.location.pathname + window.location.search);
+            if (readLink().at === 'install') {
+              writeLinkAnchor('');
             }
           }}
         />

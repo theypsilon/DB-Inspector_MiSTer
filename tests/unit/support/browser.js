@@ -1,7 +1,8 @@
 import { STATUS_CODES } from 'node:http';
 
 // A browser for the app model under Node: an address bar with history (back and forward fire
-// popstate), timers on a clock the test moves, and fetch answered from routes. Routes map a URL to
+// popstate, and so does a new # typed in the address bar), timers on a clock the test moves, and
+// fetch answered from routes. Routes map a URL to
 // { status, body, contentType } (or are a function from URL to that); a body that is not a string or
 // bytes is sent as JSON. Unknown URLs fail as a blocked request would. Requests ({ url, init }) are
 // recorded in order.
@@ -59,6 +60,12 @@ function createWindow(href, clock) {
   const listeners = new Map();
   const current = () => entries[index];
 
+  function firePopState() {
+    for (const listener of listeners.get('popstate') ?? []) {
+      listener({ type: 'popstate' });
+    }
+  }
+
   function go(delta) {
     const next = index + delta;
     if (next < 0 || next >= entries.length) {
@@ -66,9 +73,7 @@ function createWindow(href, clock) {
     }
 
     index = next;
-    for (const listener of listeners.get('popstate') ?? []) {
-      listener({ type: 'popstate' });
-    }
+    firePopState();
   }
 
   return {
@@ -111,6 +116,17 @@ function createWindow(href, clock) {
     },
     setTimeout: (callback, delay) => clock.setTimeout(callback, delay),
     clearTimeout: (id) => clock.clearTimeout(id),
+    // The address bar: another # of the same page opens in it, in a new history entry.
+    navigate(url) {
+      const next = new URL(String(url), current());
+      if (next.origin + next.pathname + next.search !== current().origin + current().pathname + current().search) {
+        throw new Error(`Only another # of the same page opens without loading it again: ${next.href}`);
+      }
+
+      entries.splice(index + 1, entries.length, next);
+      index += 1;
+      firePopState();
+    },
     addEventListener(type, listener) {
       if (!listeners.has(type)) {
         listeners.set(type, new Set());

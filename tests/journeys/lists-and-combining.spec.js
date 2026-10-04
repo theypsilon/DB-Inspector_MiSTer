@@ -1,8 +1,10 @@
+import { inflateRawSync } from 'node:zlib';
 import { expect, test } from '@playwright/test';
 
 // Database lists and combined databases in a real browser: collisions, combined filters and their
-// URLs across reload and history, the questions about loaded db_ids, selections that fail or repeat
-// a db_id, the question before a list entry replaces FILTER, single-entry lists, and loops.
+// links across reload and history, the questions about loaded db_ids, selections that fail or repeat
+// a db_id, the question before a list entry replaces FILTER, single-entry lists, loops, and the
+// packed link of a long session.
 
 const ALPHA_URL = 'https://example.com/combine/alpha.json';
 const BETA_URL = 'https://example.com/combine/beta.json';
@@ -15,6 +17,7 @@ const LOOP_URL = 'https://example.com/lists/loop.ini';
 const WITH_FILTER_URL = 'https://example.com/lists/with-filter.json';
 const WITHOUT_FILTER_URL = 'https://example.com/lists/without-filter.json';
 const PRESERVED_URL = 'https://example.com/lists/preserved.json';
+const MANY_URLS = Array.from({ length: 40 }, (_, index) => `https://example.com/combine/many/database_${index}.json`);
 
 function database(dbId, files, extra = {}) {
   return { db_id: dbId, v: 1, timestamp: 1710000000, base_files_url: `https://example.com/${dbId}/`, tag_dictionary: { arcade: 0, console: 1 }, files, folders: {}, ...extra };
@@ -47,13 +50,18 @@ test.beforeEach(async ({ page }) => {
   }
   await page.route(MISSING_URL, (route) => route.fulfill({ status: 404, contentType: 'text/plain', body: 'missing' }));
   await page.route(LIST_URL, (route) => route.fulfill({ status: 200, contentType: 'text/plain', body: LIST_INI }));
+  await page.route('https://example.com/combine/many/*.json', (route) => {
+    const index = Number(route.request().url().match(/database_(\d+)\.json$/)[1]);
+    const body = database(`many_${index}`, { [`many_${index}.rbf`]: { size: 1, tags: [index % 2] } });
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+  });
   await page.route(LOOP_URL, (route) => route.fulfill({ status: 200, contentType: 'text/plain', body: `[Loop]\ndb_url=${LOOP_URL}\n` }));
 });
 
 test('database lists and combined databases', async ({ page }) => {
   const loadMode = page.getByRole('dialog', { name: 'Combine with the loaded databases?' });
   const heading = (name) => page.getByRole('heading', { name, exact: true });
-  const search = () => decodeURIComponent(new URL(page.url()).search);
+  const link = () => new URL(page.url()).hash;
   await page.goto('/');
 
   await test.step('combining shows both databases and lists the paths they share as collisions', async () => {
@@ -75,7 +83,7 @@ test('database lists and combined databases', async ({ page }) => {
     await expect(collisions.getByRole('heading', { name: 'shared.rom' })).toHaveCount(3);
     await expect(collisions.locator('.db-chip')).toHaveText(['alpha', 'beta']);
     await expect(page.locator('#section-issues')).toContainText('1 path is claimed by more than one database: alpha, beta.');
-    await expect.poll(search).toBe(`?database-url[alpha]=${ALPHA_URL}&database-url[beta]=${BETA_URL}`);
+    await expect.poll(link).toBe(`#db=${ALPHA_URL}&db=${BETA_URL}`);
 
     await page.locator('.app-footer').getByText('to search').click();
     await page.getByLabel('Search text').fill('shared.rom');
@@ -83,7 +91,7 @@ test('database lists and combined databases', async ({ page }) => {
     await page.getByLabel('Search text').press('Escape');
   });
 
-  await test.step('combined databases share a [mister] filter and can have their own, kept in the URL across reload and history', async () => {
+  await test.step('combined databases share a [mister] filter and can have their own, kept in the link across reload and history', async () => {
     const applied = page.getByRole('list', { name: 'Filter applied to each database' }).getByRole('listitem');
     await expect(applied).toHaveText(['alphaEverythingno filter', 'beta!consoledatabase default']);
     await page.getByLabel('FILTER', { exact: true }).fill('arcade');
@@ -92,7 +100,7 @@ test('database lists and combined databases', async ({ page }) => {
     await page.getByLabel('FILTER for beta').fill('[mister] console');
     await expect(applied).toHaveText(['alphaarcadeshared filter', 'betaarcade consoleits own filter']);
     await expect(page.locator('#section-files').getByRole('heading', { name: 'beta.rbf' })).toBeVisible();
-    await expect.poll(search).toBe(`?database-url[alpha]=${ALPHA_URL}&database-url[beta]=${BETA_URL}&filter=arcade&filter[beta]=[mister] console`);
+    await expect.poll(link).toBe(`#db=${ALPHA_URL}&db=${BETA_URL}&filter=arcade&filter.beta=[mister]+console`);
 
     await page.reload();
     await expect(heading('2 combined databases')).toBeVisible();
@@ -158,7 +166,7 @@ test('database lists and combined databases', async ({ page }) => {
     await expect(page.getByText(`${MISSING_URL}: Request failed with 404 Not Found.`)).toBeVisible();
     // The shared FILTER of the combined databases carries over to the one opened alone.
     await expect(page.getByLabel('FILTER')).toHaveValue('arcade');
-    await expect.poll(search).toBe(`?filter=arcade&database-url=${GAMMA_URL}`);
+    await expect.poll(link).toBe(`#db=${GAMMA_URL}&filter=arcade`);
 
     // Gamma is loaded and selected, so the selection opens afresh without asking.
     await upload(page, 'downloader.ini', `[twin]\ndb_url=${ALPHA_TWIN_URL}\n\n[gamma]\ndb_url=${GAMMA_URL}\n\n[alpha]\ndb_url=${ALPHA_URL}\n`);
@@ -175,13 +183,12 @@ test('database lists and combined databases', async ({ page }) => {
     await fetchDatabase(page, LIST_URL);
     await expect(page.getByRole('heading', { name: 'Choose databases from this list' })).toBeVisible();
     await expect(page.getByText(`${LIST_URL} contains 2 entries.`)).toBeVisible();
-    await expect.poll(() => page.url()).toContain(`database-url=${encodeURIComponent(LIST_URL)}`);
+    await expect.poll(link).toBe(`#db=${LIST_URL}`);
     await chooseOnly(page, 'WithoutFilter');
     await page.getByRole('button', { name: 'Open selected database' }).click();
     await expect(heading('without_filter_db')).toBeVisible();
     await expect(page.getByLabel('FILTER')).toHaveValue('ini-list-default');
-    await expect.poll(() => page.url()).toContain(`database-url=${encodeURIComponent(WITHOUT_FILTER_URL)}`);
-    await expect.poll(() => page.url()).not.toContain('filter=');
+    await expect.poll(link).toBe(`#db=${WITHOUT_FILTER_URL}`);
   });
 
   await test.step('a list entry with its own filter asks before replacing a FILTER with terms', async () => {
@@ -196,7 +203,7 @@ test('database lists and combined databases', async ({ page }) => {
     await question.getByRole('button', { name: 'Keep current' }).click();
     await expect(heading('with_filter_db')).toBeVisible();
     await expect(page.getByLabel('FILTER')).toHaveValue('manual !keep');
-    await expect.poll(() => page.url()).toContain(`filter=${encodeURIComponent('manual !keep')}`);
+    await expect.poll(link).toBe(`#db=${WITH_FILTER_URL}&filter=manual+!keep`);
 
     // The entry is the loaded database this time, so only the FILTER question comes.
     await fetchDatabase(page, LIST_URL);
@@ -224,7 +231,33 @@ test('database lists and combined databases', async ({ page }) => {
     await loadMode.getByRole('button', { name: 'Load alone' }).click();
     await expect(page.getByText(`Detected a loop while following linked databases from ${LOOP_URL}.`)).toBeVisible();
   });
+
+  await test.step('a long session is packed into its link, and opens again from it', async () => {
+    await page.goto('about:blank');
+    await page.goto('/');
+    await upload(page, 'many.ini', MANY_URLS.map((url, index) => `[many_${index}]\ndb_url=${url}\n`).join('\n'));
+    await page.getByRole('button', { name: 'Open 40 selected databases' }).click();
+    await expect(heading('40 combined databases')).toBeVisible();
+    const databases = MANY_URLS.map((url) => `db=${url}`).join('&');
+    await expect.poll(() => unpackLink(link())).toBe(databases);
+    await page.getByLabel('FILTER', { exact: true }).fill('arcade');
+    await expect.poll(() => unpackLink(link())).toBe(`${databases}&filter=arcade`);
+    expect(link()).toMatch(/^#z=[A-Za-z0-9_-]+$/);
+    expect(page.url().length).toBeLessThanOrEqual(2000);
+
+    await page.reload();
+    await expect(heading('40 combined databases')).toBeVisible();
+    await expect(page.getByLabel('FILTER', { exact: true })).toHaveValue('arcade');
+    await expect(page.locator('.combined-database-row')).toHaveCount(40);
+  });
 });
+
+// What a packed link holds, unpacked as the link format says (raw deflate in base64url), or null
+// for a link that is not packed.
+function unpackLink(hash) {
+  const packed = new URLSearchParams(hash.slice(1)).get('z');
+  return packed === null ? null : inflateRawSync(Buffer.from(packed, 'base64url')).toString('utf8');
+}
 
 async function fetchDatabase(page, url) {
   await page.getByLabel('URL').fill(url);

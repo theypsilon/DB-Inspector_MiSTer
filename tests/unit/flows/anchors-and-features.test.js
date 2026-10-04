@@ -6,12 +6,7 @@ import { findHoveredColumnDepth, findRowNearestTo, resolveGhostParent } from '..
 import { activateSectionAnchor, blurOnEnter } from '../../../src/lib/interactions.js';
 import { collectVisibleRowIds, toggleDetailOverride } from '../../../src/lib/treeIndex.js';
 import { buildVirtualRowLayout, buildVirtualRows } from '../../../src/lib/treeLayout.js';
-import {
-  buildNodeAnchorHash,
-  parseNodeAnchor,
-  readDetailedSearchParam,
-  writeDetailedSearchParam,
-} from '../../../src/lib/urlState.js';
+import { buildNodeAnchor, parseNodeAnchor, readLink, writeLinkAnchor, writeLinkDetailed } from '../../../src/lib/urlState.js';
 
 // Mirrors tests/anchors-and-features.spec.js.
 
@@ -66,13 +61,15 @@ describe('node anchors', () => {
     assert.deepEqual([...toggleDetailOverride(new Map(), fileRow.id, false)], [[fileRow.id, true]]);
     assert.equal(app.url, urlBefore);
 
-    const fileHash = buildNodeAnchorHash(fileRow);
-    assert.equal(fileHash, '#files:core_a.rbf');
-    window.history.replaceState(null, '', fileHash);
-    assert.deepEqual(parseNodeAnchor(), { section: 'filesystem', rowId: fileRow.id });
+    const fileAnchor = buildNodeAnchor(fileRow);
+    assert.equal(fileAnchor, 'files:core_a.rbf');
+    writeLinkAnchor(fileAnchor);
+    assert.equal(app.hash, '#at=files:core_a.rbf');
+    assert.deepEqual(parseNodeAnchor(readLink().at), { section: 'filesystem', rowId: fileRow.id });
 
     const archiveRow = rowNamed(app.view.archivesIndex, 'test_archive');
-    assert.equal(buildNodeAnchorHash(archiveRow), '#archives:test_archive');
+    writeLinkAnchor(buildNodeAnchor(archiveRow));
+    assert.equal(app.hash, '#at=archives:test_archive');
   });
 });
 
@@ -90,13 +87,13 @@ describe('section anchors', () => {
 
     const scrolls = [];
     const panel = (tagName, open) => ({ tagName, open, scrollIntoView: (options) => scrolls.push(options) });
-    activateSectionAnchor({ anchor: 'filter', section: panel('DETAILS', true), history: window.history });
-    assert.ok(app.url.endsWith('#filter'), app.url);
+    activateSectionAnchor({ anchor: 'filter', section: panel('DETAILS', true) });
+    assert.equal(app.hash, '#at=filter');
 
     const issues = panel('DETAILS', false);
-    activateSectionAnchor({ anchor: 'issues', section: issues, history: window.history });
+    activateSectionAnchor({ anchor: 'issues', section: issues });
     assert.equal(issues.open, true);
-    assert.ok(app.url.endsWith('#issues'), app.url);
+    assert.equal(app.hash, '#at=issues');
     assert.deepEqual(scrolls, [
       { block: 'start', behavior: 'smooth' },
       { block: 'start', behavior: 'smooth' },
@@ -104,28 +101,28 @@ describe('section anchors', () => {
   });
 });
 
-describe('detailed URL param', () => {
-  test('the detailed toggle adds and removes the search param, and the param turns details on at load', async () => {
+describe('detailed in the link', () => {
+  test('the detailed toggle adds and removes detailed in the link, which turns details on at load', async () => {
     app = await openApp('/');
     await app.upload(file('test.json', SMALL_DB));
     assert.equal(app.view.heading, 'anchor_test');
 
     assert.doesNotMatch(app.url, /detailed/);
-    writeDetailedSearchParam(true);
-    assert.match(app.url, /detailed/);
-    assert.equal(readDetailedSearchParam(), true);
+    writeLinkDetailed(true);
+    assert.equal(app.hash, '#detailed');
+    assert.equal(readLink().detailed, true);
 
-    writeDetailedSearchParam(false);
+    writeLinkDetailed(false);
     assert.doesNotMatch(app.url, /detailed/);
-    assert.equal(readDetailedSearchParam(), false);
+    assert.equal(readLink().detailed, false);
 
     app.close();
-    app = await openApp('/?detailed');
+    app = await openApp('/#detailed');
     await app.upload(file('test.json', SMALL_DB));
     assert.equal(app.view.heading, 'anchor_test');
 
     // Every row shows its details unless toggled, starting with the first one.
-    const detailed = readDetailedSearchParam();
+    const detailed = readLink().detailed;
     assert.equal(detailed, true);
     const firstRow = app.view.filesystemIndex.rowsById.get(app.view.filesystemIndex.rootIds[0]);
     assert.equal(new Map().get(firstRow.id) ?? detailed, true);

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { buildNodeAnchorHash } from '../../lib/urlState.js';
+import { buildNodeAnchor, writeLinkAnchor } from '../../lib/urlState.js';
 import { createRowFlash } from '../../lib/rowFlash.js';
 import { findAncestorIds } from '../../lib/treeIndex.js';
 import { collectTextMatchRanges, runAfterNextPaint } from '../../lib/utils.js';
@@ -165,9 +165,9 @@ export default function useTreeNavigation({
   }, []);
 
   const handleAnchorRow = useCallback((rowId) => {
-    const hash = buildNodeAnchorHash(index.rowsById.get(rowId));
-    if (hash) {
-      history.replaceState(null, '', hash);
+    const at = buildNodeAnchor(index.rowsById.get(rowId));
+    if (at) {
+      writeLinkAnchor(at);
     }
 
     setHighlightedRowId(rowId);

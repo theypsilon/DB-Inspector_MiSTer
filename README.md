@@ -17,6 +17,14 @@ This is a small App for inspecting MiSTer custom downloader databases, including
 - Choosing several databases at once from the catalog or a `downloader.ini` list
 - Uploading several files or whole folders, and choosing among the databases they hold
 
+## Linking to a database
+
+Link to a database by putting its URL after `#db=`:
+
+https://theypsilon.github.io/DB-Inspector_MiSTer/#db=https://raw.githubusercontent.com/MiSTer-devel/Distribution_MiSTer/main/db.json.zip
+
+The address follows what you see (the databases, the filter, and the section or row you link to), so you can copy it from the address bar to share the view. Links from older versions, `?database-url=<url>`, still open their database.
+
 ## Code Quality
 
 This project was vibe-coded from start to finish. It is finished, self-contained, and does its job. It is not expected to be maintainable. Without that compromise, this tool could not exist.
