@@ -81,7 +81,7 @@ export default function useTreeNavigation({
       endSearchFlash();
       return;
     }
-    const section = document.getElementById(`section-${anchor}`);
+    const section = /** @type {(HTMLElement & { open?: boolean }) | null} */ (document.getElementById(`section-${anchor}`));
     if (section && !section.open) section.open = true;
     searchMatchPartRef.current = searchMatch.matchPart || 'name';
     searchQueryRef.current = searchMatch.query || '';

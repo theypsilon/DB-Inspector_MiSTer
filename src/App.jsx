@@ -214,7 +214,7 @@ export default function App() {
       const sectionHash = window.location.hash.slice(1);
       if (sectionHash) {
         runAfterNextPaint(() => {
-          const target = document.getElementById(`section-${sectionHash}`);
+          const target = /** @type {(HTMLElement & { open?: boolean }) | null} */ (document.getElementById(`section-${sectionHash}`));
           if (!target) return;
 
           if (target.tagName === 'DETAILS' && !target.open) {
@@ -280,7 +280,7 @@ export default function App() {
 
   function loadUrl(event) {
     event.preventDefault();
-    document.activeElement?.blur?.();
+    /** @type {HTMLElement | null} */ (document.activeElement)?.blur?.();
     model.loadUrl();
   }
 

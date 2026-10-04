@@ -75,7 +75,14 @@ function MisterFilterChoice({ options, showSources, value, onChange }) {
 
 // The databases of a database list, or of uploaded files, all selected at first (one per db_id).
 // `choice` is built by buildListChoice or buildUploadChoice.
-const SourcePickerModal = memo(function SourcePickerModal({ choice, loadedDatabases, onClose, onOpenDatabases }) {
+/**
+ * @typedef {object} SourcePickerModalProps
+ * @property {any} choice a list or upload choice (see selection.js)
+ * @property {any[]} loadedDatabases
+ * @property {() => void} onClose
+ * @property {(entries: any[], options: { misterFilter: string | null }) => void} onOpenDatabases
+ */
+const SourcePickerModal = memo(/** @param {SourcePickerModalProps} props */ function SourcePickerModal({ choice, loadedDatabases, onClose, onOpenDatabases }) {
   const [misterKey, setMisterKey] = useState(() => firstMisterKey(choice));
   const [misterChoice, setMisterChoice] = useState(choice);
   const initialSelectedKeys = useMemo(() => selectOnePerDbId(choice.entries), [choice]);

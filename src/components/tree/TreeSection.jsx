@@ -14,7 +14,23 @@ import { collectTextMatchRanges } from '../../lib/utils.js';
 
 // A collapsible tree list that renders only the rows near the viewport (plus overscan), with its
 // expand/collapse controls, empty state, and scroll-to-top button.
-const TreeSection = memo(function TreeSection({
+/**
+ * @typedef {object} TreeSectionProps
+ * @property {string} label
+ * @property {string} title
+ * @property {string} listClassName
+ * @property {string} emptyMessage
+ * @property {any} index the section's row index (see treeIndex.js)
+ * @property {boolean} detailed
+ * @property {string | null} [anchorRowId]
+ * @property {string | null} [altAnchorRowId]
+ * @property {() => void} [onAnchorHandled]
+ * @property {any} [searchMatch]
+ * @property {string} [searchQuery]
+ * @property {string} anchor
+ * @property {(error: any) => void} [onDownloadError]
+ */
+const TreeSection = memo(/** @param {TreeSectionProps} props */ function TreeSection({
   label,
   title,
   listClassName,
@@ -121,11 +137,11 @@ const TreeSection = memo(function TreeSection({
         <div
           className={`${listClassName}${ghost.hoveredColumnDepth >= 0 ? ' tree-column-hovered' : ''}`}
           ref={containerRef}
-          style={{
+          style={/** @type {import('react').CSSProperties} */ ({
             height: `${virtualRows.totalHeight}px`,
             '--hovered-column-x': `calc(${ghost.hoveredColumnDepth} * var(--tree-indent-step, 1.55rem) + var(--tree-control-center, 1.125rem))`,
             '--hovered-column-bottom': ghost.columnLineBottom != null ? `${virtualRows.totalHeight - ghost.columnLineBottom}px` : '0px',
-          }}
+          })}
           onMouseMove={ghost.handleTreeMouseMove}
           onMouseLeave={ghost.handleTreeMouseLeave}
         >

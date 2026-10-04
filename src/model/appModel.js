@@ -155,6 +155,10 @@ export function createAppModel() {
     return state;
   }
 
+  /**
+   * @param {() => void} listener
+   * @returns {() => void} what unsubscribes it
+   */
   function subscribe(listener) {
     listeners.add(listener);
     return () => listeners.delete(listener);
@@ -780,6 +784,11 @@ export function createAppModel() {
     }, 0);
   }
 
+  /**
+   * @param {any} ctx
+   * @param {any} loadedSource
+   * @param {{ origin?: string, requestedUrl?: string, syncSearchParam?: boolean, visitedUrls?: Set<string>, registerInCatalog?: boolean, filterDefaults?: import('../lib/filterDefaults.js').FilterDefaults, preserveCurrentFilter?: boolean, mode?: string }} [options]
+   */
   async function handleLoadedSource(
     ctx,
     loadedSource,

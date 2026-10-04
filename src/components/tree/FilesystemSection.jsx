@@ -1,7 +1,10 @@
 import { memo } from 'react';
 import TreeSection from './TreeSection.jsx';
 
-const FilesystemSection = memo(function FilesystemSection(props) {
+// The section's own label, title, list class and anchor are set here.
+const FilesystemSection = memo(
+  /** @param {Omit<import('./TreeSection.jsx').TreeSectionProps, 'label' | 'title' | 'listClassName' | 'anchor'>} props */
+  function FilesystemSection(props) {
   return (
     <TreeSection
       {...props}

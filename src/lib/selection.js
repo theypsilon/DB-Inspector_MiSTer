@@ -79,7 +79,7 @@ export function findUpdateAllDefaultKeys(entries) {
 // The keys of one entry per db_id, in list order: for each db_id, the entry that comes first in
 // `preferredKeys`, else the first entry.
 export function selectOnePerDbId(entries, preferredKeys = []) {
-  const rank = new Map(preferredKeys.map((key, index) => [key, index]).reverse());
+  const rank = new Map(preferredKeys.map((key, index) => /** @type {[string, number]} */ ([key, index])).reverse());
   const rankOf = (entry) => rank.get(entry.key) ?? Infinity;
   const chosenByDbId = new Map();
   for (const entry of entries) {

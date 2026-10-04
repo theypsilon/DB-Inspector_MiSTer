@@ -1,6 +1,7 @@
 import { blurOnEnter } from '../lib/interactions.js';
 
 // A FILTER text box. Enter applies the filter by leaving the box instead of adding a new line.
+/** @param {{ id?: string, label: string, placeholder?: string, value: string, onChange: (value: string) => void }} props */
 function FilterInput({ id, label, placeholder = 'console !cheats', value, onChange }) {
   return (
     <textarea

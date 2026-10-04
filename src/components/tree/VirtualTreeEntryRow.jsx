@@ -6,7 +6,16 @@ import { buildVirtualRowStyle, getRowMeasurementKey } from '../../lib/treeLayout
 // replace the estimated height with the measured one. Keeping this apart from TreeEntryRow means
 // a new `onHeightChange` (which changes as the page scrolls) re-measures the row without
 // re-rendering its content.
-const VirtualTreeEntryRow = memo(function VirtualTreeEntryRow({
+/**
+ * @typedef {object} VirtualRowProps
+ * @property {(rowId: string, height: number, options?: { immediate?: boolean }) => void} onHeightChange
+ * @property {number} virtualTop
+ * @property {boolean} [trimTopGuide]
+ * @property {boolean} [trimBottomGuide]
+ */
+const VirtualTreeEntryRow = memo(
+  /** @param {VirtualRowProps & Omit<import('./TreeEntryRow.jsx').TreeEntryRowProps, 'containerRef' | 'virtualStyle'>} props */
+  function VirtualTreeEntryRow({
   onHeightChange,
   virtualTop,
   trimTopGuide,

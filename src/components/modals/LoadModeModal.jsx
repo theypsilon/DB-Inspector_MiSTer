@@ -3,7 +3,15 @@ import ModalFrame from './ModalFrame.jsx';
 
 // Asked before opening databases while others are loaded: open them alone, replacing the loaded
 // ones, or combine them with the loaded ones.
-const LoadModeModal = memo(function LoadModeModal({
+/**
+ * @typedef {object} LoadModeModalProps
+ * @property {string[]} loadedDbIds
+ * @property {number} [incomingCount]
+ * @property {() => void} onLoadAlone
+ * @property {() => void} onCombine
+ * @property {() => void} onCancel
+ */
+const LoadModeModal = memo(/** @param {LoadModeModalProps} props */ function LoadModeModal({
   loadedDbIds,
   incomingCount = 1,
   onLoadAlone,

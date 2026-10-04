@@ -9,7 +9,9 @@ function describeSource({ source }) {
 // can be loaded, so each new one either replaces the loaded one or stays out; one from the same URL
 // is the loaded database again, so replacing it reloads it. `conflicts` come from
 // findLoadedDbIdConflicts; `onAnswer` gets the db_ids to replace, or null to cancel.
-const ReplaceLoadedModal = memo(function ReplaceLoadedModal({ conflicts, onAnswer }) {
+const ReplaceLoadedModal = memo(
+  /** @param {{ conflicts: any[], onAnswer: (answer: Set<string> | null) => void }} props */
+  function ReplaceLoadedModal({ conflicts, onAnswer }) {
   const [replaceDbIds, setReplaceDbIds] = useState(() => new Set(conflicts.map(({ dbId }) => dbId)));
 
   if (conflicts.length === 1 && conflicts[0].reload) {

@@ -5,6 +5,7 @@ import { collectTextMatchRanges, tagPillId } from '../lib/utils.js';
 
 // The tag dictionary: of the loaded database (`tags`), or of each combined database (`groups`,
 // as [{ dbId, tags }]).
+/** @param {{ tags?: any, groups?: { dbId: string, tags: any }[], searchQuery: string, searchMatch: any }} props */
 function TagDictionary({ tags, groups, searchQuery, searchMatch }) {
   const [open, setOpen] = useState(true);
   const cloudRef = useRef(null);

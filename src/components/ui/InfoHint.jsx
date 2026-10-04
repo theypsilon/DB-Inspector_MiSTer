@@ -7,6 +7,7 @@ function followHint(element, eventType) {
 
 // Inline value with a tooltip that toggles on click (for touch) and closes when the pointer
 // leaves or focus moves away.
+/** @param {{ className?: string, label?: string, tip: import('react').ReactNode, children?: import('react').ReactNode }} props */
 function InfoHint({ className, label, tip, children }) {
   return (
     <span

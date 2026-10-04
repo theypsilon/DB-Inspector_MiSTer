@@ -49,6 +49,14 @@ export function isFileDragEvent(event) {
 
 // Like Promise.allSettled over `task(item)` for each item, running at most `limit` tasks at a time.
 // `onSettled` receives the number of tasks settled so far.
+/**
+ * @template T, R
+ * @param {T[]} items
+ * @param {number} limit
+ * @param {(item: T) => Promise<R>} task
+ * @param {(settledCount: number) => void} [onSettled]
+ * @returns {Promise<PromiseSettledResult<R>[]>}
+ */
 export async function settleWithConcurrency(items, limit, task, onSettled = () => {}) {
   const results = new Array(items.length);
   let nextIndex = 0;

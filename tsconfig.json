@@ -1,0 +1,17 @@
+{
+  // Type checks the app's JavaScript (npm run typecheck). Vite builds it; TypeScript only checks it.
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": false,
+    "skipLibCheck": true,
+    "types": ["vite/client"]
+  },
+  "include": ["src"]
+}

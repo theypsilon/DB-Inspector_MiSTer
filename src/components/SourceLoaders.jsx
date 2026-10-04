@@ -46,7 +46,7 @@ function SourceLoaders({
           type="button"
           className="dropzone-surface"
           onClick={() => {
-            document.activeElement?.blur?.();
+            /** @type {HTMLElement | null} */ (document.activeElement)?.blur?.();
             fileInputRef.current?.click();
           }}
         >
@@ -98,7 +98,7 @@ function SourceLoaders({
           <button
             type="button"
             onClick={() => {
-              document.activeElement?.blur?.();
+              /** @type {HTMLElement | null} */ (document.activeElement)?.blur?.();
               onBrowseCatalog();
             }}
             disabled={!catalogReady}

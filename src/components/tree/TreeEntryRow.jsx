@@ -9,7 +9,21 @@ import { updateTooltipPlacement } from '../../lib/utils.js';
 
 // One tree row (archive, folder or file). TreeSection renders it through VirtualTreeEntryRow,
 // which supplies `containerRef` and `virtualStyle` to position and measure it.
-const TreeEntryRow = memo(function TreeEntryRow({
+/**
+ * @typedef {object} TreeEntryRowProps
+ * @property {any} row the row (see treeIndex.js)
+ * @property {boolean} collapsed
+ * @property {boolean} detailsVisible
+ * @property {boolean} highlighted
+ * @property {(rowId: string) => void} onToggleCollapsed
+ * @property {(rowId: string) => void} onToggleDetails
+ * @property {(rowId: string, state: { collapsed: boolean, detailsVisible: boolean }) => void} onSetRowState
+ * @property {(rowId: string) => void} onAnchorRow
+ * @property {(error: any) => void} [onDownloadError]
+ * @property {import('react').Ref<HTMLDivElement>} [containerRef]
+ * @property {import('react').CSSProperties} [virtualStyle]
+ */
+const TreeEntryRow = memo(/** @param {TreeEntryRowProps} props */ function TreeEntryRow({
   row,
   collapsed,
   detailsVisible,
@@ -128,7 +142,7 @@ const TreeEntryRow = memo(function TreeEntryRow({
               </button>
               <h3 onMouseEnter={(e) => {
                 const h3 = e.currentTarget;
-                const heading = h3.closest('.tree-heading');
+                const heading = /** @type {HTMLElement} */ (h3.closest('.tree-heading'));
                 const titleRow = h3.closest('.tree-title-row');
                 const nameTruncated = h3.scrollWidth > h3.clientWidth;
                 const idCode = titleRow.querySelector('.tree-identifier-inline code');

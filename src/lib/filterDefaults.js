@@ -4,7 +4,19 @@ import { resolveInheritedFilterValue } from './database.js';
 // `filter`, then the database `default_options.filter` (only when [mister] sets no filter, or when
 // that default inherits [mister]), then the INI `[mister]` filter.
 
+/**
+ * The filter defaults a loaded source contributes: its own filter (a list section's) and the
+ * [mister] filter of its list.
+ * @typedef {object} FilterDefaults
+ * @property {string} sourceDefaultFilter
+ * @property {boolean} sourceDefaultFilterPresent
+ * @property {boolean} sourceDefaultFilterOverridesDatabaseDefault
+ * @property {string} misterDefaultFilter
+ * @property {boolean} misterDefaultFilterPresent
+ */
+
 // The filter defaults a loaded source contributes, before the database's own default is known.
+/** @type {Readonly<FilterDefaults>} */
 export const NO_FILTER_DEFAULTS = Object.freeze({
   sourceDefaultFilter: '',
   sourceDefaultFilterPresent: false,

@@ -15,7 +15,7 @@ function GhostParentRow({ row, containerLeft, onNavigate }) {
   return (
     <div
       className="ghost-parent-row"
-      style={{ '--ghost-line-x': `${linePx}px` }}
+      style={/** @type {import('react').CSSProperties} */ ({ '--ghost-line-x': `${linePx}px` })}
       onClick={onNavigate}
       role="button"
       tabIndex={0}

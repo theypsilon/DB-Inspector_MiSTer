@@ -1,5 +1,19 @@
 import SectionAnchor from './SectionAnchor.jsx';
 
+/**
+ * @param {{
+ *   label: import('react').ReactNode,
+ *   title: import('react').ReactNode,
+ *   defaultOpen?: boolean,
+ *   actions?: import('react').ReactNode,
+ *   children?: import('react').ReactNode,
+ *   className?: string,
+ *   open?: boolean,
+ *   onToggle?: (open: boolean) => void,
+ *   summaryAside?: import('react').ReactNode,
+ *   anchor?: string,
+ * }} props
+ */
 function CollapsibleSection({
   label,
   title,

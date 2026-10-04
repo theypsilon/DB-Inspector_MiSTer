@@ -38,6 +38,10 @@ const VISITED_PROGRESS_STEP = 50;
 
 // The files of a drop that can hold databases, walking into folders. Paths start at the dropped
 // item, and folders that cannot be read are skipped.
+/**
+ * @param {{ entries?: any[], files?: File[] }} drop
+ * @param {(visited: number) => void} [onProgress]
+ */
 export async function listDroppedFiles({ entries, files }, onProgress = () => {}) {
   if (!entries) {
     return files.map((file) => ({ file, path: file.name }));
@@ -94,6 +98,10 @@ async function readDirectoryEntries(directory) {
 // Reads uploaded files ({ file, path }) and lists the databases they offer, in path order: each
 // database file, and each entry of each database list, with the path it came from. Identical files
 // are read once. `misterOptions` are the lists' [mister] filters.
+/**
+ * @param {{ file: File, path: string }[]} files
+ * @param {{ onProgress?: (read: number, total: number) => void }} [options]
+ */
 export async function scanUploads(files, { onProgress = () => {} } = {}) {
   const candidates = files
     .filter(({ path }) => isUploadCandidateName(path))

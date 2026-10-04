@@ -1,7 +1,19 @@
 import { memo, useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 
-const FindBar = memo(function FindBar({
+/**
+ * @typedef {object} FindBarProps
+ * @property {string} query
+ * @property {(query: string) => void} onQueryChange
+ * @property {number} focusToken
+ * @property {number} currentIndex
+ * @property {number} totalMatches
+ * @property {() => void} onNext
+ * @property {() => void} onPrev
+ * @property {(oneBasedIndex: number) => void} onJumpTo
+ * @property {() => void} onClose
+ */
+const FindBar = memo(/** @param {FindBarProps} props */ function FindBar({
   query,
   onQueryChange,
   focusToken,

@@ -39,6 +39,9 @@ function useWindowViewport() {
       });
     };
 
+    // Also the scroll and resize listener, which passes its event as `force`: an event counts as
+    // forcing, so scrolling and resizing re-read the layout too.
+    /** @param {boolean | Event} [force] */
     const scheduleUpdate = (force = false) => {
       if (force) {
         pendingForce = true;

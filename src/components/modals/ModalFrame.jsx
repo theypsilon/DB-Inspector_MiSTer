@@ -1,4 +1,15 @@
 // `className` adds a class to the panel, for dialogs laid out differently.
+/**
+ * @param {{
+ *   label: string,
+ *   title: string,
+ *   onClose: () => void,
+ *   footer?: import('react').ReactNode,
+ *   headerActions?: import('react').ReactNode,
+ *   className?: string,
+ *   children?: import('react').ReactNode,
+ * }} props
+ */
 export default function ModalFrame({ label, title, onClose, footer, headerActions, className, children }) {
   return (
     <div

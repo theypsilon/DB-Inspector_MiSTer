@@ -1992,6 +1992,7 @@ function buildInspectionFilterSummary(filterState, resultCounts) {
 }
 
 function buildDownloadDetails({ explicitUrl, resolvedUrl, missingLabel }) {
+  /** @type {{ label: string, value: string, kind?: string }[]} */
   const fields = [
     {
       label: 'Download URL',

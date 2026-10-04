@@ -46,7 +46,25 @@ function countDatabases(count) {
 // decide which database of a db_id "Select all" picks. The list fills the dialog and is what
 // scrolls; the summary names the first few selected databases, and reviewing the selection lists
 // only the selected ones.
-const DatabasePickerModal = memo(function DatabasePickerModal({
+/**
+ * @typedef {object} DatabasePickerModalProps
+ * @property {string} label
+ * @property {string} title
+ * @property {any[]} entries
+ * @property {string} [status]
+ * @property {string} [error]
+ * @property {{ id: string, label: string, placeholder: string }} search
+ * @property {string[]} initialSelectedKeys
+ * @property {string[]} preferredKeys
+ * @property {any[]} presets
+ * @property {any[]} loadedDatabases
+ * @property {string} listLabel
+ * @property {string} emptyMessage
+ * @property {import('react').ReactNode} [intro]
+ * @property {() => void} onClose
+ * @property {(entries: any[]) => void} onOpen
+ */
+const DatabasePickerModal = memo(/** @param {DatabasePickerModalProps} props */ function DatabasePickerModal({
   label,
   title,
   entries,

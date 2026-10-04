@@ -2,7 +2,14 @@ import { memo } from 'react';
 import ModalFrame from './ModalFrame.jsx';
 import { formatFilterPromptValue } from '../../lib/filterDefaults.js';
 
-const FilterOverrideModal = memo(function FilterOverrideModal({
+/**
+ * @typedef {object} FilterOverrideModalProps
+ * @property {string} currentFilter
+ * @property {string} nextFilter
+ * @property {() => void} onAccept
+ * @property {() => void} onDecline
+ */
+const FilterOverrideModal = memo(/** @param {FilterOverrideModalProps} props */ function FilterOverrideModal({
   currentFilter,
   nextFilter,
   onAccept,

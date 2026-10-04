@@ -10,7 +10,16 @@ const CATALOG_SEARCH = {
 // The catalog opens with nothing selected.
 const NO_KEYS = [];
 
-const CatalogPickerModal = memo(function CatalogPickerModal({
+/**
+ * @typedef {object} CatalogPickerModalProps
+ * @property {any[]} options the catalog's entries
+ * @property {string} status
+ * @property {string} error
+ * @property {any[]} loadedDatabases
+ * @property {() => void} onClose
+ * @property {(entries: any[]) => void} onOpenDatabases
+ */
+const CatalogPickerModal = memo(/** @param {CatalogPickerModalProps} props */ function CatalogPickerModal({
   options,
   status,
   error,

@@ -4,23 +4,27 @@
 export const TREE_LIST_GAP_PX = 13;
 export const TREE_OVERSCAN_PX = 900;
 
+// Row styles set CSS custom properties, which React's style type does not list.
+/** @returns {import('react').CSSProperties} */
 export function buildTreeDepthStyle(depth) {
-  return { '--tree-depth': depth };
+  return /** @type {import('react').CSSProperties} */ ({ '--tree-depth': depth });
 }
 
+/** @returns {import('react').CSSProperties} */
 export function buildTreeGuideStyle(depth) {
-  return { '--tree-guide-depth': depth };
+  return /** @type {import('react').CSSProperties} */ ({ '--tree-guide-depth': depth });
 }
 
+/** @returns {import('react').CSSProperties} */
 export function buildVirtualRowStyle(top, { trimTopGuide = false, trimBottomGuide = false } = {}) {
-  return {
+  return /** @type {import('react').CSSProperties} */ ({
     position: 'absolute',
     top: `${top}px`,
     left: 0,
     right: 0,
     '--tree-guide-top-overlap': trimTopGuide ? '0px' : 'var(--tree-guide-overlap)',
     '--tree-guide-bottom-overlap': trimBottomGuide ? '0px' : 'var(--tree-guide-overlap)',
-  };
+  });
 }
 
 export function getRowMeasurementKey(rowId, { collapsed, detailsVisible }) {

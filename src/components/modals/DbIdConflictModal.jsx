@@ -13,7 +13,9 @@ function EntrySummary({ label, entry }) {
 
 // Asked when choosing a database whose db_id another selected database already has: databases
 // that share a db_id cannot be combined, so the new one can only replace the selected one.
-const DbIdConflictModal = memo(function DbIdConflictModal({ selected, incoming, onReplace, onCancel }) {
+const DbIdConflictModal = memo(
+  /** @param {{ selected: any, incoming: any, onReplace: () => void, onCancel: () => void }} props */
+  function DbIdConflictModal({ selected, incoming, onReplace, onCancel }) {
   return (
     <ModalFrame
       label="Selection"
