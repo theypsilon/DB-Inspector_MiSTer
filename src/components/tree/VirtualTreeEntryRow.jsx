@@ -22,7 +22,8 @@ const VirtualTreeEntryRow = memo(
   trimBottomGuide,
   ...rowProps
 }) {
-  const { row, collapsed, detailsVisible } = rowProps;
+  const { row, collapsed, detailsVisible, tagsExpanded, tagsRevealed } = rowProps;
+  const allTags = Boolean(tagsExpanded || tagsRevealed);
   const rowRef = useRef(null);
   const previousMeasurementSignatureRef = useRef(null);
   const virtualStyle = useMemo(
@@ -40,8 +41,8 @@ const VirtualTreeEntryRow = memo(
       return undefined;
     }
 
-    const measurementSignature = `${collapsed ? '1' : '0'}:${detailsVisible ? '1' : '0'}`;
-    const measurementKey = getRowMeasurementKey(row.id, { collapsed, detailsVisible });
+    const measurementSignature = `${collapsed ? '1' : '0'}:${detailsVisible ? '1' : '0'}:${allTags ? '1' : '0'}`;
+    const measurementKey = getRowMeasurementKey(row.id, { collapsed, detailsVisible, tagsExpanded: allTags });
     const previousMeasurementSignature = previousMeasurementSignatureRef.current;
     const shouldFlushImmediately =
       previousMeasurementSignature !== null && previousMeasurementSignature !== measurementSignature;
@@ -64,7 +65,7 @@ const VirtualTreeEntryRow = memo(
     return () => {
       observer.disconnect();
     };
-  }, [row.id, collapsed, detailsVisible, onHeightChange]);
+  }, [row.id, collapsed, detailsVisible, allTags, onHeightChange]);
 
   return <TreeEntryRow {...rowProps} containerRef={rowRef} virtualStyle={virtualStyle} />;
 });

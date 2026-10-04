@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test';
 
 // The virtualized trees of a large database in a real browser: only rows near the viewport render,
-// rows keep their spacing as details open and close, the last rows can be reached, and URL anchors,
-// find-in-page and ghost parent rows bring far rows into view.
+// rows keep their spacing as details and tags open and close, the last rows can be reached, and URL
+// anchors, find-in-page and ghost parent rows bring far rows into view.
 
 const FILE_COUNT = 600;
 const ARCHIVE_COUNT = 220;
@@ -31,13 +31,19 @@ test('large trees render near the viewport, keep their spacing, and reach far ro
     await expect(page.locator('.ghost-parent-row')).toHaveCount(0);
   });
 
-  await test.step('rows keep the list spacing as their details open and close', async () => {
+  await test.step('rows keep the list spacing as their details and tags open and close', async () => {
     const row = rowNamed(page, 'file_00000.rbf');
     await expect(row.locator('.collapse-button')).toHaveCount(0);
     const urlBefore = page.url();
     for (const [button, hashCount] of [['Show details', 1], ['Hide details', 0], ['Show details', 1]]) {
       await row.getByRole('button', { name: button }).click();
       await expect(row.getByText('MD5 HASH', { exact: true })).toHaveCount(hashCount);
+      await expect.poll(async () => Math.abs(Math.round(await gapAfter(row)) - 13)).toBeLessThanOrEqual(1);
+    }
+    await row.getByRole('button', { name: 'Hide details' }).click();
+    for (const [button, chips] of [['+7 more tags', 11], ['Show fewer', 4]]) {
+      await row.getByRole('button', { name: button }).click();
+      await expect(row.locator('.tag-chip')).toHaveCount(chips);
       await expect.poll(async () => Math.abs(Math.round(await gapAfter(row)) - 13)).toBeLessThanOrEqual(1);
     }
     // Only a row's link icon puts it in the address.
@@ -117,6 +123,8 @@ function buildLargeDatabase() {
     folders[folder] = {};
     files[`${folder}/file_${String(index).padStart(5, '0')}.rbf`] = { size: 1000 + index, hash: `h${index}` };
   }
+  // The first file has many tags.
+  files['games/folder_00/file_00000.rbf'].tags = Array.from({ length: 11 }, (_, index) => index);
   const summary = {};
   for (let index = 0; index < ARCHIVE_COUNT; index += 1) {
     const padded = String(index).padStart(3, '0');
@@ -127,6 +135,7 @@ function buildLargeDatabase() {
     v: 1,
     timestamp: 1710000000,
     base_files_url: 'https://example.com/',
+    tag_dictionary: Object.fromEntries(Array.from({ length: 11 }, (_, index) => [`tag_${index}`, index])),
     files,
     folders: { 'games/': {}, ...folders },
     archives: {

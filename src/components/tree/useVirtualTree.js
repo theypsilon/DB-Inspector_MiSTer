@@ -19,7 +19,7 @@ import { isTouchDevice } from '../../lib/utils.js';
 // Splitting them keeps the navigation effects running before the viewport and measurement
 // effects, which is the order the virtualization was tuned against.
 
-export function useMeasuredRowLayout({ index, visibleRowIds, collapsedIds, detailOverrides, detailed }) {
+export function useMeasuredRowLayout({ index, visibleRowIds, collapsedIds, detailOverrides, detailed, expandedTagIds }) {
   const containerRef = useRef(null);
   const pendingMeasuredHeightsRef = useRef(new Map());
   const measuredHeightsRef = useRef(new Map());
@@ -37,8 +37,9 @@ export function useMeasuredRowLayout({ index, visibleRowIds, collapsedIds, detai
         detailOverrides,
         defaultDetailed: detailed,
         measuredHeights,
+        expandedTagIds,
       }),
-    [visibleRowIds, index.rowsById, collapsedIds, detailOverrides, detailed, measuredHeights],
+    [visibleRowIds, index.rowsById, collapsedIds, detailOverrides, detailed, measuredHeights, expandedTagIds],
   );
   const virtualLayoutRef = useRef(virtualLayout);
   virtualLayoutRef.current = virtualLayout;
@@ -65,6 +66,7 @@ export function useVirtualRowWindow({
   collapsedIds,
   detailOverrides,
   detailed,
+  expandedTagIds,
   suppressAnchoringRef,
 }) {
   const {
@@ -124,6 +126,7 @@ export function useVirtualRowWindow({
         collapsedIds,
         detailOverrides,
         defaultDetailed: detailed,
+        expandedTagIds,
         currentMeasuredHeights,
         nextMeasuredHeights,
         viewportTop: Math.max(0, viewport.scrollY - containerTop),
@@ -147,6 +150,7 @@ export function useVirtualRowWindow({
     containerTop,
     detailOverrides,
     detailed,
+    expandedTagIds,
     heightFlushFrameRef,
     index.rowsById,
     measuredHeightsRef,

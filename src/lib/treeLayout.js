@@ -27,9 +27,13 @@ export function buildVirtualRowStyle(top, { trimTopGuide = false, trimBottomGuid
   });
 }
 
-export function getRowMeasurementKey(rowId, { collapsed, detailsVisible }) {
-  return `${rowId}:${collapsed ? '1' : '0'}:${detailsVisible ? '1' : '0'}`;
+// A row's measured height depends on what it shows: open or collapsed, its details, and all its
+// tags or only the first few (`tagsExpanded`).
+export function getRowMeasurementKey(rowId, { collapsed, detailsVisible, tagsExpanded = false }) {
+  return `${rowId}:${collapsed ? '1' : '0'}:${detailsVisible ? '1' : '0'}:${tagsExpanded ? '1' : '0'}`;
 }
+
+const NO_ROW_IDS = new Set();
 
 export function buildVirtualRowLayout({
   rowIds,
@@ -38,6 +42,7 @@ export function buildVirtualRowLayout({
   detailOverrides,
   defaultDetailed,
   measuredHeights,
+  expandedTagIds = NO_ROW_IDS,
 }) {
   if (!rowIds.length) {
     return {
@@ -61,7 +66,7 @@ export function buildVirtualRowLayout({
     const collapsed = collapsedIds.has(rowId);
     const detailsVisible = detailOverrides.get(rowId) ?? defaultDetailed;
     const measuredHeight = measuredHeights.get(
-      getRowMeasurementKey(rowId, { collapsed, detailsVisible }),
+      getRowMeasurementKey(rowId, { collapsed, detailsVisible, tagsExpanded: expandedTagIds.has(rowId) }),
     );
     const rowHeight =
       measuredHeight ?? estimateRowHeight(row, { collapsed, detailsVisible });
@@ -198,6 +203,7 @@ export function getMeasurementScrollDelta({
   collapsedIds,
   detailOverrides,
   defaultDetailed,
+  expandedTagIds = NO_ROW_IDS,
   currentMeasuredHeights,
   nextMeasuredHeights,
   viewportTop,
@@ -207,7 +213,7 @@ export function getMeasurementScrollDelta({
   }
 
   const layoutFor = (measuredHeights) =>
-    buildVirtualRowLayout({ rowIds, rowsById, collapsedIds, detailOverrides, defaultDetailed, measuredHeights });
+    buildVirtualRowLayout({ rowIds, rowsById, collapsedIds, detailOverrides, defaultDetailed, measuredHeights, expandedTagIds });
   return getViewportAnchorOffsetDelta({
     currentLayout: layoutFor(currentMeasuredHeights),
     nextLayout: layoutFor(nextMeasuredHeights),

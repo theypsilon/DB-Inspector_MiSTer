@@ -112,15 +112,31 @@ button, summary, a, label, [role='button'] { touch-action: manipulation; }
   backdrop-filter: blur(18px);
 }
 
-.hero { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.9fr); gap: 1rem; overflow: hidden; }
-.hero::after { content: ''; position: absolute; right: -6rem; top: -6rem; width: 18rem; height: 18rem; border-radius: 999px; background: radial-gradient(circle, rgba(15, 111, 145, 0.18), transparent 68%); }
+.hero { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.9fr); gap: 1rem; overflow: hidden; transition: padding 350ms ease, margin-bottom 350ms ease, row-gap 350ms ease, background-color 350ms ease, border-color 350ms ease, box-shadow 350ms ease, backdrop-filter 350ms ease; }
+.hero::after { content: ''; position: absolute; right: -6rem; top: -6rem; width: 18rem; height: 18rem; border-radius: 999px; background: radial-gradient(circle, rgba(15, 111, 145, 0.18), transparent 68%); transition: opacity 350ms ease; }
 .hero h1, .section-heading h2, .overview-header h2, .panel h2, .tree-card h3, .metadata-card h3 { margin: 0; letter-spacing: -0.03em; }
-.hero h1 { font-size: clamp(2.2rem, 5vw, 4.2rem); font-weight: 700; line-height: 1.05; max-width: 16ch; }
+.hero h1 { font-size: clamp(2.2rem, 5vw, 4.2rem); font-weight: 700; line-height: 1.05; max-width: 16ch; transition: font-size 350ms ease, line-height 350ms ease, max-width 350ms ease; }
+/* The label row keeps the label's height, the repository link beside it. */
+.hero-meta { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.35rem; }
+.hero-meta .eyebrow { margin: 0; }
+.hero-meta .github-repo-link { margin-top: 0; line-height: 1.2; white-space: nowrap; }
 .hero-copy { margin-top: 1rem; }
-/* With a database loaded, the hero is its title and the spec link. */
-.hero.hero-compact { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 0.5rem 1.5rem; }
-.hero-compact h1 { font-size: 1.75rem; line-height: 1.15; max-width: none; }
-.hero-compact > a { font-size: 0.92rem; }
+.hero-aside { align-self: end; }
+/* What folds away from the hero: its height and opacity animate. */
+.hero-fold { display: grid; grid-template-rows: 1fr; transition: grid-template-rows 350ms ease, opacity 250ms ease; }
+.hero-fold > div { min-height: 0; overflow: hidden; }
+/* With a database loaded or being loaded, the hero is just its title, outside the frames. */
+.hero.hero-compact { padding-block: 0; margin-bottom: 0.75rem; row-gap: 0; background-color: transparent; border-color: transparent; box-shadow: 0 22px 60px rgba(22, 33, 47, 0); backdrop-filter: blur(0); }
+.hero-compact::after { opacity: 0; }
+.hero-compact h1 { font-size: 1.6rem; line-height: 1.2; max-width: 30ch; }
+.hero-compact .hero-fold { grid-template-rows: 0fr; opacity: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .hero, .hero::after, .hero h1, .hero-fold { transition: none; }
+}
+/* Too narrow for both on one line: the repository link is its icon, named by its tooltip. */
+@media (max-width: 560px) {
+  .hero-meta .github-repo-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
 .section-heading h2, .overview-header h2, .panel h2 { font-size: 1.5rem; font-weight: 700; line-height: 1.2; }
 .modal-title-row h2 { font-size: 1.5rem; font-weight: 700; line-height: 1.2; letter-spacing: -0.03em; overflow-wrap: anywhere; }
 .tree-card h3, .metadata-card h3 { font-size: 1.17rem; font-weight: 700; line-height: 1.2; }
@@ -132,7 +148,7 @@ button, summary, a, label, [role='button'] { touch-action: manipulation; }
 .hero-copy, .helper-copy, .empty-screen p, .hero-note p { color: var(--muted); line-height: 1.55; }
 .clickable-code { cursor: pointer; }
 .clickable-code:hover { text-decoration: underline; }
-.hero-note { align-self: end; display: grid; gap: 0.6rem; justify-items: start; padding: 1rem; border-radius: var(--radius-md); background: linear-gradient(135deg, rgba(15, 111, 145, 0.1), rgba(30, 71, 117, 0.08)); border: 1px solid rgba(15, 111, 145, 0.16); }
+.hero-note { display: grid; gap: 0.6rem; justify-items: start; padding: 1rem; border-radius: var(--radius-md); background: linear-gradient(135deg, rgba(15, 111, 145, 0.1), rgba(30, 71, 117, 0.08)); border: 1px solid rgba(15, 111, 145, 0.16); }
 
 .loader-grid, .overview-grid { display: grid; gap: 1rem; }
 .loader-grid { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); align-items: stretch; }
@@ -444,6 +460,8 @@ fieldset.mister-option legend { float: left; width: 100%; padding: 0; }
 .tag-chip-list { display: flex; flex-wrap: wrap; gap: 0.45rem; }
 .mini-chip { display: inline-flex; padding: 0.35rem 0.55rem; border-radius: 999px; }
 .tag-chip { position: relative; display: inline-flex; padding: 0.35rem 0.55rem; border-radius: 999px; background: rgba(15, 111, 145, 0.08); }
+.tag-chip-toggle { display: inline-flex; align-items: center; padding: 0.35rem 0.6rem; border-radius: 999px; font-family: 'IBM Plex Mono', monospace; font-size: 0.82rem; font-weight: 700; color: var(--accent-strong); background: rgba(15, 111, 145, 0.16); }
+.tag-chip-toggle:hover { background: rgba(15, 111, 145, 0.26); filter: none; }
 .chip-tooltip { display: none; position: absolute; left: 50%; bottom: calc(100% + 0.45rem); transform: translateX(-50%); padding: 0.45rem 0.6rem; border-radius: 10px; background: rgba(22, 33, 47, 0.96); color: #fff; white-space: nowrap; font-size: 0.76rem; cursor: text; user-select: text; box-shadow: 0 10px 24px rgba(22, 33, 47, 0.24); z-index: 100; }
 .chip-tooltip::after { content: ''; position: absolute; left: -2rem; right: -2rem; top: 100%; height: 1rem; }
 .tag-chip.has-tooltip:hover > .chip-tooltip, .chip-tooltip:hover, .chip-tooltip[data-selecting] { display: block; }

@@ -1084,6 +1084,8 @@ async function inspectDatabase(rawDatabase, source) {
     ),
   );
 
+  sortTagsByRareness([...filesystemRecords, ...archiveViews.flatMap((archive) => archive.summaryRecords)]);
+
   const missingFolders = findMissingParentFolders(files, folders);
   for (const missingPath of missingFolders) {
     addIssue(
@@ -1519,6 +1521,25 @@ function buildArchiveFileRecord({
   };
 }
 
+// Puts each entry's tags in order of how rarely the database uses them, rarest first, so the tags
+// that tell entries apart come first; tags used as often keep their order. The counts cover the
+// whole database (its files, folders and archive entries), so filters do not change the order.
+// Trees and filtered views share these lists, so they all follow it.
+function sortTagsByRareness(records) {
+  const tagLists = records
+    .map((record) => record.primaryFields.find((field) => field.kind === 'tags')?.value)
+    .filter(Array.isArray);
+  const uses = new Map();
+  for (const tags of tagLists) {
+    for (const tag of tags) {
+      uses.set(tag.key, (uses.get(tag.key) ?? 0) + 1);
+    }
+  }
+  for (const tags of tagLists) {
+    tags.sort((left, right) => uses.get(left.key) - uses.get(right.key));
+  }
+}
+
 function buildPrimaryFields(tags) {
   const fields = [];
 
@@ -1735,11 +1756,16 @@ function buildTagEntries(rawTags, tagLookup) {
     return [];
   }
 
+  // `names` are the tag's names in the dictionary (several when it has aliases); `label` all of them.
+  // `key` is the tag itself, however the entry names it: its dictionary number, else its name.
   return rawTags.map((tag, index) => {
     if (typeof tag === 'number') {
+      const names = tagLookup.byIndex.get(tag) || [`#${tag}`];
       return {
         id: `tag:${index}:${tag}`,
-        label: (tagLookup.byIndex.get(tag) || [`#${tag}`]).join(' / '),
+        key: `index:${tag}`,
+        label: names.join(' / '),
+        names,
         rawLabel: String(tag),
       };
     }
@@ -1749,7 +1775,9 @@ function buildTagEntries(rawTags, tagLookup) {
 
     return {
       id: `tag:${index}:${label}`,
+      key: dictionaryIndex == null ? `name:${normalizeTagName(label)}` : `index:${dictionaryIndex}`,
       label,
+      names: [label],
       rawLabel: dictionaryIndex == null ? null : String(dictionaryIndex),
     };
   });

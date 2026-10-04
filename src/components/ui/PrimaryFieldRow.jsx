@@ -1,6 +1,12 @@
 import FieldValue from './FieldValue.jsx';
+import TagList from './TagList.jsx';
 
-function PrimaryFieldRow({ fields }) {
+/**
+ * A row's primary fields: its tags, and pills for the rest. `tagView` is how its tags show (see
+ * TagList).
+ * @param {{ fields: any[], tagView?: 'compact' | 'expanded' | 'all', onToggleTags?: () => void }} props
+ */
+function PrimaryFieldRow({ fields, tagView = 'all', onToggleTags }) {
   if (!fields.length) {
     return null;
   }
@@ -10,7 +16,7 @@ function PrimaryFieldRow({ fields }) {
       {fields.map((field, index) =>
         field.kind === 'tags' ? (
           <div key={`${field.label}:${index}`} className="primary-tags">
-            <FieldValue field={field} />
+            <TagList tags={field.value} view={tagView} onToggle={onToggleTags} />
           </div>
         ) : (
           <div key={`${field.label}:${index}`} className="primary-pill">

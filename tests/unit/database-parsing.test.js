@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { loadDatabaseSourceFile } from '../../src/lib/database.js';
+import { applyInspectionFilter, loadDatabaseSourceFile } from '../../src/lib/database.js';
 
 // Reading database sources: JSON databases and INI lists, and the issues their inspection reports.
 
@@ -222,4 +222,45 @@ test('INI with no [mister] section still parses entries and has empty defaultFil
   // Individual entries should also have empty defaultFilter.
   assert.equal(result.entries[0].defaultFilter, '');
   assert.equal(result.entries[1].defaultFilter, '');
+});
+
+// The first names of an entry's tags, in the order its row shows them.
+function tagOrder(records, path) {
+  const record = records.find((candidate) => candidate.path === path);
+  return record.primaryFields.find((field) => field.kind === 'tags').value.map((tag) => tag.names[0]);
+}
+
+test('entries list their tags rarest in the database first, counting files, folders and archive entries', async () => {
+  const db = makeMinimalDb({
+    tag_dictionary: { common: 0, folderish: 1, rare: 2, also_rare: 3, single: 4, zeta: 5, alpha: 6 },
+    folders: { games: { tags: [1] } },
+    files: {
+      'games/a.rbf': { hash: 'a', size: 1, tags: [1, 2] },
+      'games/b.rbf': { hash: 'b', size: 1, tags: [3, 4] },
+      'games/d.rbf': { hash: 'd', size: 1, tags: [5, 6] },
+    },
+    archives: {
+      pack: {
+        format: 'zip',
+        extract: 'selective',
+        target_folder: 'games/',
+        archive_file: { url: 'https://example.com/pack.zip', hash: 'p', size: 1 },
+        summary_inline: { files: { 'games/c.bin': { arc_id: 'pack', arc_at: 'c.bin', hash: 'c', size: 1, tags: [3, 0] } }, folders: {} },
+      },
+    },
+  });
+
+  const { inspection } = await loadDatabaseSourceFile(makeJsonFile(db));
+  const files = inspection.filesystemRecords;
+  // The folder uses folderish too, so rare comes first.
+  assert.deepEqual(tagOrder(files, 'games/a.rbf'), ['rare', 'folderish']);
+  // The archive entry uses also_rare too, so single comes first.
+  assert.deepEqual(tagOrder(files, 'games/b.rbf'), ['single', 'also_rare']);
+  // Tags used as often keep the database's order.
+  assert.deepEqual(tagOrder(files, 'games/d.rbf'), ['zeta', 'alpha']);
+  assert.deepEqual(tagOrder(inspection.archiveViews[0].summaryRecords, 'games/c.bin'), ['common', 'also_rare']);
+
+  // A filter shows fewer entries, but the order stays the database's.
+  const filtered = applyInspectionFilter(inspection, 'single');
+  assert.deepEqual(tagOrder(filtered.filesystemRecords, 'games/b.rbf'), ['single', 'also_rare']);
 });

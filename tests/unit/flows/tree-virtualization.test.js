@@ -26,6 +26,7 @@ function treeSection(index) {
     index,
     collapsedIds: new Set(),
     detailOverrides: new Map(),
+    expandedTagIds: new Set(),
     measuredHeights: new Map(),
     get visibleRowIds() {
       return collectVisibleRowIds(index.rootIds, index.rowsById, this.collapsedIds);
@@ -38,6 +39,7 @@ function treeSection(index) {
         detailOverrides: this.detailOverrides,
         defaultDetailed: false,
         measuredHeights: this.measuredHeights,
+        expandedTagIds: this.expandedTagIds,
       });
     },
     rendered(containerTop, scrollY) {
@@ -48,9 +50,13 @@ function treeSection(index) {
     detailsVisible(rowId) {
       return this.detailOverrides.get(rowId) ?? false;
     },
-    // A row reports its height after it renders, under its collapsed and details state.
+    // A row reports its height after it renders, under its collapsed, details and tags state.
     measure(rowId, height) {
-      const key = getRowMeasurementKey(rowId, { collapsed: this.collapsedIds.has(rowId), detailsVisible: this.detailsVisible(rowId) });
+      const key = getRowMeasurementKey(rowId, {
+        collapsed: this.collapsedIds.has(rowId),
+        detailsVisible: this.detailsVisible(rowId),
+        tagsExpanded: this.expandedTagIds.has(rowId),
+      });
       this.measuredHeights = mergeMeasuredHeights(this.measuredHeights, [[key, height]]);
     },
     // The space between a row and the next one.
@@ -124,6 +130,32 @@ test('virtualized filesystem and archive trees still behave correctly', async ()
 
   const nearArchivesBottom = archivesTopWithoutFiles + archives.layout.totalHeight - VIEWPORT_HEIGHT * 0.75;
   assert.ok(archives.rendered(archivesTopWithoutFiles, nearArchivesBottom).includes(`rom_${pad(ARCHIVE_COUNT - 1)}.bin`));
+});
+
+test('a row showing all its tags keeps the list spacing, and the height measured with them is used again', async () => {
+  app = await openApp('/');
+  const tagged = buildLargeDatabase();
+  tagged.tag_dictionary = Object.fromEntries(Array.from({ length: 11 }, (_, index) => [`tag_${index}`, index]));
+  tagged.files['games/TEST/file_000.rbf'].tags = Array.from({ length: 11 }, (_, index) => index);
+  await app.upload(file('virtualization-tags.json', tagged));
+
+  const files = treeSection(app.view.filesystemIndex);
+  const row = [...files.index.rowsById.values()].find((candidate) => candidate.node.name === 'file_000.rbf');
+  files.measure(row.id, 151);
+  assert.equal(files.gapAfter(row.id, 151), 13);
+
+  // Its first tags and all of them have their own heights: each is measured once, then used again.
+  for (const [expanded, height, measuresAgain] of [
+    [true, 189, true],
+    [false, 151, false],
+    [true, 189, false],
+  ]) {
+    files.expandedTagIds = expanded ? new Set([row.id]) : new Set();
+    if (measuresAgain) {
+      files.measure(row.id, height);
+    }
+    assert.equal(files.gapAfter(row.id, height), 13);
+  }
 });
 
 function buildLargeDatabase() {

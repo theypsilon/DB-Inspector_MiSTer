@@ -9,11 +9,12 @@ import {
   toggleSetMembership,
 } from '../../lib/treeIndex.js';
 
-// Which rows are collapsed or show details, the rows that are visible as a result, and the
-// handlers that change them.
+// Which rows are collapsed, show details or show all their tags, the rows that are visible as a
+// result, and the handlers that change them.
 export default function useTreeRowState(index, detailed) {
   const [collapsedIds, setCollapsedIds] = useState(() => new Set());
   const [detailOverrides, setDetailOverrides] = useState(() => new Map());
+  const [expandedTagIds, setExpandedTagIds] = useState(() => new Set());
   const visibleRowIds = useMemo(
     () => collectVisibleRowIds(index.rootIds, index.rowsById, collapsedIds),
     [index, collapsedIds],
@@ -34,6 +35,12 @@ export default function useTreeRowState(index, detailed) {
   const handleToggleCollapsed = useCallback((rowId) => {
     flushSync(() => {
       setCollapsedIds((current) => toggleSetMembership(current, rowId));
+    });
+  }, []);
+
+  const handleToggleTags = useCallback((rowId) => {
+    flushSync(() => {
+      setExpandedTagIds((current) => toggleSetMembership(current, rowId));
     });
   }, []);
 
@@ -67,11 +74,13 @@ export default function useTreeRowState(index, detailed) {
     collapsedIds,
     setCollapsedIds,
     detailOverrides,
+    expandedTagIds,
     visibleRowIds,
     handleExpandAll,
     handleCollapseAll,
     handleToggleCollapsed,
     handleToggleDetails,
+    handleToggleTags,
     handleSetRowState,
   };
 }

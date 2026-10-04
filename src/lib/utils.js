@@ -135,6 +135,15 @@ export function tagPillId(tag, dbId = null) {
   return dbId ? `tagdict-${dbId}-${tag.name}-${tag.index}` : `tagdict-${tag.name}-${tag.index}`;
 }
 
+// How many tags a tree row shows before "+N"; a row with just one more shows them all.
+export const TAGS_SHOWN = 4;
+
+export function compactTagList(tags) {
+  return tags.length > TAGS_SHOWN + 1
+    ? { shown: tags.slice(0, TAGS_SHOWN), hiddenCount: tags.length - TAGS_SHOWN }
+    : { shown: tags, hiddenCount: 0 };
+}
+
 export function buildCombinedFilterSummaryCopy({ resultCounts, isFiltering, databases }) {
   const { files, folders, archives } = resultCounts;
   if (isFiltering) {

@@ -267,21 +267,54 @@ describe('the page and the app model', () => {
     await waitFor(() => expect(scrolledTo).toContain('row-archive[alpha]:cheats'));
   });
 
-  test('once a database is loaded, the top of the page shrinks to its title and the spec link', async () => {
+  test('a row’s other tags show on request, and for a find-in-page match in one of them', async () => {
+    const url = 'https://example.com/tags.json';
+    const tag_dictionary = Object.fromEntries(['arcade', 'mra', 'console', 'retro', 'alpha', 'beta', 'hidden_gem'].map((name, index) => [name, index]));
+    const files = { 'cores/many.rbf': { size: 1, hash: 'm', tags: [0, 1, 2, 3, 4, 5, 6] } };
+    const user = openPage(`/#db=${url}`, { [url]: { body: database('tags_db', { tag_dictionary, files }) } });
+    expect(await screen.findByRole('heading', { name: 'tags_db' })).toBeTruthy();
+    const row = () => document.querySelector('[id="row-database:file:cores/many.rbf"]');
+    const chips = () => [...row().querySelectorAll('.tag-chip')].map((chip) => chip.firstChild.textContent);
+    await waitFor(() => expect(row()).not.toBeNull());
+    expect(chips()).toEqual(['arcade', 'mra', 'console', 'retro']);
+
+    await user.click(within(row()).getByRole('button', { name: '+3 more tags' }));
+    expect(chips()).toHaveLength(7);
+    await user.click(within(row()).getByRole('button', { name: 'Show fewer' }));
+    expect(chips()).toHaveLength(4);
+
+    await user.click(screen.getByRole('button', { name: /to search/ }));
+    await user.type(screen.getByLabelText('Search text'), 'hidden_gem');
+    await waitFor(() => expect(chips()).toContain('hidden_gem'));
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(chips()).toHaveLength(4));
+  });
+
+  test('the top of the page shows the project’s repository, and folds to its title once a database is loaded', async () => {
     const url = 'https://example.com/hero.json';
     const user = openPage('/', { [url]: { body: database('hero_db') } });
-    expect(screen.getByText('About MiSTer Downloader')).toBeTruthy();
-    expect(document.querySelector('.hero-copy')).not.toBeNull();
+    const hero = document.querySelector('.hero');
+    expect(hero.classList.contains('hero-compact')).toBe(false);
+    expect(hero.querySelectorAll('.hero-fold[inert]')).toHaveLength(0);
+    expect(within(hero).getByRole('link', { name: 'theypsilon/DB-Inspector_MiSTer' }).getAttribute('href')).toBe(
+      'https://github.com/theypsilon/DB-Inspector_MiSTer',
+    );
+    expect(within(hero).getByText('About MiSTer Downloader')).toBeTruthy();
 
     await user.type(screen.getByLabelText('URL'), url);
     await user.click(screen.getByRole('button', { name: 'Fetch database' }));
     expect(await screen.findByRole('heading', { name: 'hero_db' })).toBeTruthy();
-    expect(screen.queryByText('About MiSTer Downloader')).toBeNull();
-    expect(document.querySelector('.hero-copy')).toBeNull();
-    expect(screen.getByRole('heading', { level: 1, name: 'Custom Database Inspector' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Read the custom database spec' }).getAttribute('href')).toBe(
-      'https://github.com/MiSTer-devel/Downloader_MiSTer/blob/main/docs/custom-databases.md',
-    );
+    expect(hero.classList.contains('hero-compact')).toBe(true);
+    // Everything but the title folds away, and cannot be reached.
+    expect(hero.querySelectorAll('.hero-fold[inert]')).toHaveLength(3);
+    expect(screen.getByRole('heading', { level: 1, name: 'Custom Database Inspector' }).closest('.hero-fold')).toBeNull();
+  });
+
+  test('a link that names a database opens with the top of the page folded', async () => {
+    const url = 'https://example.com/folded.json';
+    openPage(`/#db=${url}`, { [url]: { body: database('folded_db') } });
+    expect(document.querySelector('.hero').classList.contains('hero-compact')).toBe(true);
+    expect(await screen.findByRole('heading', { name: 'folded_db' })).toBeTruthy();
   });
 
   test('an old link opens its database, and the address becomes its link', async () => {

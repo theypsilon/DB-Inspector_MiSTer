@@ -38,6 +38,7 @@ import ArchiveSummariesSection from './components/tree/ArchiveSummariesSection.j
 import TagDictionary from './components/TagDictionary.jsx';
 import FindBar from './components/FindBar.jsx';
 import SourceLoaders from './components/SourceLoaders.jsx';
+import Hero from './components/Hero.jsx';
 import ChoicePanel from './components/ChoicePanel.jsx';
 import ErrorPanel from './components/ErrorPanel.jsx';
 import DatabaseOverview from './components/DatabaseOverview.jsx';
@@ -297,55 +298,13 @@ export default function App() {
     if (!globalSearch.open) globalSearch.openSearch();
   }
 
-  // Once a database is loaded, the hero shrinks to its title and the spec link, so the database
-  // starts higher on the page.
-  const heroCompact = databases.length > 0;
-  const specLink = (
-    <a
-      href="https://github.com/MiSTer-devel/Downloader_MiSTer/blob/main/docs/custom-databases.md"
-      target="_blank"
-      rel="noreferrer"
-    >
-      Read the custom database spec
-    </a>
-  );
+  // Once a database is loaded or being loaded (from a link, or chosen from a list or uploads), the
+  // hero is just its title, so the database starts higher on the page.
+  const heroCompact = databases.length > 0 || Boolean(loadingMessage) || Boolean(choice) || readLink().databases.length > 0;
 
   return (
     <main className="app-shell">
-      <section className={heroCompact ? 'hero hero-compact panel' : 'hero panel'}>
-        <div>
-          <p className="eyebrow">Downloader Databases</p>
-          <h1>Custom Database Inspector</h1>
-          {heroCompact ? null : (
-            <p className="hero-copy">
-              Open a Downloader database from your computer or from a web link. Review its details,
-              browse folders and files, filter its content, inspect archives, and spot warnings in
-              one place.
-            </p>
-          )}
-        </div>
-        {heroCompact ? (
-          specLink
-        ) : (
-          <div className="hero-note">
-            <strong>About MiSTer Downloader</strong>
-            <p>
-              MiSTer Downloader is the updater used on{' '}
-              <a
-                href="https://github.com/MiSTer-devel/Main_MiSTer/wiki"
-                target="_blank"
-                rel="noreferrer"
-              >
-                MiSTer FPGA
-              </a>{' '}
-              to install and refresh cores, content, and support files from database definitions.
-              This inspector helps you review those custom database files in the browser before using
-              them.
-            </p>
-            {specLink}
-          </div>
-        )}
-      </section>
+      <Hero compact={heroCompact} />
 
       <SourceLoaders
         dropzone={dropzone}

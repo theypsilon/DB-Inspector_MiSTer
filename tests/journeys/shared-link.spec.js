@@ -54,8 +54,10 @@ test('a shared link opens its database, and the page around it works', async ({ 
   await test.step('an old link opens its database as its #db= link, with its default FILTER and a link to its repository', async () => {
     await expect(heading('shared_db')).toBeVisible();
     expect(new URL(page.url()).search).toBe('');
-    await expect(page.locator('.github-repo-link')).toHaveText('example-owner/example-repo');
-    await expect(page.locator('.github-repo-link')).toHaveAttribute('href', 'https://github.com/example-owner/example-repo');
+    // The database's repository, in its overview (the top of the page links to this project's).
+    const repoLink = page.locator('#section-database .github-repo-link');
+    await expect(repoLink).toHaveText('example-owner/example-repo');
+    await expect(repoLink).toHaveAttribute('href', 'https://github.com/example-owner/example-repo');
     await expect(filter).toHaveValue('arcade');
     await expect(heading('arcade.rbf')).toBeVisible();
     await expect(heading('console.rbf')).toHaveCount(0);

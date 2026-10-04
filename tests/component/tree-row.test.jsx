@@ -18,8 +18,31 @@ const DOWNLOADS = {
   folders: {},
 };
 
+// Files with eleven, six, five and three tags; some tags have a second name in the dictionary.
+const TAGGED = {
+  db_id: 'tagged',
+  v: 1,
+  timestamp: 1710000000,
+  tag_dictionary: {
+    screenrotationverticalcw: 0, screentatecw: 0, screenrotationflip: 1, arcade: 2, arcadecores: 2, mra: 3,
+    controls2buttons: 4, controls2players: 5, controlsmove8way: 6, scanrate15khz: 7, arcadejtcps2: 8, alternatives: 9, extra: 10,
+  },
+  files: {
+    'eleven.mra': { size: 1, hash: 'a', tags: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] },
+    'six.mra': { size: 1, hash: 'b', tags: [2, 3, 4, 5, 6, 7] },
+    'five.mra': { size: 1, hash: 'c', tags: [2, 3, 4, 5, 6] },
+    'three.mra': { size: 1, hash: 'd', tags: [0, 2, 3] },
+  },
+  folders: {},
+};
+
+// The text of each tag chip, without its tooltip.
+function chipNames(element) {
+  return [...element.querySelectorAll('.tag-chip')].map((chip) => chip.firstChild.textContent);
+}
+
 function renderRow(row, props = {}) {
-  const handlers = { onToggleCollapsed: vi.fn(), onToggleDetails: vi.fn(), onSetRowState: vi.fn(), onAnchorRow: vi.fn() };
+  const handlers = { onToggleCollapsed: vi.fn(), onToggleDetails: vi.fn(), onToggleTags: vi.fn(), onSetRowState: vi.fn(), onAnchorRow: vi.fn() };
   const { container, unmount } = render(
     <TreeEntryRow row={row} collapsed={false} detailsVisible={false} highlighted={false} {...handlers} {...props} />,
   );
@@ -106,6 +129,50 @@ describe('a tree row', () => {
     const { row } = await filesystemRows(DOWNLOADS);
     const { element } = renderRow({ ...row('core.rbf'), node: { ...row('core.rbf').node, dbId: 'alpha' } });
     expect(text(element.querySelector('.db-chip'))).toBe('alpha');
+  });
+
+  test('a row shows its four rarest tags, one name each, and how many more it has', async () => {
+    const { row } = await filesystemRows(TAGGED);
+    const { element, user, onToggleTags, unmount } = renderRow(row('eleven.mra'));
+    // The tags only this file has come first, in the database's order.
+    expect(chipNames(element)).toEqual(['screenrotationflip', 'arcadejtcps2', 'alternatives', 'extra']);
+    await user.click(within(element).getByRole('button', { name: '+7 more tags' }));
+    expect(onToggleTags).toHaveBeenCalledWith(row('eleven.mra').id);
+    unmount();
+
+    // A tag's other names are in its tooltip.
+    const three = renderRow(row('three.mra'));
+    expect(chipNames(three.element)).toEqual(['screenrotationverticalcw', 'arcade', 'mra']);
+    expect(text(three.element.querySelectorAll('.tag-chip')[1].querySelector('.chip-tooltip'))).toBe('Tag 2: arcade / arcadecores');
+    three.unmount();
+
+    // One more tag than four is shown rather than counted.
+    for (const [name, count, more] of [['six.mra', 4, '+2 more tags'], ['five.mra', 5, null], ['three.mra', 3, null]]) {
+      const shown = renderRow(row(name));
+      expect(chipNames(shown.element)).toHaveLength(count);
+      expect(within(shown.element).queryByRole('button', { name: /more tags/ })?.getAttribute('aria-label') ?? null).toBe(more);
+      shown.unmount();
+    }
+  });
+
+  test('all its tags show, with their other names, when asked for, with details, or for a find-in-page match', async () => {
+    const { row } = await filesystemRows(TAGGED);
+    // Rarest first: used by this file only, then by two, three and four files.
+    const all = ['screenrotationflip', 'arcadejtcps2', 'alternatives', 'extra', 'screenrotationverticalcw / screentatecw', 'scanrate15khz',
+      'controls2buttons', 'controls2players', 'controlsmove8way', 'arcade / arcadecores', 'mra'];
+
+    const expanded = renderRow(row('eleven.mra'), { tagsExpanded: true });
+    expect(chipNames(expanded.element)).toEqual(all);
+    await expanded.user.click(within(expanded.element).getByRole('button', { name: 'Show fewer' }));
+    expect(expanded.onToggleTags).toHaveBeenCalledWith(row('eleven.mra').id);
+    expanded.unmount();
+
+    for (const props of [{ detailsVisible: true }, { tagsRevealed: true }, { detailsVisible: true, tagsExpanded: true }]) {
+      const { element, unmount } = renderRow(row('eleven.mra'), props);
+      expect(chipNames(element)).toEqual(all);
+      expect(within(element).queryByRole('button', { name: /more tags|Show fewer/ })).toBeNull();
+      unmount();
+    }
   });
 
   test('a highlighted row says so', async () => {

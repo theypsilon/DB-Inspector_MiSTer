@@ -161,7 +161,7 @@ test.describe('remote loading', () => {
     await page.goto(`/#db=${githubUrl}`);
 
     await expect(page.getByRole('heading', { name: 'github_db' })).toBeVisible();
-    const repoLink = page.locator('.github-repo-link');
+    const repoLink = page.locator('#section-database .github-repo-link');
     await expect(repoLink).toHaveText('example-owner/example-repo');
     await expect(repoLink).toHaveAttribute('href', 'https://github.com/example-owner/example-repo');
   });

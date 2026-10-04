@@ -1,4 +1,4 @@
-import { memo, useEffect } from 'react';
+import { memo, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import CollapsibleSection from '../ui/CollapsibleSection.jsx';
 import SectionControls from '../ui/SectionControls.jsx';
@@ -46,12 +46,22 @@ const TreeSection = memo(/** @param {TreeSectionProps} props */ function TreeSec
   onDownloadError,
 }) {
   const rows = useTreeRowState(index, detailed);
+  // The find-in-page match in a row's tags shows all of them, so a match in a hidden tag shows.
+  const revealedTagRowId = searchMatch?.matchPart === 'tags' ? searchMatch.rowId : null;
+  const expandedTagIds = useMemo(
+    () =>
+      revealedTagRowId && !rows.expandedTagIds.has(revealedTagRowId)
+        ? new Set([...rows.expandedTagIds, revealedTagRowId])
+        : rows.expandedTagIds,
+    [rows.expandedTagIds, revealedTagRowId],
+  );
   const layout = useMeasuredRowLayout({
     index,
     visibleRowIds: rows.visibleRowIds,
     collapsedIds: rows.collapsedIds,
     detailOverrides: rows.detailOverrides,
     detailed,
+    expandedTagIds,
   });
   const navigation = useTreeNavigation({
     index,
@@ -70,6 +80,7 @@ const TreeSection = memo(/** @param {TreeSectionProps} props */ function TreeSec
     collapsedIds: rows.collapsedIds,
     detailOverrides: rows.detailOverrides,
     detailed,
+    expandedTagIds,
     suppressAnchoringRef: navigation.suppressAnchoringRef,
   });
   const { containerRef } = layout;
@@ -157,9 +168,12 @@ const TreeSection = memo(/** @param {TreeSectionProps} props */ function TreeSec
                 row={row}
                 collapsed={rows.collapsedIds.has(row.id)}
                 detailsVisible={rows.detailOverrides.get(row.id) ?? detailed}
+                tagsExpanded={rows.expandedTagIds.has(row.id)}
+                tagsRevealed={row.id === revealedTagRowId}
                 highlighted={row.id === navigation.highlightedRowId}
                 onToggleCollapsed={rows.handleToggleCollapsed}
                 onToggleDetails={rows.handleToggleDetails}
+                onToggleTags={rows.handleToggleTags}
                 onSetRowState={rows.handleSetRowState}
                 onAnchorRow={navigation.handleAnchorRow}
                 onDownloadError={onDownloadError}
