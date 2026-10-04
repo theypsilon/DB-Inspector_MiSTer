@@ -3,6 +3,7 @@ import MetadataCard from './ui/MetadataCard.jsx';
 import DetailedToggle from './ui/DetailedToggle.jsx';
 import SectionAnchor from './ui/SectionAnchor.jsx';
 import GitHubRepoLink from './ui/GitHubRepoLink.jsx';
+import { readThroughFields } from '../lib/utils.js';
 
 // The loaded database: its identity, source, counts and options, with the Detailed toggle and
 // the Install button.
@@ -55,6 +56,7 @@ function DatabaseOverview({ inspection, detailed, onDetailedChange, onInstall })
           title="Source"
           fields={[
             { label: 'Loaded from', value: inspection.source.sourceLabel, kind: 'url' },
+            ...readThroughFields(inspection.source),
             {
               label: 'Container',
               value:

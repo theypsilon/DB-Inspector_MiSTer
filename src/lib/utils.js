@@ -152,3 +152,11 @@ export function buildCombinedFilterSummaryCopy({ resultCounts, isFiltering, data
 
   return `Showing all ${databases.length} databases: ${files} files, ${folders} folders, ${archives} archives.`;
 }
+
+// The line a source read through the release mirror adds to its details, or nothing.
+/** @param {{ readThrough?: string | null } | null | undefined} source */
+export function readThroughFields(source) {
+  return source?.readThrough
+    ? [{ label: 'Read through', value: `${source.readThrough}, since GitHub does not let websites read release downloads` }]
+    : [];
+}

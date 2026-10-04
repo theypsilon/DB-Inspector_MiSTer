@@ -53,6 +53,18 @@ describe('the database overview', () => {
     expect(onInstall).toHaveBeenCalledTimes(1);
   });
 
+  test('a release download read through gh-proxy.com says so under where it was loaded from', async () => {
+    const read = await fromUrl(database('released_db'), 'https://github.com/owner/repo/releases/download/v1.0.0/db.json');
+    const proxied = { ...read, source: { ...read.source, readThrough: 'gh-proxy.com' } };
+    const { unmount } = render(<DatabaseOverview inspection={proxied} detailed={false} onDetailedChange={() => {}} onInstall={() => {}} />);
+    expect(screen.getByText('Read through')).toBeTruthy();
+    expect(screen.getByText('gh-proxy.com, since GitHub does not let websites read release downloads')).toBeTruthy();
+    unmount();
+
+    render(<DatabaseOverview inspection={read} detailed={false} onDetailedChange={() => {}} onInstall={() => {}} />);
+    expect(screen.queryByText('Read through')).toBeNull();
+  });
+
   test('uploaded databases have no Install button', async () => {
     render(<DatabaseOverview inspection={await inspect(database('mine'))} detailed={false} onDetailedChange={() => {}} onInstall={() => {}} />);
     expect(screen.queryByRole('button', { name: 'Install' })).toBeNull();
@@ -134,6 +146,15 @@ describe('combined databases', () => {
     const chip = document.querySelector('article.combined-database-card h3');
     expect(text(chip)).toBe(dbId);
     expect(chip.querySelectorAll('wbr')).toHaveLength(2);
+  });
+
+  test('a card says when its database was read through gh-proxy.com', async () => {
+    const [first, second] = await several(2);
+    const proxied = { ...first, inspection: { ...first.inspection, source: { ...first.inspection.source, readThrough: 'gh-proxy.com' } } };
+    render(<CombinedOverview databases={[proxied, second]} detailed={false} onDetailedChange={() => {}} onInstall={() => {}} />);
+    const [proxiedCard, directCard] = document.querySelectorAll('article.combined-database-card');
+    expect(within(proxiedCard).getByText('gh-proxy.com, since GitHub does not let websites read release downloads')).toBeTruthy();
+    expect(within(directCard).queryByText('Read through')).toBeNull();
   });
 
   test('in the compact list, each database opens on its own, and the list collapses with the Detailed toggle at hand', async () => {

@@ -51,6 +51,10 @@ const MULTIDATABASES_CATALOG_SOURCE_URL =
 // The path of a GitHub release download: <owner>/<repo>/releases/latest/download/<file>, or
 // <owner>/<repo>/releases/download/<tag>/<file>.
 const GITHUB_RELEASE_DOWNLOAD_PATH = /^\/[^/]+\/[^/]+\/releases\/(?:latest\/download|download\/[^/]+)\/([^/]+)$/;
+// A public mirror of GitHub downloads that lets websites read them. A release download goes
+// through it only when reading it directly fails, as it does in browsers today.
+const GITHUB_RELEASE_PROXY_URL = 'https://gh-proxy.com/';
+export const GITHUB_RELEASE_PROXY_NAME = 'gh-proxy.com';
 
 export async function loadDatabaseSourceFile(file) {
   return loadDatabaseSourceBytes(new Uint8Array(await file.arrayBuffer()), file.name);
@@ -125,6 +129,7 @@ export async function loadDatabaseSourceUrl(input, { reload = false } = {}) {
     sourceUrl: decoded.finalUrl,
     requestedUrl,
     resolvedUrl,
+    readThrough: decoded.readThrough,
     containerType: decoded.containerType,
     extractedEntry: decoded.entryName,
   });
@@ -322,7 +327,7 @@ function resolveRemoteSourceUrl(url) {
 }
 
 async function fetchSupportedSource(url, { reload = false } = {}) {
-  const { bytes, fallbackName, finalUrl } = await fetchSourceBytes(url, { reload });
+  const { bytes, fallbackName, finalUrl, readThrough } = await fetchSourceBytes(url, { reload });
   const decoded = decodeSupportedSource(bytes, fallbackName, {
     baseUrl: finalUrl,
   });
@@ -330,6 +335,7 @@ async function fetchSupportedSource(url, { reload = false } = {}) {
   return {
     ...decoded,
     finalUrl,
+    readThrough,
   };
 }
 
@@ -343,25 +349,36 @@ async function fetchJsonish(url) {
   };
 }
 
+// A source's bytes. One read through the release mirror keeps the release download as its URL, so
+// what it names relatively (an archive's summary file) resolves against the release, and says so
+// in `readThrough`.
 async function fetchSourceBytes(url, { reload = false } = {}) {
-  const response = await fetchRemoteResource(url, { reload });
+  const { response, release } = await fetchRemoteResource(url, { reload });
   if (!response.ok) {
     throw new Error(`Request failed with ${response.status} ${response.statusText}.`);
   }
 
   return {
     bytes: new Uint8Array(await response.arrayBuffer()),
-    fallbackName: response.url.split('/').pop() || url,
-    finalUrl: response.url || url,
+    fallbackName: release?.fileName ?? (response.url.split('/').pop() || url),
+    finalUrl: release?.url ?? (response.url || url),
+    readThrough: release ? GITHUB_RELEASE_PROXY_NAME : null,
   };
 }
 
+// The response for `url`, and the release download it is when it was read through the mirror.
 async function fetchRemoteResource(url, { reload = false } = {}) {
+  /** @type {RequestInit} */
+  const init = reload ? { redirect: 'follow', cache: 'no-cache' } : { redirect: 'follow' };
   try {
-    return await fetch(url, reload ? { redirect: 'follow', cache: 'no-cache' } : { redirect: 'follow' });
+    return { response: await fetch(url, init), release: null };
   } catch (error) {
     if (error instanceof TypeError) {
       const release = findGitHubReleaseDownload(url);
+      const proxied = release ? await fetchThroughReleaseProxy(release.url, init) : null;
+      if (proxied) {
+        return { response: proxied, release };
+      }
       throw new Error(
         release
           ? `GitHub does not let websites read release downloads, so ${url} cannot be opened in the browser. Download ${release.fileName} and drag it into Upload to inspect it.`
@@ -374,9 +391,20 @@ async function fetchRemoteResource(url, { reload = false } = {}) {
   }
 }
 
+// A release download through the mirror, or null when the mirror cannot give it.
+async function fetchThroughReleaseProxy(releaseUrl, init) {
+  try {
+    const response = await fetch(`${GITHUB_RELEASE_PROXY_URL}${releaseUrl}`, init);
+    return response.ok ? response : null;
+  } catch {
+    return null;
+  }
+}
+
 // A GitHub release download ({ url, fileName }), or null when `url` is not one. GitHub sends no CORS
-// headers for release downloads, at any step of their redirects, so browsers cannot read them: they
-// can only be downloaded.
+// headers for release downloads, at any step of their redirects, so browsers cannot read them
+// directly: the page reads them through a mirror (GITHUB_RELEASE_PROXY_URL), and when that fails
+// too, they can only be downloaded.
 export function findGitHubReleaseDownload(url) {
   let parsedUrl;
   try {

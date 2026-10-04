@@ -3,7 +3,7 @@ import DetailedToggle from './ui/DetailedToggle.jsx';
 import SectionAnchor from './ui/SectionAnchor.jsx';
 import GitHubRepoLink from './ui/GitHubRepoLink.jsx';
 import MetadataList from './ui/MetadataList.jsx';
-import { COMBINED_DATABASES_IN_FULL_MAX } from '../lib/utils.js';
+import { COMBINED_DATABASES_IN_FULL_MAX, readThroughFields } from '../lib/utils.js';
 
 // Up to COMBINED_DATABASES_IN_FULL_MAX combined databases show as cards. More show as a compact
 // list in columns, a row each that opens on its own, in a section that collapses. A row shows only
@@ -24,6 +24,7 @@ function databaseFields(inspection, detailed) {
     { label: 'Version', value: `v${inspection.overview.version}` },
     { label: 'Timestamp', value: inspection.overview.timestampLabel },
     { label: 'Loaded from', value: inspection.source.sourceLabel, kind: 'url' },
+    ...readThroughFields(inspection.source),
     { label: 'Counts', value: formatCounts(inspection.overview.counts) },
     ...(detailed
       ? [
