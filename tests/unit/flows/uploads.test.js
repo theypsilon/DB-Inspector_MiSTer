@@ -60,16 +60,18 @@ test('several chosen files offer their databases, and other files are skipped wi
   assert.deepEqual(again.loaded, ['alpha (again.json)', 'beta (again.json.zip)']);
 });
 
-test('a chosen folder offers the databases of all its folders, one selected per db_id', async () => {
+test('a dropped folder offers the databases of all its folders, one selected per db_id', async () => {
   app = await openApp('/', { routes: ROUTES });
-  await app.uploadFolder('my-dbs', {
-    'one/alpha.json': ALPHA,
-    'one/deep/beta.json.zip': zipJson(BETA),
-    'two/alpha-copy.json': ALPHA,
-    'two/alpha-fork.json': ALPHA_FORK,
-    'two/list.ini': LIST_INI,
-    'readme.md': '# My databases',
-  });
+  await app.drop(
+    droppedEntries({
+      'my-dbs/one/alpha.json': ALPHA,
+      'my-dbs/one/deep/beta.json.zip': zipJson(BETA),
+      'my-dbs/two/alpha-copy.json': ALPHA,
+      'my-dbs/two/alpha-fork.json': ALPHA_FORK,
+      'my-dbs/two/list.ini': LIST_INI,
+      'my-dbs/readme.md': '# My databases',
+    }),
+  );
 
   const picker = app.openChoice();
   assert.equal(picker.entries.length, 4);
@@ -100,10 +102,12 @@ test('several lists offer their [mister] filters to choose one from, and a folde
   const alphaListUrl = GAMMA_URL.replace('gamma.json', 'alpha.json');
   app = await openApp('/', { routes: { ...ROUTES, [alphaListUrl]: { body: database('alpha_list', {}) } } });
 
-  await app.uploadFolder('lists', {
-    'a/downloader.ini': LIST_INI,
-    'b/other.ini': `[mister]\nfilter=console\n\n[alpha_list]\ndb_url=${alphaListUrl}\n`,
-  });
+  await app.drop(
+    droppedEntries({
+      'lists/a/downloader.ini': LIST_INI,
+      'lists/b/other.ini': `[mister]\nfilter=console\n\n[alpha_list]\ndb_url=${alphaListUrl}\n`,
+    }),
+  );
   const picker = app.openChoice();
   // Two [mister] filters, plus "No [mister] filter": the first one is chosen.
   assert.equal(picker.misterOptions.length, 2);
@@ -116,7 +120,7 @@ test('several lists offer their [mister] filters to choose one from, and a folde
   assert.deepEqual(app.view.appliedFilters, ['gammaconsoleshared filter', 'alpha_listconsoleshared filter']);
 
   // A folder offers its databases even when it holds only one.
-  await app.uploadFolder('single', { 'alpha.json': ALPHA });
+  await app.drop(droppedEntries({ 'single/alpha.json': ALPHA }));
   assert.equal(app.state.choicePickerOpen, true);
   assert.deepEqual(app.openChoice().selected, ['alpha (single/alpha.json)']);
 });

@@ -62,7 +62,7 @@ test('several chosen files offer their databases, and other files are skipped wi
   await expect(picker.locator('.catalog-option').filter({ hasText: 'fork.json' }).locator('.catalog-loaded-badge')).toHaveCount(0);
 });
 
-test('a chosen folder offers the databases of all its folders, one selected per db_id', async ({ page }, testInfo) => {
+test('a dropped folder offers the databases of all its folders, one selected per db_id', async ({ page }, testInfo) => {
   const root = testInfo.outputPath('my-dbs');
   writeFiles(root, {
     'one/alpha.json': JSON.stringify(ALPHA),
@@ -74,7 +74,7 @@ test('a chosen folder offers the databases of all its folders, one selected per 
   });
 
   await page.goto('/');
-  await page.locator('#database-folder-input').setInputFiles(root);
+  await dropFromDisk(page, [root]);
 
   const picker = page.getByRole('dialog', { name: 'Choose databases from your files' });
   await expect(picker.locator('.catalog-option')).toHaveCount(4);
@@ -114,7 +114,7 @@ test('several lists offer their [mister] filters to choose one from, and a folde
   );
 
   await page.goto('/');
-  await page.locator('#database-folder-input').setInputFiles(root);
+  await dropFromDisk(page, [root]);
   const picker = page.getByRole('dialog', { name: 'Choose databases from your files' });
   const misterChoices = picker.getByRole('group', { name: '[mister] sections' }).getByRole('radio');
   await expect(misterChoices).toHaveCount(3);
@@ -126,7 +126,7 @@ test('several lists offer their [mister] filters to choose one from, and a folde
   await expect(appliedFilters(page)).toHaveText(['gammaconsoleshared filter', 'alpha_listconsoleshared filter']);
 
   // A folder offers its databases even when it holds only one.
-  await page.locator('#database-folder-input').setInputFiles(single);
+  await dropFromDisk(page, [single]);
   await expect(picker).toBeVisible();
   await expect.poll(() => selectedNames(page)).toEqual(['alpha (single/alpha.json)']);
 });
@@ -243,6 +243,7 @@ function writeFiles(root, files) {
 // Drops files and folders from disk on the upload card, as the operating system would.
 async function dropFromDisk(page, paths) {
   const cdp = await page.context().newCDPSession(page);
+  await page.locator('.dropzone').scrollIntoViewIfNeeded();
   const box = await page.locator('.dropzone').boundingBox();
   const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
   const data = { items: [], files: paths, dragOperationsMask: 1 };

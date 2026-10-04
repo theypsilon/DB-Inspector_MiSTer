@@ -230,6 +230,21 @@ label.catalog-option { cursor: pointer; }
 .selection-summary .section-label { margin: 0; }
 .selection-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; max-height: 7.5rem; overflow: auto; }
 .selection-chip { display: inline-flex; align-items: center; gap: 0.35rem; }
+.selection-summary-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.9rem; }
+.selection-review { margin-left: auto; }
+.selection-more { padding: 0.18rem 0.6rem; font-size: 0.8rem; }
+.modal-selected button { cursor: pointer; user-select: none; }
+/* Pickers: the list fills what the controls leave of the dialog, and is the part that scrolls. */
+.picker-panel .modal-body { display: flex; flex-direction: column; }
+.picker-toolbar { grid-template-columns: minmax(0, 1fr) auto auto; }
+.picker-panel .modal-list { flex: 1 1 auto; min-height: min(12rem, 30vh); max-height: none; }
+.picker-panel .selection-chips { max-height: none; overflow: visible; }
+.picker-panel .catalog-list { gap: 0.5rem; }
+.picker-panel .catalog-option { gap: 0.4rem; padding: 0.75rem 1rem; }
+@media (max-width: 720px), (max-height: 600px) {
+  /* Small screens scroll the whole dialog instead of a list inside it. */
+  .picker-panel .modal-list { flex: none; min-height: 0; overflow: visible; }
+}
 .mister-option { display: grid; gap: 0.5rem; padding: 1rem; border-radius: var(--radius-md); border: 1px solid rgba(15, 111, 145, 0.2); background: linear-gradient(135deg, rgba(15, 111, 145, 0.08), rgba(255, 255, 255, 0.6)); }
 .mister-option .section-label, .mister-option .helper-copy { margin: 0; }
 fieldset.mister-option { min-width: 0; margin: 0; }
@@ -469,7 +484,7 @@ fieldset.mister-option legend { float: left; width: 100%; padding: 0; }
 .tag-groups { display: grid; gap: 1.2rem; }
 
 @media (max-width: 960px) {
-  .hero, .loader-grid, .catalog-toolbar, .filter-toolbar, .modal-toolbar, .catalog-selected-grid, .overview-grid, .highlight-row, .metadata-list { grid-template-columns: 1fr; }
+  .hero, .loader-grid, .catalog-toolbar, .filter-toolbar, .modal-toolbar, .picker-toolbar, .catalog-selected-grid, .overview-grid, .highlight-row, .metadata-list { grid-template-columns: 1fr; }
   .overview-header, .section-heading, .tree-heading { align-items: stretch; flex-direction: column; }
   .overview-controls, .section-controls, .dictionary-summary, .section-summary, .section-summary-side, .collapsible-actions { justify-content: start; }
   .tree-heading-actions { align-items: start; }

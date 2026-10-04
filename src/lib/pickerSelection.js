@@ -50,6 +50,21 @@ export function selectedPickerEntries(entries, { selectedKeys }) {
   return entries.filter((entry) => selectedKeys.has(entry.key));
 }
 
+// How many selected databases the picker's summary names; it counts the rest.
+export const SELECTION_SUMMARY_LIMIT = 10;
+
+// The selected entries the summary names, and how many more are selected.
+export function summarizePickerSelection(selectedEntries, limit = SELECTION_SUMMARY_LIMIT) {
+  return { named: selectedEntries.slice(0, limit), more: Math.max(0, selectedEntries.length - limit) };
+}
+
+// The entries the picker lists: those matching the search, among `reviewKeys` (the selection when
+// its review started, so that entries unchecked while reviewing stay in place) when reviewing.
+export function listedPickerEntries(entries, { query, reviewKeys = null }) {
+  const matching = filterPickerEntries(entries, query);
+  return reviewKeys ? matching.filter((entry) => reviewKeys.has(entry.key)) : matching;
+}
+
 // Whether every db_id among the entries has a selected entry ("Select all" turns into "Select none").
 export function allPickerDbIdsSelected(entries, selection) {
   const selectedDbIds = new Set(selectedPickerEntries(entries, selection).map((entry) => entry.dbId));

@@ -1,4 +1,5 @@
-export default function ModalFrame({ label, title, onClose, footer, headerActions, children }) {
+// `className` adds a class to the panel, for dialogs laid out differently.
+export default function ModalFrame({ label, title, onClose, footer, headerActions, className, children }) {
   return (
     <div
       className="modal-overlay"
@@ -9,7 +10,12 @@ export default function ModalFrame({ label, title, onClose, footer, headerAction
         }
       }}
     >
-      <section className="modal-panel" role="dialog" aria-modal="true" aria-label={title}>
+      <section
+        className={className ? `modal-panel ${className}` : 'modal-panel'}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+      >
         <div className="modal-header">
           <div>
             <p className="section-label">{label}</p>

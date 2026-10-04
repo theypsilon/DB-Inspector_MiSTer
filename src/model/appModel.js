@@ -461,8 +461,9 @@ export function createAppModel() {
     await openUploads(ctx, (onProgress) => listDroppedFiles(drop, onProgress));
   }
 
-  function openChosenFiles(ctx, files, { fromFolder }) {
-    if (files.length === 1 && !fromFolder) {
+  // Chosen files: one opens as before; several offer their databases to choose from.
+  function openChosenFiles(ctx, files) {
+    if (files.length === 1) {
       openFile(ctx, files[0]);
       return;
     }
@@ -1264,7 +1265,7 @@ export function createAppModel() {
     setDatabaseUrl: (databaseUrl) => setState({ databaseUrl }),
     loadUrl: () => loadUrl(makeCtx()),
     openDrop: (drop) => openDrop(makeCtx(), drop),
-    openChosenFiles: (files, options) => openChosenFiles(makeCtx(), files, options),
+    openChosenFiles: (files) => openChosenFiles(makeCtx(), files),
     openCatalog: () => setState({ catalogModalOpen: true }),
     closeCatalog: () => setState({ catalogModalOpen: false }),
     openCatalogSelection: (entries) => openCatalogSelection(makeCtx(), entries),

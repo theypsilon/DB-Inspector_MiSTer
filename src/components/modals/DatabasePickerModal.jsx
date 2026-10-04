@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import ModalFrame from './ModalFrame.jsx';
 import DbIdConflictModal from './DbIdConflictModal.jsx';
@@ -9,11 +9,12 @@ import { findLoadedKeys } from '../../lib/selection.js';
 import {
   allPickerDbIdsSelected,
   describePickerEntry,
-  filterPickerEntries,
+  listedPickerEntries,
   openButtonLabel,
   reducePickerSelection,
   selectedPickerEntries,
   startPickerSelection,
+  summarizePickerSelection,
 } from '../../lib/pickerSelection.js';
 import { runAfterNextPaint, updateTooltipPlacement, FILTER_INPUT_DEBOUNCE_MS } from '../../lib/utils.js';
 
@@ -42,7 +43,9 @@ function countDatabases(count) {
 // Chooses databases to open, from the catalog or a database list. Each selected database has its
 // own db_id: choosing one whose db_id is taken asks whether it should replace the selected one.
 // `presets` are extra buttons that replace the selection with their `keys`, and `preferredKeys`
-// decide which database of a db_id "Select all" picks.
+// decide which database of a db_id "Select all" picks. The list fills the dialog and is what
+// scrolls; the summary names the first few selected databases, and reviewing the selection lists
+// only the selected ones.
 const DatabasePickerModal = memo(function DatabasePickerModal({
   label,
   title,
@@ -64,6 +67,9 @@ const DatabasePickerModal = memo(function DatabasePickerModal({
   const debouncedQuery = useDebouncedValue(query.trim().toLowerCase(), FILTER_INPUT_DEBOUNCE_MS);
   const [selection, setSelection] = useState(() => startPickerSelection(initialSelectedKeys));
   const [selectionStart, setSelectionStart] = useState(initialSelectedKeys);
+  // While reviewing the selection: the keys selected when the review started.
+  const [reviewKeys, setReviewKeys] = useState(null);
+  const listRef = useRef(null);
   const { selectedKeys, conflict } = selection;
   const ready = status === 'ready';
 
@@ -71,6 +77,7 @@ const DatabasePickerModal = memo(function DatabasePickerModal({
   if (selectionStart !== initialSelectedKeys) {
     setSelectionStart(initialSelectedKeys);
     setSelection(startPickerSelection(initialSelectedKeys));
+    setReviewKeys(null);
   }
 
   function dispatch(action) {
@@ -96,11 +103,21 @@ const DatabasePickerModal = memo(function DatabasePickerModal({
     };
   }, [conflict]);
 
-  const filteredEntries = useMemo(() => filterPickerEntries(entries, debouncedQuery), [debouncedQuery, entries]);
+  const listedEntries = useMemo(
+    () => listedPickerEntries(entries, { query: debouncedQuery, reviewKeys }),
+    [debouncedQuery, entries, reviewKeys],
+  );
   const selectedEntries = useMemo(() => selectedPickerEntries(entries, selection), [entries, selection]);
+  const summary = useMemo(() => summarizePickerSelection(selectedEntries), [selectedEntries]);
   const allSelected = useMemo(() => allPickerDbIdsSelected(entries, selection), [entries, selection]);
   const loadedKeys = useMemo(() => findLoadedKeys(entries, loadedDatabases), [entries, loadedDatabases]);
   const hasApproximateDbIds = useMemo(() => entries.some((entry) => entry.dbIdApproximate), [entries]);
+
+  // Lists only the selected databases (or all of them again), from the top of the list.
+  function review(keys) {
+    setReviewKeys(keys);
+    listRef.current?.scrollTo({ top: 0 });
+  }
 
   function openSelection() {
     if (!selectedEntries.length) {
@@ -120,6 +137,7 @@ const DatabasePickerModal = memo(function DatabasePickerModal({
       <ModalFrame
         label={label}
         title={title}
+        className="picker-panel"
         onClose={onClose}
         footer={
           <>
@@ -133,28 +151,7 @@ const DatabasePickerModal = memo(function DatabasePickerModal({
         }
       >
         {intro}
-        <div className="button-row picker-actions">
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => dispatch({ type: 'toggleAll' })}
-            disabled={!ready || !entries.length}
-          >
-            {allSelected ? 'Select none' : 'Select all'}
-          </button>
-          {presets.map((preset) => (
-            <button
-              key={preset.label}
-              type="button"
-              className="secondary-button"
-              onClick={() => dispatch({ type: 'preset', keys: preset.keys })}
-              disabled={!ready || !preset.keys.length}
-            >
-              {preset.label}
-            </button>
-          ))}
-        </div>
-        <div className="modal-toolbar">
+        <div className="modal-toolbar picker-toolbar">
           <div className="catalog-search">
             <label className="field-label" htmlFor={search.id}>
               {search.label}
@@ -168,8 +165,29 @@ const DatabasePickerModal = memo(function DatabasePickerModal({
               disabled={!ready}
             />
           </div>
+          <div className="button-row picker-actions">
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => dispatch({ type: 'toggleAll' })}
+              disabled={!ready || !entries.length}
+            >
+              {allSelected ? 'Select none' : 'Select all'}
+            </button>
+            {presets.map((preset) => (
+              <button
+                key={preset.label}
+                type="button"
+                className="secondary-button"
+                onClick={() => dispatch({ type: 'preset', keys: preset.keys })}
+                disabled={!ready || !preset.keys.length}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
           <p className="catalog-count">
-            {ready ? `${filteredEntries.length} of ${entries.length} entries` : 'Catalog unavailable'}
+            {ready ? `${listedEntries.length} of ${entries.length} entries` : 'Catalog unavailable'}
           </p>
         </div>
         {hasApproximateDbIds ? (
@@ -179,29 +197,51 @@ const DatabasePickerModal = memo(function DatabasePickerModal({
           </p>
         ) : null}
         <article className="modal-selected selection-summary">
-          <p className="section-label">Selected</p>
+          <div className="selection-summary-head">
+            <p className="section-label">Selected</p>
+            {selectedEntries.length ? (
+              <strong>{countDatabases(selectedEntries.length)}</strong>
+            ) : (
+              <span className="helper-copy">No databases selected.</span>
+            )}
+            {selectedEntries.length || reviewKeys ? (
+              <button
+                type="button"
+                className="inline-action-button selection-review"
+                onClick={() => review(reviewKeys ? null : new Set(selectedKeys))}
+              >
+                {reviewKeys ? 'Show all entries' : 'Review selected'}
+              </button>
+            ) : null}
+          </div>
           {selectedEntries.length ? (
             <>
-              <strong>{countDatabases(selectedEntries.length)}</strong>
               <div className="selection-chips">
-                {selectedEntries.map((entry) => (
+                {summary.named.map((entry) => (
                   <span key={entry.key} className="selection-chip">
                     <code className="db-chip">{entry.dbId}</code>
                     {entry.dbIdApproximate ? <ApproximateDbIdLabel /> : null}
                   </span>
                 ))}
+                {summary.more ? (
+                  <button
+                    type="button"
+                    className="inline-action-button selection-more"
+                    onClick={() => review(new Set(selectedKeys))}
+                  >
+                    +{summary.more} more
+                  </button>
+                ) : null}
               </div>
             </>
-          ) : (
-            <p className="helper-copy">No databases selected.</p>
-          )}
+          ) : null}
         </article>
         {status === 'loading' ? <p className="helper-copy">Loading catalog entries.</p> : null}
         {status === 'error' ? <p className="status error">{error}</p> : null}
         {ready ? (
-          filteredEntries.length ? (
-            <div className="catalog-list modal-list" role="group" aria-label={listLabel}>
-              {filteredEntries.map((entry) => {
+          listedEntries.length ? (
+            <div ref={listRef} className="catalog-list modal-list" role="group" aria-label={listLabel}>
+              {listedEntries.map((entry) => {
                 const selected = selectedKeys.has(entry.key);
                 return (
                   <label

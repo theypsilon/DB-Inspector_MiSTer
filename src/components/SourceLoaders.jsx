@@ -1,4 +1,3 @@
-import { useRef } from 'react';
 import EmptyState from './ui/EmptyState.jsx';
 
 // Takes the chosen files out of a file input, then empties it so the same files can be chosen again.
@@ -8,8 +7,8 @@ function takeChosenFiles(input) {
   return files;
 }
 
-// The three ways to open a database: upload, fetch by URL, and the catalog. Uploads take files or
-// whole folders, chosen or dropped.
+// The three ways to open a database: upload, fetch by URL, and the catalog. Uploads take files,
+// chosen or dropped, and whole folders, dropped.
 function SourceLoaders({
   dropzone,
   fileInputRef,
@@ -23,7 +22,6 @@ function SourceLoaders({
   catalogError,
   onBrowseCatalog,
 }) {
-  const folderInputRef = useRef(null);
   return (
     <section className="loader-grid">
       <section
@@ -56,18 +54,6 @@ function SourceLoaders({
           <span className="dropzone-hint">or click to choose files from disk</span>
           <span className="dropzone-action">Choose files</span>
         </button>
-        <div className="button-row">
-          <button
-            type="button"
-            className="inline-action-button"
-            onClick={() => {
-              document.activeElement?.blur?.();
-              folderInputRef.current?.click();
-            }}
-          >
-            Choose a folder
-          </button>
-        </div>
         <input
           id="database-file-input"
           ref={fileInputRef}
@@ -75,15 +61,7 @@ function SourceLoaders({
           type="file"
           multiple
           accept=".json,.json.zip,.ini,.ini.zip,.zip,application/json,application/zip,text/plain"
-          onChange={(event) => onFilesChosen(takeChosenFiles(event.target), { fromFolder: false })}
-        />
-        <input
-          id="database-folder-input"
-          ref={folderInputRef}
-          style={{ display: 'none' }}
-          type="file"
-          webkitdirectory=""
-          onChange={(event) => onFilesChosen(takeChosenFiles(event.target), { fromFolder: true })}
+          onChange={(event) => onFilesChosen(takeChosenFiles(event.target))}
         />
       </section>
 

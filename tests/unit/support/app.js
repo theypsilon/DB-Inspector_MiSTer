@@ -39,14 +39,10 @@ import { installBrowser } from './browser.js';
 
 const ORIGIN = 'http://localhost';
 
-// A file to upload. Objects become JSON; `path` is its place inside a chosen folder.
-export function file(name, content, { path } = {}) {
+// A file to upload. Objects become JSON.
+export function file(name, content) {
   const bytes = content instanceof Uint8Array ? content : strToU8(typeof content === 'string' ? content : JSON.stringify(content));
-  const upload = new File([bytes], name);
-  if (path) {
-    Object.defineProperty(upload, 'webkitRelativePath', { value: path });
-  }
-  return upload;
+  return new File([bytes], name);
 }
 
 export function zipJson(value, name = 'db.json') {
@@ -377,16 +373,9 @@ function startApp(browser) {
       return findSearchMatches({ query, filesystemIndex, archivesIndex, collisionsIndex, tagGroups, hasEssentialHint });
     },
 
-    // Uploads: one file opens as it is; several, or a folder, offer their databases to choose from.
+    // Chosen files: one opens as it is; several offer their databases to choose from.
     async upload(...files) {
-      model.openChosenFiles(files, { fromFolder: false });
-      await settle();
-    },
-    async uploadFolder(name, files) {
-      model.openChosenFiles(
-        Object.entries(files).map(([path, content]) => file(path.split('/').at(-1), content, { path: `${name}/${path}` })),
-        { fromFolder: true },
-      );
+      model.openChosenFiles(files);
       await settle();
     },
     async drop(entries) {

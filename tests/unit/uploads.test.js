@@ -173,10 +173,6 @@ test('a drop is read as entries when the browser can list folders, else as files
   assert.deepEqual(captureDrop({ items: [{ kind: 'string' }], files: [] }), { entries: null, files: [] });
 });
 
-test('chosen files keep their path inside a chosen folder', () => {
-  const inFolder = Object.assign(file('a.json', '{}'), {});
-  Object.defineProperty(inFolder, 'webkitRelativePath', { value: 'dbs/a.json' });
-  const alone = file('b.json', '{}');
-
-  assert.deepEqual(listChosenFiles([inFolder, alone]).map(({ path }) => path), ['dbs/a.json', 'b.json']);
+test('chosen files are listed by name', () => {
+  assert.deepEqual(listChosenFiles([file('a.json', '{}'), file('b.json', '{}')]).map(({ path }) => path), ['a.json', 'b.json']);
 });

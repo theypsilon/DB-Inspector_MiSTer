@@ -10,9 +10,9 @@ export function isUploadCandidateName(name) {
   return UPLOAD_SUFFIXES.some((suffix) => lowerName.endsWith(suffix));
 }
 
-// The files of a file input, with their path inside a chosen folder or else their name.
+// The files of a file input, by name.
 export function listChosenFiles(fileList) {
-  return [...fileList].map((file) => ({ file, path: file.webkitRelativePath || file.name }));
+  return [...fileList].map((file) => ({ file, path: file.name }));
 }
 
 // What a drop holds. Runs during the drop event, since the browser empties the drop data after it.
