@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import App from '../../src/App.jsx';
+import { NARROW_SCREEN_QUERY } from '../../src/lib/utils.js';
 import { text } from './support.js';
 
 // The whole page in jsdom, with fetch answered from `routes`: how it is wired to the app model.
@@ -354,6 +355,72 @@ describe('the page and the app model', () => {
     await waitFor(() => expect(scrolledTo).toContain('row-archive[alpha]:cheats'));
   });
 
+  test('a row shows the tags that fit its line, from the list’s hidden sample row, and fits them again when the list’s width changes', async () => {
+    // jsdom has no layout, so the sample row's boxes are given as a browser lays them out: a tag of
+    // four characters is 10 + 4 * 8 = 42px wide, 5px from the next, and "+3" 10 + 2 * 9 = 28px.
+    let lineWidth = 400;
+    const parts = {
+      line: () => [0, lineWidth],
+      indent: () => [0, 20],
+      'empty-chip': () => [0, 10],
+      'sample-chip': () => [15, 10 + 10 * 8],
+      'empty-toggle': () => [0, 10],
+      'sample-toggle': () => [0, 10 + 10 * 9],
+    };
+    const getBoundingClientRect = Element.prototype.getBoundingClientRect;
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function boxOf() {
+      const part = parts[this.dataset?.tagFit];
+      if (!part) {
+        return getBoundingClientRect.call(this);
+      }
+      const [left, width] = part();
+      return { left, right: left + width, width, top: 0, bottom: 0, height: 0, x: left, y: 0 };
+    });
+    // The page's resize observers, to tell the sample row its width changed.
+    const observers = [];
+    vi.stubGlobal(
+      'ResizeObserver',
+      class ResizeObserver {
+        constructor(callback) {
+          Object.assign(this, { callback, targets: [] });
+          observers.push(this);
+        }
+        observe(target) {
+          this.targets.push(target);
+        }
+        unobserve() {}
+        disconnect() {
+          this.targets = [];
+        }
+      },
+    );
+
+    const url = 'https://example.com/fit.json';
+    const names = ['aaaa', 'bbbb', 'cccc', 'dddd', 'eeee', 'ffff', 'gggg', 'hhhh', 'iiii', 'jjjj'];
+    const tag_dictionary = Object.fromEntries(names.map((name, index) => [name, index]));
+    const files = { 'cores/many.rbf': { size: 1, hash: 'm', tags: names.map((_, index) => index) } };
+    openPage(`/#db=${url}`, { [url]: { body: database('fit_db', { tag_dictionary, files }) } });
+    expect(await screen.findByRole('heading', { name: 'fit_db' })).toBeTruthy();
+    const row = () => document.querySelector('[id="row-database:file:cores/many.rbf"]');
+    const chips = () => [...row().querySelectorAll('.tag-chip')].map((chip) => chip.firstChild.textContent);
+    await waitFor(() => expect(row()).not.toBeNull());
+
+    // The file is one level deep: 400 - 20 - 2 = 378px, where seven tags and "+3" take 357px.
+    expect(chips()).toEqual(names.slice(0, 7));
+    expect(within(row()).getByRole('button', { name: '+3 more tags' })).toBeTruthy();
+    // The sample row is not a row, and hidden from screen readers.
+    const probe = document.querySelector('.tree-root > .tag-fit-probe');
+    expect(probe.getAttribute('aria-hidden')).toBe('true');
+    expect(probe.classList.contains('tree-entry')).toBe(false);
+
+    // 250 - 20 - 2 = 228px: four tags and "+6" take 216px.
+    lineWidth = 250;
+    const sampleObserver = observers.find((observer) => observer.targets.some((target) => target.dataset?.tagFit === 'line'));
+    act(() => sampleObserver.callback([]));
+    expect(chips()).toEqual(names.slice(0, 4));
+    expect(within(row()).getByRole('button', { name: '+6 more tags' })).toBeTruthy();
+  });
+
   test('a row’s other tags show on request, and for a find-in-page match in one of them', async () => {
     const url = 'https://example.com/tags.json';
     const tag_dictionary = Object.fromEntries(['arcade', 'mra', 'console', 'retro', 'alpha', 'beta', 'hidden_gem'].map((name, index) => [name, index]));
@@ -375,6 +442,50 @@ describe('the page and the app model', () => {
     await waitFor(() => expect(chips()).toContain('hidden_gem'));
     await user.keyboard('{Escape}');
     await waitFor(() => expect(chips()).toHaveLength(4));
+  });
+
+  test('on a narrow screen a file leaves its tags to its details or a find-in-page match in one, a folder keeps its own, and on a wider one they show again', async () => {
+    // The window, narrow until it is widened: what matchMedia says, and tells as it changes.
+    let narrow = true;
+    const listeners = new Set();
+    vi.stubGlobal('matchMedia', (query) => ({
+      media: query,
+      get matches() {
+        return query === NARROW_SCREEN_QUERY && narrow;
+      },
+      addEventListener: (type, listener) => query === NARROW_SCREEN_QUERY && listeners.add(listener),
+      removeEventListener: (type, listener) => listeners.delete(listener),
+    }));
+    const url = 'https://example.com/narrow.json';
+    const tag_dictionary = { arcade: 0, hidden_gem: 1 };
+    const user = openPage(`/#db=${url}`, {
+      [url]: { body: database('narrow_db', { tag_dictionary, files: { 'cores/game.rbf': { size: 1, hash: 'g', tags: [0, 1] } }, folders: { 'cores/': { tags: [0] } } }) },
+    });
+    expect(await screen.findByRole('heading', { name: 'narrow_db' })).toBeTruthy();
+    const row = (name) => [...document.querySelectorAll('#section-files .tree-entry')].find((entry) => text(entry.querySelector('h3')) === name);
+    const chips = (name) => [...row(name).querySelectorAll('.tag-chip')].map((chip) => chip.firstChild.textContent);
+    await waitFor(() => expect(row('game.rbf')).toBeTruthy());
+    expect(row('game.rbf').querySelector('.primary-row')).toBeNull();
+    expect(chips('cores')).toEqual(['arcade']);
+
+    // Rarest first: arcade is the folder's too.
+    await user.click(within(row('game.rbf')).getByRole('button', { name: 'Show details' }));
+    expect(chips('game.rbf')).toEqual(['hidden_gem', 'arcade']);
+    await user.click(within(row('game.rbf')).getByRole('button', { name: 'Hide details' }));
+    expect(row('game.rbf').querySelector('.primary-row')).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: /to search/ }));
+    await user.type(screen.getByLabelText('Search text'), 'hidden_gem');
+    await waitFor(() => expect(chips('game.rbf')).toEqual(['hidden_gem', 'arcade']));
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(row('game.rbf').querySelector('.primary-row')).toBeNull());
+
+    act(() => {
+      narrow = false;
+      listeners.forEach((listener) => listener({ media: NARROW_SCREEN_QUERY, matches: false }));
+    });
+    expect(chips('game.rbf')).toEqual(['hidden_gem', 'arcade']);
+    expect(chips('cores')).toEqual(['arcade']);
   });
 
   test('the top of the page shows the project’s repository, and folds to its title once a database is loaded', async () => {
@@ -595,6 +706,8 @@ describe('the page and the app model', () => {
     // The count waits for FILTER to settle, then counts every database's files.
     expect(text(dialog.querySelector('.filter-terms-matches'))).toBe('Counting matches…');
     await waitFor(() => expect(text(dialog.querySelector('.filter-terms-matches'))).toBe('Matches 1 of 3 files'), { timeout: 3000 });
+    // The shared filter has nothing to include.
+    expect(within(dialog).queryByRole('checkbox')).toBeNull();
     await user.click(within(dialog).getByRole('button', { name: 'Done' }));
 
     await user.click(within(filters).getByRole('button', { name: 'Terms for beta' }));
@@ -607,6 +720,11 @@ describe('the page and the app model', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Keep arcade' }));
     expect(screen.getByLabelText('FILTER for beta').value).toBe('console arcade');
     expect(screen.getByLabelText('FILTER').value).toBe('!arcade');
+    await waitFor(() => expect(text(dialog.querySelector('.filter-terms-matches'))).toBe('Matches 2 of 3 files'), { timeout: 3000 });
+    // It can include the shared filter, which then applies to beta too: !arcade leaves its console file.
+    await user.click(within(dialog).getByRole('checkbox', { name: 'Include the shared filter ([mister]) !arcade' }));
+    expect(screen.getByLabelText('FILTER for beta').value).toBe('[mister] console arcade');
+    await waitFor(() => expect(text(dialog.querySelector('.filter-terms-matches'))).toBe('Matches 1 of 3 files'), { timeout: 3000 });
   });
   test('a link to a database’s own filter’s terms opens them, while it has one; else the shared filter’s', async () => {
     const alpha = 'https://example.com/terms-own-alpha.json';

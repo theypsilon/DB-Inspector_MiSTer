@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 // The virtualized trees of a large database in a real browser: only rows near the viewport render,
 // rows keep touching as details and tags open and close, with each line between two rows drawn
-// once, the last rows can be reached, and URL anchors, find-in-page and ghost parent rows bring far
+// once, a row shows as many tags as fit its line at any width, the last rows can be reached, and URL anchors, find-in-page and ghost parent rows bring far
 // rows into view. The explorer renders only the entries near view of a large folder too, and folds
 // its path on a phone.
 
@@ -33,7 +33,7 @@ test('large trees render near the viewport, keep their spacing, and reach far ro
     await expect(page.locator('.ghost-parent-row')).toHaveCount(0);
   });
 
-  await test.step('rows keep touching as their details and tags open and close, and draw each line between them once', async () => {
+  await test.step('rows keep touching as their details open and close, and draw each line between them once', async () => {
     const row = rowNamed(page, 'file_00000.rbf');
     await expect(row.locator('.collapse-button')).toHaveCount(0);
     expect(await linesDrawnTwiceOrNot(page)).toEqual([]);
@@ -44,13 +44,66 @@ test('large trees render near the viewport, keep their spacing, and reach far ro
       await expect.poll(() => meetsNextRow(row)).toBe(true);
     }
     await row.getByRole('button', { name: 'Hide details' }).click();
-    for (const [button, chips] of [['+7 more tags', 11], ['Show fewer', 4]]) {
+    // Only a row's link icon puts it in the address.
+    expect(page.url()).toBe(urlBefore);
+  });
+
+  await test.step('a row shows as many tags as fit its line at any width, and keeps touching the next as they change, open and close', async () => {
+    const file = rowNamed(page, 'file_00000.rbf');
+    // Its eleven short tags fit at 1440px.
+    await expect(file.locator('.tag-chip')).toHaveCount(11);
+    await expect(file.getByRole('button', { name: /more tags/ })).toHaveCount(0);
+    // At 960px and narrower a file leaves its tags to its details (the next step), so the narrower
+    // widths are checked on its folder, which has the same eleven tags.
+    const row = rowNamed(page, 'folder_00');
+    for (const [width, fitted] of [[700, row], [1440, file], [1440, row], [360, row]]) {
+      await page.setViewportSize({ width, height: 960 });
+      await scrollUntilSteady(page.locator('.tree-root'), 100);
+      await expect.poll(() => tagLineMisfits(fitted)).toEqual([]);
+      await expect.poll(() => meetsNextRow(fitted)).toBe(true);
+    }
+    // On a phone some are counted.
+    const shown = await row.locator('.tag-chip').count();
+    expect(shown).toBeLessThan(11);
+    for (const [button, chips] of [[`+${11 - shown} more tags`, 11], ['Show fewer', shown]]) {
       await row.getByRole('button', { name: button }).click();
       await expect(row.locator('.tag-chip')).toHaveCount(chips);
       await expect.poll(() => meetsNextRow(row)).toBe(true);
     }
-    // Only a row's link icon puts it in the address.
-    expect(page.url()).toBe(urlBefore);
+    // And at every width of the list 4px apart, through the widths where a tag comes or goes.
+    const widths = Array.from({ length: 31 }, (_, step) => 310 - step * 4);
+    expect(await tagLineMisfits(row, widths)).toEqual([]);
+    await expect.poll(() => meetsNextRow(row)).toBe(true);
+    await page.setViewportSize({ width: 1440, height: 960 });
+  });
+
+  await test.step('at 960px and narrower a file leaves its tags to its details, from the width its heading stacks, and the rows keep touching and reach the end', async () => {
+    const file = rowNamed(page, 'file_00000.rbf');
+    const folder = rowNamed(page, 'folder_00');
+    const heading = () => file.locator('.tree-heading').evaluate((element) => getComputedStyle(element).flexDirection);
+    await page.setViewportSize({ width: 960, height: 960 });
+    await scrollUntilSteady(page.locator('.tree-root'), 100);
+    await expect(file.locator('.primary-row')).toHaveCount(0);
+    expect(await heading()).toBe('column');
+    await expect(folder.locator('.tag-chip').first()).toBeVisible();
+    await expect.poll(() => meetsNextRow(file)).toBe(true);
+    for (const [button, chips] of [['Show details', 11], ['Hide details', 0]]) {
+      await file.getByRole('button', { name: button }).click();
+      await expect(file.locator('.tag-chip')).toHaveCount(chips);
+      await expect.poll(() => meetsNextRow(file)).toBe(true);
+    }
+
+    // One pixel wider, its heading is on one line and its tags are back.
+    await page.setViewportSize({ width: 961, height: 960 });
+    await expect(file.locator('.tag-chip').first()).toBeVisible();
+    expect(await heading()).toBe('row');
+    await expect.poll(() => meetsNextRow(file)).toBe(true);
+
+    await page.setViewportSize({ width: 960, height: 960 });
+    await expect(file.locator('.primary-row')).toHaveCount(0);
+    await scrollUntilSteady(page.locator('.tree-root'), 'end');
+    await expect(page.getByRole('heading', { name: `file_${String(FILE_COUNT - 1).padStart(5, '0')}.rbf` })).toBeInViewport();
+    await page.setViewportSize({ width: 1440, height: 960 });
   });
 
   await test.step('the last rows can be reached', async () => {
@@ -297,8 +350,9 @@ function buildLargeDatabase() {
     folders[folder] = {};
     files[`${folder}/file_${String(index).padStart(5, '0')}.rbf`] = { size: 1000 + index, hash: `h${index}` };
   }
-  // The first file has many tags.
+  // The first file has many tags, and so does its folder.
   files['games/folder_00/file_00000.rbf'].tags = Array.from({ length: 11 }, (_, index) => index);
+  folders['games/folder_00'].tags = Array.from({ length: 11 }, (_, index) => index);
   const summary = {};
   for (let index = 0; index < ARCHIVE_COUNT; index += 1) {
     const padded = String(index).padStart(3, '0');
@@ -309,7 +363,8 @@ function buildLargeDatabase() {
     v: 1,
     timestamp: 1710000000,
     base_files_url: 'https://example.com/',
-    // Eleven tags the first file uses, and more that nothing uses, for a long list of filter terms.
+    // Eleven tags the first file and its folder use, and more that nothing uses, for a long list of
+    // filter terms.
     tag_dictionary: Object.fromEntries([
       ...Array.from({ length: 11 }, (_, index) => [`tag_${index}`, index]),
       ...Array.from({ length: 60 }, (_, index) => [`unused_${String(index).padStart(2, '0')}`, 100 + index]),
@@ -383,6 +438,64 @@ function meetsNextRow(row) {
     const slack = place - element.getBoundingClientRect().height;
     return parseFloat(getComputedStyle(element, '::before').height) === place && slack >= 0 && slack < 1;
   });
+}
+
+// Where a row's tags do not fit as they should, as the list is or, narrowing the list, at each of
+// `widths`: more than one line, unless the first tag and "+N" do not fit together; or room for one
+// more of them (the file's tags are tag_0 to tag_10), with "+N" one less, on a line 2px narrower
+// than theirs, the room the page keeps against rounding (TAG_FIT_MARGIN_PX). Each width is checked
+// once the row's tags hold still for three frames.
+function tagLineMisfits(row, widths = [null]) {
+  return row.evaluate(async (element, listWidths) => {
+    const root = element.closest('.tree-root');
+    const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+    const lines = (tags) => new Set([...tags.children].map((tag) => Math.round(tag.getBoundingClientRect().top))).size;
+    const misfits = [];
+    for (const width of listWidths) {
+      if (width !== null) {
+        root.style.width = `${width}px`;
+        // The list's new width is laid out, then its tags are counted again.
+        await frame();
+        await frame();
+        for (let still = 0, last = null, frames = 0; still < 3 && frames < 120; frames += 1) {
+          await frame();
+          const now = element.querySelector('.tag-chip-list').textContent;
+          still = now === last ? still + 1 : 0;
+          last = now;
+        }
+      }
+      if (!element.isConnected) {
+        misfits.push(`${width}px: the row left the list`);
+        break;
+      }
+      const line = element.querySelector('.primary-row');
+      const list = line.querySelector('.tag-chip-list');
+      const shown = list.querySelectorAll('.tag-chip').length;
+      if (shown > 1 && lines(list) > 1) {
+        misfits.push(`${width}px: ${shown} tags on ${lines(list)} lines`);
+      }
+      if (shown < 11) {
+        const trial = list.cloneNode(true);
+        Object.assign(trial.style, { position: 'absolute', visibility: 'hidden', width: `${line.getBoundingClientRect().width - 2}px` });
+        const next = trial.querySelector('.tag-chip').cloneNode(true);
+        next.firstChild.textContent = `tag_${shown}`;
+        const more = trial.querySelector('.tag-chip-toggle');
+        trial.insertBefore(next, more);
+        if (shown + 1 < 11) {
+          more.textContent = `+${11 - shown - 1}`;
+        } else {
+          more.remove();
+        }
+        line.append(trial);
+        if (lines(trial) === 1) {
+          misfits.push(`${width}px: room for tag_${shown} after ${shown} tags`);
+        }
+        trial.remove();
+      }
+    }
+    root.style.width = '';
+    return misfits;
+  }, widths);
 }
 
 // The lines between two rendered rows that are drawn twice, or not at all: each should be drawn by

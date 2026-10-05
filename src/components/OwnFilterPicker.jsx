@@ -51,6 +51,7 @@ export default function OwnFilterPicker({ databases, onPick }) {
   // The whole list in view as it opens, as far as the page can scroll; then the highlight as it moves.
   useEffect(() => {
     if (open) {
+      popupRef.current?.scrollIntoView?.({ block: 'nearest' });
     }
   }, [open]);
   useEffect(() => {

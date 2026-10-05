@@ -35,7 +35,7 @@ async function termsOf(...databases) {
 const SETTLED = { kept: 3, total: 3, pending: false, invalid: false };
 
 // The dialog as the page holds it: FILTER in state, changed by the dialog.
-function Harness({ terms, withoutTerms, combined, initialFilter, matches = SETTLED, search, onChange, onSearchChange, onClose }) {
+function Harness({ terms, withoutTerms, combined, initialFilter, sharedFilter, matches = SETTLED, search, onChange, onSearchChange, onClose }) {
   const [filter, setFilter] = useState(initialFilter);
   return (
     <FilterTermsModal
@@ -44,6 +44,7 @@ function Harness({ terms, withoutTerms, combined, initialFilter, matches = SETTL
       withoutTerms={withoutTerms}
       combined={combined}
       filter={filter}
+      sharedFilter={sharedFilter}
       matches={matches}
       search={search}
       onFilterChange={(next) => {
@@ -56,10 +57,19 @@ function Harness({ terms, withoutTerms, combined, initialFilter, matches = SETTL
   );
 }
 
-function open({ terms, withoutTerms }, { combined = false, filter = '', matches, search } = {}) {
+function open({ terms, withoutTerms }, { combined = false, filter = '', sharedFilter, matches, search } = {}) {
   const handlers = { onChange: vi.fn(), onSearchChange: vi.fn(), onClose: vi.fn() };
   const result = render(
-    <Harness terms={terms} withoutTerms={withoutTerms} combined={combined} initialFilter={filter} matches={matches} search={search} {...handlers} />,
+    <Harness
+      terms={terms}
+      withoutTerms={withoutTerms}
+      combined={combined}
+      initialFilter={filter}
+      sharedFilter={sharedFilter}
+      matches={matches}
+      search={search}
+      {...handlers}
+    />,
   );
   return { ...handlers, ...result, user: userEvent.setup(), dialog: screen.getByRole('dialog', { name: 'Filter terms' }) };
 }
@@ -103,6 +113,41 @@ describe('the filter terms', () => {
     await user.click(within(row('cheats')).getByRole('button', { name: 'Exclude cheats' }));
     expect(onChange).toHaveBeenLastCalledWith('[mister] arcade !cheats');
 
+  });
+
+  test('a database’s own filter includes the shared filter with a checkbox above FILTER, while the shared filter has terms', async () => {
+    const terms = await termsOf(ALPHA);
+    const { user, onChange } = open(terms, { combined: true, filter: 'nes', sharedFilter: ' arcade !cheats ' });
+    const include = screen.getByRole('checkbox', { name: 'Include the shared filter ([mister]) arcade !cheats' });
+    // A line of its own in the footer, above FILTER.
+    expect([...document.querySelector('.modal-footer').children].map((child) => child.className)).toEqual(['filter-terms-shared', 'filter-terms-current', '']);
+    expect(include.checked).toBe(false);
+
+    await user.click(include);
+    expect(onChange).toHaveBeenLastCalledWith('[mister] nes');
+    expect(include.checked).toBe(true);
+    expect(text(document.querySelector('.filter-terms-current code'))).toBe('[mister] nes');
+    // Terms chosen after it leave it in; leaving it out leaves them.
+    await user.click(within(row('cheats')).getByRole('button', { name: 'Exclude cheats' }));
+    expect(onChange).toHaveBeenLastCalledWith('[mister] nes !cheats');
+    expect(include.checked).toBe(true);
+    await user.click(include);
+    expect(onChange).toHaveBeenLastCalledWith('nes !cheats');
+    expect(include.checked).toBe(false);
+
+    // Written by hand, in any letter case, it is there.
+    document.body.innerHTML = '';
+    open(terms, { combined: true, filter: 'nes [MiSTer]', sharedFilter: 'arcade' });
+    expect(screen.getByRole('checkbox', { name: 'Include the shared filter ([mister]) arcade' }).checked).toBe(true);
+
+    // Without terms in the shared filter, there is nothing to include; nor without a shared filter
+    // to include (FILTER, or the shared filter's own terms).
+    for (const sharedFilter of ['', '  ', undefined]) {
+      document.body.innerHTML = '';
+      open(terms, { combined: true, filter: '[mister] nes', sharedFilter });
+      expect(screen.queryByRole('checkbox')).toBeNull();
+      expect(text(document.querySelector('.filter-terms-current code'))).toBe('[mister] nes');
+    }
   });
 
   test('a term in FILTER by another of its names, in any letter case, shows as there', async () => {

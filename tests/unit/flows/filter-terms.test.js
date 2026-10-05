@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
 
 import { openApp } from '../support/app.js';
-import { buildFilterTerms, toggleTerm } from '../../../src/lib/filterTerms.js';
+import { buildFilterTerms, toggleSharedFilter, toggleTerm } from '../../../src/lib/filterTerms.js';
 import { countLoadedFiles } from '../../../src/model/views.js';
 
 // The filter terms dialog over databases opened as the page opens them: the terms it lists for
@@ -68,6 +68,21 @@ test('combined databases: the shared filter’s terms are every database’s, a 
   assert.equal(app.ownFilter('beta'), 'arcade console');
   assert.deepEqual(app.view.appliedFilters, ['alphaarcadeshared filter', 'betaarcade consoleits own filter']);
   assert.equal(app.hash, `#db=${ALPHA_URL}&db=${BETA_URL}&filter=arcade&filter.beta=arcade+console`);
+});
+
+test('a database’s own filter that includes the shared filter gets its terms, in the link as [mister], until it leaves it out again', async () => {
+  app = await openApp(`/#db=${ALPHA_URL}&db=${BETA_URL}&filter=arcade&filter.beta=console`, { routes: ROUTES });
+  assert.deepEqual(app.view.appliedFilters, ['alphaarcadeshared filter', 'betaconsoleits own filter']);
+
+  await app.typeOwnFilter('beta', toggleSharedFilter(app.ownFilter('beta'), true));
+  assert.equal(app.ownFilter('beta'), '[mister] console');
+  assert.deepEqual(app.view.appliedFilters, ['alphaarcadeshared filter', 'betaarcade consoleits own filter']);
+  assert.equal(app.hash, `#db=${ALPHA_URL}&db=${BETA_URL}&filter=arcade&filter.beta=[mister]+console`);
+
+  await app.typeOwnFilter('beta', toggleSharedFilter(app.ownFilter('beta'), false));
+  assert.equal(app.ownFilter('beta'), 'console');
+  assert.deepEqual(app.view.appliedFilters, ['alphaarcadeshared filter', 'betaconsoleits own filter']);
+  assert.equal(app.hash, `#db=${ALPHA_URL}&db=${BETA_URL}&filter=arcade&filter.beta=console`);
 });
 
 test('the dialog counts what FILTER matches against all the files the loaded databases list: archive entries in, a shared path once', async () => {

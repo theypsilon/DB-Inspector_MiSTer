@@ -1,12 +1,15 @@
 import { memo, useLayoutEffect, useMemo, useRef } from 'react';
 import TreeEntryRow from './TreeEntryRow.jsx';
-import { buildVirtualRowStyle, getRowMeasurementKey } from '../../lib/treeLayout.js';
+import { buildVirtualRowStyle, getRowMeasurementKey, rowTagsHidden } from '../../lib/treeLayout.js';
+import { fitTagCount, getRowTags } from '../../lib/tagFit.js';
 
 // A TreeEntryRow placed at its virtual offset, and drawn over its place in the list with its part
 // of the list's outline (see rowOutline). It reports its rendered height so the list can replace
 // the estimated height with the measured one. Keeping this apart from TreeEntryRow means
 // a new `onHeightChange` (which changes as the page scrolls) re-measures the row without
-// re-rendering its content.
+// re-rendering its content. It counts the tags that fit on the row's line from the list's
+// `tagFit` widths; when that count changes the row's height, its resize observer measures it again,
+// as for any other change of width.
 /**
  * @typedef {object} VirtualRowProps
  * @property {(rowId: string, height: number, options?: { immediate?: boolean }) => void} onHeightChange
@@ -17,6 +20,8 @@ import { buildVirtualRowStyle, getRowMeasurementKey } from '../../lib/treeLayout
  * @property {string} corners
  * @property {boolean} [trimTopGuide]
  * @property {boolean} [trimBottomGuide]
+ * @property {import('../../lib/tagFit.js').TagFitMetrics | null} [tagFit]
+ * @property {boolean} [narrow] a narrow screen, where a file leaves its tags off its line (see rowTagsHidden)
  */
 const VirtualTreeEntryRow = memo(
   /** @param {VirtualRowProps & Omit<import('./TreeEntryRow.jsx').TreeEntryRowProps, 'containerRef' | 'virtualStyle'>} props */
@@ -29,10 +34,15 @@ const VirtualTreeEntryRow = memo(
   corners,
   trimTopGuide,
   trimBottomGuide,
+  tagFit = null,
+  narrow = false,
   ...rowProps
 }) {
   const { row, collapsed, detailsVisible, tagsExpanded, tagsRevealed } = rowProps;
   const allTags = Boolean(tagsExpanded || tagsRevealed);
+  const tagsHidden = rowTagsHidden(row, { narrow, detailsVisible, tagsExpanded: allTags });
+  const tags = getRowTags(row);
+  const tagsShown = useMemo(() => fitTagCount(tags, tagFit, row.depth), [tags, tagFit, row.depth]);
   const rowRef = useRef(null);
   const previousMeasurementSignatureRef = useRef(null);
   const virtualStyle = useMemo(
@@ -54,8 +64,8 @@ const VirtualTreeEntryRow = memo(
       return undefined;
     }
 
-    const measurementSignature = `${collapsed ? '1' : '0'}:${detailsVisible ? '1' : '0'}:${allTags ? '1' : '0'}`;
-    const measurementKey = getRowMeasurementKey(row.id, { collapsed, detailsVisible, tagsExpanded: allTags });
+    const measurementSignature = `${collapsed ? '1' : '0'}:${detailsVisible ? '1' : '0'}:${allTags ? '1' : '0'}:${tagsHidden ? '1' : '0'}`;
+    const measurementKey = getRowMeasurementKey(row.id, { collapsed, detailsVisible, tagsExpanded: allTags, tagsHidden });
     const previousMeasurementSignature = previousMeasurementSignatureRef.current;
     const shouldFlushImmediately =
       previousMeasurementSignature !== null && previousMeasurementSignature !== measurementSignature;
@@ -78,9 +88,9 @@ const VirtualTreeEntryRow = memo(
     return () => {
       observer.disconnect();
     };
-  }, [row.id, collapsed, detailsVisible, allTags, onHeightChange]);
+  }, [row.id, collapsed, detailsVisible, allTags, tagsHidden, onHeightChange]);
 
-  return <TreeEntryRow {...rowProps} containerRef={rowRef} virtualStyle={virtualStyle} />;
+  return <TreeEntryRow {...rowProps} tagsShown={tagsShown} tagsHidden={tagsHidden} containerRef={rowRef} virtualStyle={virtualStyle} />;
 });
 
 export default VirtualTreeEntryRow;

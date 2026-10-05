@@ -2,7 +2,8 @@ import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import ModalFrame from './ModalFrame.jsx';
 import EmptyState from '../ui/EmptyState.jsx';
 import useDebouncedValue from '../../hooks/useDebouncedValue.js';
-import { searchFilterTerms, termUse, toggleTerm } from '../../lib/filterTerms.js';
+import { inheritsMisterFilter } from '../../lib/filterDefaults.js';
+import { searchFilterTerms, termUse, toggleSharedFilter, toggleTerm } from '../../lib/filterTerms.js';
 import { COMBINED_DATABASES_IN_FULL_MAX, FILTER_INPUT_DEBOUNCE_MS } from '../../lib/utils.js';
 
 // The databases that have a term, as the terms list names them: each, or how many past a few.
@@ -50,13 +51,15 @@ function describeNumbers(term, combined) {
 
 /**
  * The terms one FILTER box can use (see src/lib/filterTerms.js), to keep or exclude in it: Keep
- * writes the term, Exclude writes it with `!`, and choosing what is already there takes it out.
+ * writes the term, Exclude writes it with `!`, and choosing what is already there takes it out. A
+ * database's own filter can include the shared filter too, with a checkbox above FILTER.
  * @param {{
  *   intro: string,
  *   terms: import('../../lib/filterTerms.js').FilterTerm[],
  *   withoutTerms: string[],
  *   combined: boolean,
  *   filter: string,
+ *   sharedFilter?: string,
  *   matches: { kept: number, total: number, pending: boolean, invalid: boolean },
  *   search?: string,
  *   onFilterChange: (filter: string) => void,
@@ -65,6 +68,8 @@ function describeNumbers(term, combined) {
  * }} props `intro` says which FILTER box the terms go in; `matches`, how many files of all the
  * loaded databases the FILTERs leave (`kept`, of `total`), or that they are settling. `search` is
  * what the search box opens with, and `onSearchChange` hears what it holds once typing pauses.
+ * `sharedFilter` is the shared filter when the box is a database's own filter, which can include it
+ * (the [mister] term); while it has no terms, there is nothing to include.
  */
 export default function FilterTermsModal({
   intro,
@@ -72,6 +77,7 @@ export default function FilterTermsModal({
   withoutTerms,
   combined,
   filter,
+  sharedFilter = '',
   matches,
   search = '',
   onFilterChange,
@@ -115,6 +121,20 @@ export default function FilterTermsModal({
       onClose={onClose}
       footer={
         <>
+          {sharedFilter.trim() ? (
+            <label className="filter-terms-shared">
+              <span className="filter-terms-shared-words">
+                <input
+                  type="checkbox"
+                  className="catalog-option-check"
+                  checked={inheritsMisterFilter(filter)}
+                  onChange={(event) => onFilterChange(toggleSharedFilter(filter, event.target.checked))}
+                />
+                <span>Include the shared filter ([mister])</span>
+              </span>{' '}
+              <code>{sharedFilter.trim()}</code>
+            </label>
+          ) : null}
           <p className="filter-terms-current">
             <span className="catalog-meta-label">FILTER</span>{' '}
             {filter.trim() ? <code>{filter.trim()}</code> : <span className="filter-terms-empty">No terms</span>}{' '}

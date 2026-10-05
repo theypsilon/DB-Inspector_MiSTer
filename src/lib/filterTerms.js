@@ -1,4 +1,4 @@
-import { normalizeTagName } from './database.js';
+import { normalizeTagName, resolveInheritedFilterValue } from './database.js';
 
 // The terms a FILTER can use: the tags of the databases it applies to, one term for each tag with
 // every name it has (a tag dictionary can give one tag several names, such as famicom, nes and
@@ -172,6 +172,17 @@ export function toggleTerm(filter, term, use) {
     others.push(use === 'excluded' ? `!${term.name}` : term.name);
   }
   return others.join(' ');
+}
+
+/**
+ * A database's own filter with the shared filter included (the [mister] term, written first), or
+ * without it (every [mister] term taken out). Its other terms stay as written, in their order.
+ * @param {string} filter
+ * @param {boolean} include
+ */
+export function toggleSharedFilter(filter, include) {
+  const others = tokens(resolveInheritedFilterValue(filter, ''));
+  return (include ? ['[mister]', ...others] : others).join(' ');
 }
 
 function tokens(filter) {

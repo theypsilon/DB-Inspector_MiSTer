@@ -7,8 +7,10 @@ import {
   buildVirtualRowLayout,
   buildVirtualRowStyle,
   buildVirtualRows,
+  getMeasurementScrollDelta,
   getRowMeasurementKey,
   rowOutline,
+  rowTagsHidden,
 } from '../../src/lib/treeLayout.js';
 
 async function filesystemIndex(files, folders) {
@@ -148,6 +150,61 @@ test('rendered rows fill their place in the list, and draw their lines from the 
   // of the window draws its own top line, under a file that is not rendered either.
   assert.deepEqual([items[0].bottomLine, items[0].corners], [true, 'outer outer none step']);
   assert.deepEqual([windowStart.topLine, windowStart.bottomLine, windowStart.corners], [true, false, 'none none none none']);
+});
+
+test('on a narrow screen a file leaves its tags to its details, unless all of them were asked for or hold the find-in-page match; folders and archives keep theirs', async () => {
+  const index = await filesystemIndex({ 'games/a.rbf': { tags: ['arcade'] } }, { games: { tags: ['arcade'] } });
+  const [folder, file] = [...index.rowsById.values()];
+  assert.equal(file.node.kind, 'file');
+  const hidden = (row, state = {}) => rowTagsHidden(row, { narrow: true, detailsVisible: false, tagsExpanded: false, ...state });
+  assert.equal(hidden(file), true);
+  assert.equal(hidden(file, { narrow: false }), false);
+  assert.equal(hidden(file, { detailsVisible: true }), false);
+  assert.equal(hidden(file, { tagsExpanded: true }), false);
+  assert.equal(hidden(folder), false);
+  assert.equal(hidden({ id: 'archive:pack', type: 'archive', archive: {} }), false);
+  assert.equal(hidden(undefined), false);
+  // Measured apart: a height measured with its tags is not one measured without.
+  assert.notEqual(
+    getRowMeasurementKey(file.id, { collapsed: false, detailsVisible: false, tagsHidden: true }),
+    getRowMeasurementKey(file.id, { collapsed: false, detailsVisible: false }),
+  );
+});
+
+test('the list places a file with the height measured for whether its tags show, on a narrow screen and a wide one, and anchors the scroll with it', async () => {
+  const index = await filesystemIndex({ 'games/a.rbf': { tags: ['arcade'] }, 'games/b.rbf': { tags: ['arcade'] } }, { games: { tags: ['arcade'] } });
+  const rowIds = collectVisibleRowIds(index.rootIds, index.rowsById, new Set());
+  const [folderId, fileId] = rowIds;
+  const key = (rowId, tagsHidden) => getRowMeasurementKey(rowId, { collapsed: false, detailsVisible: false, tagsHidden });
+  // The folder and the first file measured on both screens; the last file on neither.
+  const measuredHeights = new Map([
+    [key(folderId, false), 104],
+    [key(fileId, false), 101],
+    [key(fileId, true), 71],
+  ]);
+  const layout = (narrow, heights = measuredHeights, detailOverrides = new Map()) =>
+    buildVirtualRowLayout({ rowIds, rowsById: index.rowsById, collapsedIds: new Set(), detailOverrides, defaultDetailed: false, measuredHeights: heights, narrow });
+  assert.deepEqual(layout(false).bottoms.slice(0, 2), [104, 205]);
+  assert.deepEqual(layout(true).bottoms.slice(0, 2), [104, 175]);
+  // With its details the file shows its tags, on any screen.
+  assert.equal(layout(true, new Map([...measuredHeights, [getRowMeasurementKey(fileId, { collapsed: false, detailsVisible: true }), 300]]), new Map([[fileId, true]])).bottoms[1], 404);
+
+  // A file above the viewport measured again on a narrow screen moves the rows below by its change.
+  const nextMeasuredHeights = new Map([...measuredHeights, [key(fileId, true), 81]]);
+  const delta = (narrow) =>
+    getMeasurementScrollDelta({
+      rowIds,
+      rowsById: index.rowsById,
+      collapsedIds: new Set(),
+      detailOverrides: new Map(),
+      defaultDetailed: false,
+      narrow,
+      currentMeasuredHeights: measuredHeights,
+      nextMeasuredHeights,
+      viewportTop: 190,
+    });
+  assert.equal(delta(true), 10);
+  assert.equal(delta(false), 0);
 });
 
 test('a row is drawn over its place in the list with its lines and corners, or as a card on its own outside the list', () => {

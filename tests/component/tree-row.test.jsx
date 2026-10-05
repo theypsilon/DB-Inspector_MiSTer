@@ -155,6 +155,17 @@ describe('a tree row', () => {
     }
   });
 
+  test('a row shows as many tags as fit its line, and counts the rest, one more included', async () => {
+    const { row } = await filesystemRows(TAGGED);
+    for (const [shown, more] of [[6, '+5 more tags'], [10, '+1 more tags'], [1, '+10 more tags'], [11, null]]) {
+      const { element, unmount } = renderRow(row('eleven.mra'), { tagsShown: shown });
+      expect(chipNames(element)).toEqual(['screenrotationflip', 'arcadejtcps2', 'alternatives', 'extra', 'screenrotationverticalcw', 'scanrate15khz',
+        'controls2buttons', 'controls2players', 'controlsmove8way', 'arcade', 'mra'].slice(0, shown));
+      expect(within(element).queryByRole('button', { name: /more tags/ })?.getAttribute('aria-label') ?? null).toBe(more);
+      unmount();
+    }
+  });
+
   test('all its tags show, with their other names, when asked for, with details, or for a find-in-page match', async () => {
     const { row } = await filesystemRows(TAGGED);
     // Rarest first: used by this file only, then by two, three and four files.
@@ -167,12 +178,27 @@ describe('a tree row', () => {
     expect(expanded.onToggleTags).toHaveBeenCalledWith(row('eleven.mra').id);
     expanded.unmount();
 
+    // A row asked for all its tags can show fewer again even once they all fit (on a wider page).
+    const fitting = renderRow(row('eleven.mra'), { tagsExpanded: true, tagsShown: 11 });
+    expect(chipNames(fitting.element)).toEqual(all);
+    await fitting.user.click(within(fitting.element).getByRole('button', { name: 'Show fewer' }));
+    expect(fitting.onToggleTags).toHaveBeenCalledWith(row('eleven.mra').id);
+    fitting.unmount();
+
     for (const props of [{ detailsVisible: true }, { tagsRevealed: true }, { detailsVisible: true, tagsExpanded: true }]) {
       const { element, unmount } = renderRow(row('eleven.mra'), props);
       expect(chipNames(element)).toEqual(all);
       expect(within(element).queryByRole('button', { name: /more tags|Show fewer/ })).toBeNull();
       unmount();
     }
+  });
+
+  test('a row whose tags are left to its details shows no tag line, and the rest of the row as before', async () => {
+    const { row } = await filesystemRows(TAGGED);
+    const { element } = renderRow(row('eleven.mra'), { tagsHidden: true });
+    expect(element.querySelector('.primary-row')).toBeNull();
+    expect(within(element).getByRole('heading', { name: 'eleven.mra' })).toBeTruthy();
+    expect(within(element).getByRole('button', { name: 'Show details' })).toBeTruthy();
   });
 
   test('a highlighted row says so', async () => {

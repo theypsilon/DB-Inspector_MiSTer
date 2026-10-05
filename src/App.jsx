@@ -670,6 +670,7 @@ export default function App() {
           withoutTerms={filterTerms.withoutTerms}
           combined={isCombined}
           filter={!isCombined ? filterInput : termsTarget === 'main' ? combinedFilters.shared.value : combinedFilters.overrides[termsTarget] ?? ''}
+          sharedFilter={isCombined && termsTarget !== 'main' ? combinedFilters.shared.value : undefined}
           matches={{
             kept: isCombined ? combinedView.resultCounts.files : displayedInspection.activeFilter.resultCounts.files,
             total: loadedFileCount ?? 0,

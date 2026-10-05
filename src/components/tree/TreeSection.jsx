@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import CollapsibleSection from '../ui/CollapsibleSection.jsx';
 import SectionControls from '../ui/SectionControls.jsx';
@@ -6,11 +6,13 @@ import EmptyState from '../ui/EmptyState.jsx';
 import ScrollToSectionTopButton from '../ui/ScrollToSectionTopButton.jsx';
 import VirtualTreeEntryRow from './VirtualTreeEntryRow.jsx';
 import GhostParentRow from './GhostParentRow.jsx';
+import TagFitProbe from './TagFitProbe.jsx';
 import useTreeRowState from './useTreeRowState.js';
 import useTreeNavigation from './useTreeNavigation.js';
 import useGhostParent from './useGhostParent.js';
 import { scrollToMeasuredRow, useMeasuredRowLayout, useVirtualRowWindow } from './useVirtualTree.js';
-import { collectTextMatchRanges } from '../../lib/utils.js';
+import useMediaQuery from '../../hooks/useMediaQuery.js';
+import { NARROW_SCREEN_QUERY, collectTextMatchRanges } from '../../lib/utils.js';
 
 // A collapsible tree list that renders only the rows near the viewport (plus overscan), with its
 // expand/collapse controls, empty state, and scroll-to-top button.
@@ -48,6 +50,8 @@ const TreeSection = memo(/** @param {TreeSectionProps} props */ function TreeSec
   onOpenExplorer,
 }) {
   const rows = useTreeRowState(index, detailed);
+  // On narrow screens files leave their tags to their details (see rowTagsHidden).
+  const narrow = useMediaQuery(NARROW_SCREEN_QUERY);
   // The find-in-page match in a row's tags shows all of them, so a match in a hidden tag shows.
   const revealedTagRowId = searchMatch?.matchPart === 'tags' ? searchMatch.rowId : null;
   const expandedTagIds = useMemo(
@@ -64,6 +68,7 @@ const TreeSection = memo(/** @param {TreeSectionProps} props */ function TreeSec
     detailOverrides: rows.detailOverrides,
     detailed,
     expandedTagIds,
+    narrow,
   });
   const navigation = useTreeNavigation({
     index,
@@ -83,9 +88,12 @@ const TreeSection = memo(/** @param {TreeSectionProps} props */ function TreeSec
     detailOverrides: rows.detailOverrides,
     detailed,
     expandedTagIds,
+    narrow,
     suppressAnchoringRef: navigation.suppressAnchoringRef,
   });
   const { containerRef } = layout;
+  // The widths the rows fit their tags into, from the list's TagFitProbe.
+  const [tagFit, setTagFit] = useState(null);
 
   // Highlights the find-in-page query in every rendered row except the current match.
   const searchHighlightName = `search-match-all-${anchor}`;
@@ -159,6 +167,7 @@ const TreeSection = memo(/** @param {TreeSectionProps} props */ function TreeSec
           onMouseMove={ghost.handleTreeMouseMove}
           onMouseLeave={ghost.handleTreeMouseLeave}
         >
+          <TagFitProbe onMeasure={setTagFit} />
           {virtualRows.items.map(({ rowId, top, height, topLine, bottomLine, corners, trimTopGuide, trimBottomGuide }) => {
             const row = index.rowsById.get(rowId);
             if (!row) {
@@ -188,6 +197,8 @@ const TreeSection = memo(/** @param {TreeSectionProps} props */ function TreeSec
                 corners={corners}
                 trimTopGuide={trimTopGuide}
                 trimBottomGuide={trimBottomGuide}
+                tagFit={tagFit}
+                narrow={narrow}
               />
             );
           })}

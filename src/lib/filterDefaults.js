@@ -138,6 +138,7 @@ export function resolveDownloaderFilterSource({ misterFilter, sectionFilter, dat
   return misterFilter.isSet ? 'shared' : 'none';
 }
 
-function inheritsMisterFilter(filterValue) {
+// Whether a filter has the [mister] term, which fills in the [mister] filter.
+export function inheritsMisterFilter(filterValue) {
   return /\[\s*mister\s*\]/i.test(String(filterValue));
 }

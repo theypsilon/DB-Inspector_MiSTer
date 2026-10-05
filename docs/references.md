@@ -24,8 +24,8 @@ These are the main references that shaped the implementation.
   - Choosing several databases at once: one per `db_id`, the Update All defaults, and the picker shared by the catalog, database lists, and uploads.
 - `src/lib/uploads.js`
   - Uploads of several files or folders: which files count, walking dropped folders, identical files, and where each database came from.
-- `src/components/tree/` with `src/lib/treeIndex.js` and `src/lib/treeLayout.js`
-  - Tree rendering, flat row indexes, and the virtualization layout math.
+- `src/components/tree/` with `src/lib/treeIndex.js`, `src/lib/treeLayout.js` and `src/lib/tagFit.js`
+  - Tree rendering, flat row indexes, the virtualization layout math, and how many tags fit on a row's line.
 - `tests/unit/flows/`
   - Every user flow at the model level: one file per legacy end-to-end spec, with one unit test per legacy end-to-end test under the same title, run against the app model and the plain modules.
 - `tests/unit/filtering.test.js`

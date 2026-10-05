@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { loadDatabaseSourceFile } from '../../src/lib/database.js';
-import { buildFilterTerms, searchFilterTerms, termUse, toggleTerm } from '../../src/lib/filterTerms.js';
+import { inheritsMisterFilter } from '../../src/lib/filterDefaults.js';
+import { buildFilterTerms, searchFilterTerms, termUse, toggleSharedFilter, toggleTerm } from '../../src/lib/filterTerms.js';
 
 async function inspect(db) {
   const source = await loadDatabaseSourceFile(new File([JSON.stringify(db)], `${db.db_id}.json`, { type: 'application/json' }));
@@ -108,6 +109,22 @@ test('Keep writes a term, Exclude writes it with !, and choosing what is there t
   assert.deepEqual(termUse('nes !nes', nes), { kept: true, excluded: true });
   assert.deepEqual(termUse('', cheats), { kept: false, excluded: false });
   assert.deepEqual(termUse('nesting cheatsheet', cheats), { kept: false, excluded: false });
+});
+
+test('a database’s own filter includes the shared filter with [mister], written first, and leaves it out wherever it was; the other terms stay as written', () => {
+  assert.equal(toggleSharedFilter('', true), '[mister]');
+  assert.equal(toggleSharedFilter('arcade  !cheats', true), '[mister] arcade !cheats');
+  assert.equal(toggleSharedFilter('arcade [mister] !cheats', false), 'arcade !cheats');
+  assert.equal(toggleSharedFilter('[mister]', false), '');
+  // Every [mister] goes, in any letter case and with spaces in its brackets, as the page fills
+  // them in; included again, it is there once.
+  assert.equal(toggleSharedFilter('[MiSTer] arcade [ mister ]', false), 'arcade');
+  assert.equal(toggleSharedFilter('arcade [mister]', true), '[mister] arcade');
+
+  // What the checkbox shows: whether [mister] is there.
+  assert.equal(inheritsMisterFilter('arcade [ MiSTer ]'), true);
+  assert.equal(inheritsMisterFilter('arcade mister'), false);
+  assert.equal(inheritsMisterFilter(''), false);
 });
 
 test('the search finds terms by any of their names, as typed or as FILTER compares them', async () => {

@@ -1,4 +1,5 @@
 import { updateTooltipPlacement } from '../../lib/utils.js';
+import { compactTagName } from '../../lib/tagFit.js';
 
 // A tag. Its tooltip names its number in the tag dictionary; a `compact` chip shows only the
 // tag's first name, and its tooltip all of them.
@@ -12,7 +13,7 @@ function TagChip({ tag, compact = false }) {
       className={tooltip ? 'tag-chip has-tooltip' : 'tag-chip'}
       onMouseEnter={tooltip ? (e) => updateTooltipPlacement(e.currentTarget) : undefined}
     >
-      {compact ? names[0] : tag.label}
+      {compact ? compactTagName(tag) : tag.label}
       {tooltip ? <span className="chip-tooltip">{tooltip}</span> : null}
     </span>
   );

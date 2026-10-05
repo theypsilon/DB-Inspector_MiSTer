@@ -16,6 +16,8 @@ import { updateTooltipPlacement } from '../../lib/utils.js';
  * @property {boolean} detailsVisible
  * @property {boolean} [tagsExpanded] all its tags shown, as the user asked
  * @property {boolean} [tagsRevealed] all its tags shown, for the find-in-page match in one of them
+ * @property {number} [tagsShown] how many tags it shows before "+N" (see fitTagCount); by default the first four
+ * @property {boolean} [tagsHidden] its tags left off its line, for its details (see rowTagsHidden)
  * @property {boolean} highlighted
  * @property {(rowId: string) => void} onToggleCollapsed
  * @property {(rowId: string) => void} onToggleDetails
@@ -32,6 +34,8 @@ const TreeEntryRow = memo(/** @param {TreeEntryRowProps} props */ function TreeE
   detailsVisible,
   tagsExpanded = false,
   tagsRevealed = false,
+  tagsShown,
+  tagsHidden = false,
   highlighted,
   onToggleCollapsed,
   onToggleDetails,
@@ -58,8 +62,8 @@ const TreeEntryRow = memo(/** @param {TreeEntryRowProps} props */ function TreeE
   const isFile = !isArchive && row.node.kind === 'file';
   const { downloadUrl, openUrl } = getRowFileLinks(row);
   const bodyCollapsed = isFile && collapsed;
-  // Details show every tag; otherwise a row shows its first few, unless they were asked for or
-  // the find-in-page match is in one of them.
+  // Details show every tag; otherwise a row shows those that fit on its line, unless they were
+  // asked for or the find-in-page match is in one of them.
   const tagView = detailsVisible ? 'all' : tagsExpanded ? 'expanded' : tagsRevealed ? 'all' : 'compact';
   const hasVisibleChildren = childIds.length > 0 && !collapsed;
   const containerClassName = [
@@ -216,8 +220,8 @@ const TreeEntryRow = memo(/** @param {TreeEntryRowProps} props */ function TreeE
               ) : null}
             </span>
           </div>
-          {!bodyCollapsed ? (
-            <PrimaryFieldRow fields={primaryFields} tagView={tagView} onToggleTags={() => onToggleTags?.(row.id)} />
+          {!bodyCollapsed && !tagsHidden ? (
+            <PrimaryFieldRow fields={primaryFields} tagView={tagView} tagsShown={tagsShown} onToggleTags={() => onToggleTags?.(row.id)} />
           ) : null}
           {!bodyCollapsed && detailsVisible ? <MetadataList fields={details} /> : null}
           {issues.length ? (

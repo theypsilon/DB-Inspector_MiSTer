@@ -65,8 +65,15 @@ export function rowOutline(rowIds, rowsById, index) {
 
 // A row's measured height depends on what it shows: open or collapsed, its details, and all its
 // tags or only the first few (`tagsExpanded`).
-export function getRowMeasurementKey(rowId, { collapsed, detailsVisible, tagsExpanded = false }) {
-  return `${rowId}:${collapsed ? '1' : '0'}:${detailsVisible ? '1' : '0'}:${tagsExpanded ? '1' : '0'}`;
+export function getRowMeasurementKey(rowId, { collapsed, detailsVisible, tagsExpanded = false, tagsHidden = false }) {
+  return `${rowId}:${collapsed ? '1' : '0'}:${detailsVisible ? '1' : '0'}:${tagsExpanded ? '1' : '0'}:${tagsHidden ? '1' : '0'}`;
+}
+
+// Whether a row leaves its tags off its line: a file on a narrow screen (NARROW_SCREEN_QUERY in
+// utils.js), unless its details show, or all its tags were asked for or hold the find-in-page match.
+// Folders and archives keep theirs.
+export function rowTagsHidden(row, { narrow, detailsVisible, tagsExpanded }) {
+  return Boolean(narrow && row && row.type !== 'archive' && row.node?.kind === 'file' && !detailsVisible && !tagsExpanded);
 }
 
 const NO_ROW_IDS = new Set();
@@ -79,6 +86,7 @@ export function buildVirtualRowLayout({
   defaultDetailed,
   measuredHeights,
   expandedTagIds = NO_ROW_IDS,
+  narrow = false,
 }) {
   if (!rowIds.length) {
     return {
@@ -101,9 +109,9 @@ export function buildVirtualRowLayout({
     rowIndexById.set(rowId, index);
     const collapsed = collapsedIds.has(rowId);
     const detailsVisible = detailOverrides.get(rowId) ?? defaultDetailed;
-    const measuredHeight = measuredHeights.get(
-      getRowMeasurementKey(rowId, { collapsed, detailsVisible, tagsExpanded: expandedTagIds.has(rowId) }),
-    );
+    const tagsExpanded = expandedTagIds.has(rowId);
+    const tagsHidden = rowTagsHidden(row, { narrow, detailsVisible, tagsExpanded });
+    const measuredHeight = measuredHeights.get(getRowMeasurementKey(rowId, { collapsed, detailsVisible, tagsExpanded, tagsHidden }));
     const rowHeight =
       measuredHeight ?? estimateRowHeight(row, { collapsed, detailsVisible });
 
@@ -239,6 +247,7 @@ export function getMeasurementScrollDelta({
   detailOverrides,
   defaultDetailed,
   expandedTagIds = NO_ROW_IDS,
+  narrow = false,
   currentMeasuredHeights,
   nextMeasuredHeights,
   viewportTop,
@@ -248,7 +257,7 @@ export function getMeasurementScrollDelta({
   }
 
   const layoutFor = (measuredHeights) =>
-    buildVirtualRowLayout({ rowIds, rowsById, collapsedIds, detailOverrides, defaultDetailed, measuredHeights, expandedTagIds });
+    buildVirtualRowLayout({ rowIds, rowsById, collapsedIds, detailOverrides, defaultDetailed, measuredHeights, expandedTagIds, narrow });
   return getViewportAnchorOffsetDelta({
     currentLayout: layoutFor(currentMeasuredHeights),
     nextLayout: layoutFor(nextMeasuredHeights),

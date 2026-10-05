@@ -8,7 +8,6 @@ import {
   collectVisibleRowIds,
   getRowBadge,
 } from '../../src/lib/treeIndex.js';
-import { TAGS_SHOWN, compactTagList } from '../../src/lib/utils.js';
 
 async function inspect(database) {
   const loadedSource = await loadDatabaseSourceFile(
@@ -126,14 +125,4 @@ test('row badges distinguish archives, folders, and files', async () => {
     badge: 'FILE',
     badgeClassName: 'node-badge file-badge',
   });
-});
-
-test('tree rows show their first four tags and count the rest, unless there is only one more', () => {
-  const tags = (count) => Array.from({ length: count }, (_, index) => ({ id: `tag:${index}` }));
-  assert.equal(TAGS_SHOWN, 4);
-  for (const count of [0, 1, 4, 5]) {
-    assert.deepEqual(compactTagList(tags(count)), { shown: tags(count), hiddenCount: 0 }, String(count));
-  }
-  assert.deepEqual(compactTagList(tags(6)), { shown: tags(4), hiddenCount: 2 });
-  assert.deepEqual(compactTagList(tags(11)), { shown: tags(4), hiddenCount: 7 });
 });

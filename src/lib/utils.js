@@ -10,6 +10,9 @@ export const CLUSTER_SIZE_OPTIONS = [4096, 8192, 16384, 32768, 65536, 131072, 26
 // Up to this many combined databases, the page shows each one in full: a card each, and the filter
 // each one gets. With more, it lists them compactly.
 export const COMBINED_DATABASES_IN_FULL_MAX = 3;
+// Screens where tree rows stack their heading (app.css's 960px rule): there a file's tags are left to
+// its details (see rowTagsHidden).
+export const NARROW_SCREEN_QUERY = '(max-width: 960px)';
 export const isTouchDevice = typeof window !== 'undefined' && (window.matchMedia?.('(pointer: coarse)').matches || navigator.maxTouchPoints > 0);
 
 const TOOLTIP_FLIP_THRESHOLD_PX = 80;
@@ -128,15 +131,6 @@ export function collectTextMatchRanges(root, query, { firstMatchPerNode = false 
     textNode = walker.nextNode();
   }
   return ranges;
-}
-
-// How many tags a tree row shows before "+N"; a row with just one more shows them all.
-export const TAGS_SHOWN = 4;
-
-export function compactTagList(tags) {
-  return tags.length > TAGS_SHOWN + 1
-    ? { shown: tags.slice(0, TAGS_SHOWN), hiddenCount: tags.length - TAGS_SHOWN }
-    : { shown: tags, hiddenCount: 0 };
 }
 
 export function buildCombinedFilterSummaryCopy({ resultCounts, isFiltering, databases }) {

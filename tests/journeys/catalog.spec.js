@@ -235,10 +235,31 @@ test('the catalog lists known databases and opens them alone or together', async
     expect(own.width).toBe(shared.width);
     expect([ownTerms.y > own.y, ownTerms.width]).toEqual([true, remove.width]);
 
-    // Its terms name it on every term, and the dialog scrolls only up and down.
+    // Its terms name it on every term, and the dialog scrolls only up and down, with a shared
+    // filter to include, a long term among its own.
+    await page.getByLabel('FILTER', { exact: true }).fill('arcade !cheats-and-every-other-long-named-extra-of-the-collection');
     await page.getByRole('button', { name: `Terms for ${dbId}` }).click();
     const terms = page.getByRole('dialog', { name: 'Filter terms' });
     await expect(terms.locator('.filter-term .db-chip', { hasText: dbId })).toHaveCount(2);
+    // The shared filter to include has a line of its own above FILTER: the checkbox beside its
+    // words, and the shared filter's terms under them, wrapping.
+    const include = terms.locator('.filter-terms-shared');
+    const [check, words, sharedTerms, current] = await Promise.all([
+      box(include.getByRole('checkbox')),
+      box(include.locator('.filter-terms-shared-words > span')),
+      box(include.locator('code')),
+      box(terms.locator('.filter-terms-current')),
+    ]);
+    expect([
+      check.x + check.width < words.x && Math.abs(check.y + check.height / 2 - (words.y + words.height / 2)) < 1,
+      sharedTerms.y >= words.y + words.height && sharedTerms.height > words.height * 2,
+      sharedTerms.y + sharedTerms.height <= current.y,
+    ]).toEqual([true, true, true]);
+    // On a wide screen, where its words and terms fit on one line, the line is still all its own.
+    await page.setViewportSize(viewport);
+    const [wideInclude, footer, wideCurrent] = await Promise.all([box(include), box(terms.locator('.modal-footer')), box(terms.locator('.filter-terms-current'))]);
+    expect([Math.abs(wideInclude.width - footer.width) < 1, wideInclude.height < words.height * 2, wideInclude.y + wideInclude.height <= wideCurrent.y]).toEqual([true, true, true]);
+    await page.setViewportSize({ width: 360, height: 800 });
     for (const part of ['.modal-body', '.modal-footer']) {
       expect(await terms.locator(part).evaluate((element) => element.scrollWidth - element.clientWidth), part).toBe(0);
     }
@@ -254,6 +275,7 @@ test('the catalog lists known databases and opens them alone or together', async
       }),
     ).toEqual([true, 'solid', true]);
     await terms.getByRole('button', { name: 'Done' }).click();
+    await page.locator('#section-filter .filter-toolbar').getByRole('button', { name: 'Clear' }).click();
     await page.locator('.database-filter-row').getByRole('button', { name: 'Remove' }).click();
     await expect.poll(() => new URL(page.url()).hash).toBe(link);
 

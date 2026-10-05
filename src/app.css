@@ -914,7 +914,11 @@ fieldset.mister-option legend { float: left; width: 100%; padding: 0; }
 .filter-term-use.active { color: var(--on-toggle-on); background: var(--toggle-on); }
 .filter-term-use:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .filter-terms-current { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.7rem; min-width: 0; margin-right: auto; }
-.filter-terms-current code { padding: 0.25rem 0.5rem; border-radius: var(--radius-sm); background: var(--code); overflow-wrap: anywhere; }
+.filter-terms-current code, .filter-terms-shared code { padding: 0.25rem 0.5rem; border-radius: var(--radius-sm); background: var(--code); overflow-wrap: anywhere; }
+/* A database's own filter can include the shared filter: a line of its own above FILTER, the
+   checkbox beside its words, and the shared filter's terms after them, or under them when narrow. */
+.filter-terms-shared { display: flex; flex-basis: 100%; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.6rem; min-width: 0; cursor: pointer; }
+.filter-terms-shared-words { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
 .filter-terms-empty, .filter-terms-matches { color: var(--muted); }
 @media (max-width: 560px) {
   /* A term's Keep and Exclude go under its names. */
@@ -1141,7 +1145,7 @@ fieldset.mister-option legend { float: left; width: 100%; padding: 0; }
 .ghost-parent-name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--ghost); padding: 0.1rem 0.4rem; border-radius: 0.3rem; }
 
 /* Tree entry */
-.tree-entry { position: relative; --tree-indent-step: 1.55rem; --tree-control-size: 2.25rem; --tree-control-center: calc(var(--tree-control-size) / 2); --tree-control-offset: 0.4rem; --tree-control-y: calc(var(--tree-control-center) + var(--tree-control-offset)); --tree-row-gap: 0.9rem; --tree-corner-outer: var(--radius-md); --tree-corner-step: min(var(--radius-md), calc(var(--tree-indent-step) / 2)); --tree-guide-overlap: 1px; --tree-guide-join-overlap: 0.08rem; --tree-guide-top-overlap: var(--tree-guide-overlap); --tree-guide-bottom-overlap: var(--tree-guide-overlap); padding-left: calc(var(--tree-depth, 0) * var(--tree-indent-step)); }
+.tree-entry, .tag-fit-probe { position: relative; --tree-indent-step: 1.55rem; --tree-control-size: 2.25rem; --tree-control-center: calc(var(--tree-control-size) / 2); --tree-control-offset: 0.4rem; --tree-control-y: calc(var(--tree-control-center) + var(--tree-control-offset)); --tree-row-gap: 0.9rem; --tree-corner-outer: var(--radius-md); --tree-corner-step: min(var(--radius-md), calc(var(--tree-indent-step) / 2)); --tree-guide-overlap: 1px; --tree-guide-join-overlap: 0.08rem; --tree-guide-top-overlap: var(--tree-guide-overlap); --tree-guide-bottom-overlap: var(--tree-guide-overlap); padding-left: calc(var(--tree-depth, 0) * var(--tree-indent-step)); }
 /* The rows touch, and together draw one outline around the list, stepping in and out with the
    indentation. Each row draws its card's background and its part of the outline on this layer, the
    height of its place in the list (--tree-row-height) rather than of its content, so it reaches
@@ -1150,6 +1154,11 @@ fieldset.mister-option legend { float: left; width: 100%; padding: 0; }
 .tree-entry::before { content: ''; position: absolute; top: 0; left: calc(var(--tree-depth, 0) * var(--tree-indent-step) + var(--tree-control-size) + var(--tree-row-gap)); right: 0; height: var(--tree-row-height, 100%); box-sizing: border-box; border: 1px solid var(--card-line); border-top-width: var(--tree-row-top-line, 1px); border-bottom-width: var(--tree-row-bottom-line, 1px); border-radius: var(--tree-row-corners, var(--tree-corner-outer)); background: var(--card); }
 .copy-link-button { all: unset; cursor: pointer; font-size: 0.7em; line-height: 1; color: var(--ink); opacity: 1; margin-inline: -0.35rem; visibility: hidden; }
 .tree-entry:hover .copy-link-button, .copy-link-button:focus-visible { visibility: visible; }
+/* A hidden row at the top of each tree list, with a row's sizes, that its rows fit their tags with
+   (TagFitProbe): it takes no room and shows nothing. Its sample tags sit side by side at their full width. */
+.tag-fit-probe { position: absolute; top: 0; left: 0; right: 0; height: 0; overflow: hidden; visibility: hidden; pointer-events: none; }
+.tag-chip-list.tag-fit-sample { position: absolute; flex-wrap: nowrap; width: max-content; }
+.tag-fit-indent { display: block; width: var(--tree-indent-step); }
 .tree-row { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--tree-row-gap); align-items: start; }
 .tree-guides { position: absolute; inset: 0; pointer-events: none; }
 .tree-guide-vertical, .tree-guide-parent, .tree-guide-child, .tree-guide-elbow { position: absolute; }
@@ -1333,7 +1342,7 @@ fieldset.mister-option legend { float: left; width: 100%; padding: 0; }
   .app-shell { width: min(100% - 1rem, 1380px); padding-top: 2.75rem; }
   .panel { padding: 1rem; border-radius: min(var(--radius-lg), 22px); border-bottom-right-radius: min(var(--panel-corner), 22px); }
   .modal-panel { padding: 1rem; border-radius: min(var(--radius-lg), 22px); }
-  .tree-entry { --tree-indent-step: 1rem; --tree-row-gap: 0.6rem; padding-left: calc(var(--tree-depth, 0) * var(--tree-indent-step)); }
+  .tree-entry, .tag-fit-probe { --tree-indent-step: 1rem; --tree-row-gap: 0.6rem; padding-left: calc(var(--tree-depth, 0) * var(--tree-indent-step)); }
   .tree-guide-elbow { width: var(--tree-indent-step); }
   /* A database's own filter: its db_id, its box, then Terms and Remove, each a line of its own. */
   .database-filter-row { grid-template-columns: minmax(0, 1fr); }
