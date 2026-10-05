@@ -7,6 +7,8 @@ import ReplaceLoadedModal from '../../src/components/modals/ReplaceLoadedModal.j
 import FilterOverrideModal from '../../src/components/modals/FilterOverrideModal.jsx';
 import DbIdConflictModal from '../../src/components/modals/DbIdConflictModal.jsx';
 import ClearDatabasesModal from '../../src/components/modals/ClearDatabasesModal.jsx';
+import InstallAllModal from '../../src/components/modals/InstallAllModal.jsx';
+import { NO_COMBINED_FILTERS } from '../../src/lib/combinedFilters.js';
 import { inspect, text } from './support.js';
 
 describe('the question before combining', () => {
@@ -60,6 +62,50 @@ describe('the question before clearing the loaded databases', () => {
     // A click outside cancels.
     await user.click(document.querySelector('.modal-overlay'));
     expect([answers.onClear.mock.calls.length, answers.onCancel.mock.calls.length]).toEqual([1, 2]);
+  });
+});
+
+describe('the install dialog of every loaded database', () => {
+  const installable = [
+    { dbId: 'alpha', dbUrl: 'https://example.com/alpha.json' },
+    { dbId: 'Coin-OpCollection/Distribution-MiSTerFPGA', dbUrl: 'https://example.com/coin-op/db.json.zip' },
+  ];
+  const ini = (dialog) => within(dialog).getByRole('figure', { name: 'downloader.ini' }).querySelector('pre').textContent;
+
+  test('shows the downloader.ini it downloads, with the filters when asked, and names the uploaded databases left out', async () => {
+    const onClose = vi.fn();
+    const filters = { shared: { isSet: true, value: 'arcade' }, overrides: { alpha: 'console' } };
+    render(<InstallAllModal installable={installable} leftOut={['mine']} filters={filters} onClose={onClose} />);
+    const dialog = screen.getByRole('dialog', { name: 'Install all loaded databases on MiSTer' });
+
+    expect(text(dialog)).toContain('extract downloader.ini, and copy it to the root of your SD card in place of the one there. It lists these 2 databases and no others.');
+    expect(text(dialog)).toContain('Left out, since uploaded databases have no URL to install from: mine.');
+    expect(within(dialog).getByRole('button', { name: 'Download downloader.ini' })).toBeTruthy();
+    expect(ini(dialog)).toBe('[alpha]\ndb_url=https://example.com/alpha.json\n\n[Coin-OpCollection/Distribution-MiSTerFPGA]\ndb_url=https://example.com/coin-op/db.json.zip\n');
+
+    const user = userEvent.setup();
+    await user.click(within(dialog).getByLabelText('Include the current filters in the INI file'));
+    expect(ini(dialog)).toBe('[mister]\nfilter=arcade\n\n[alpha]\ndb_url=https://example.com/alpha.json\nfilter=console\n\n[Coin-OpCollection/Distribution-MiSTerFPGA]\ndb_url=https://example.com/coin-op/db.json.zip\n');
+
+    await user.click(within(dialog).getByRole('button', { name: 'Copy install link to clipboard' }));
+    expect(await navigator.clipboard.readText()).toBe(`${window.location.origin}/#at=install-all`);
+    await user.click(document.querySelector('.modal-overlay'));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  test('offers no filters when there are none, speaks of one database for one, and says when none can be installed', () => {
+    const one = render(<InstallAllModal installable={installable.slice(0, 1)} leftOut={[]} filters={NO_COMBINED_FILTERS} onClose={() => {}} />);
+    let dialog = screen.getByRole('dialog', { name: 'Install all loaded databases on MiSTer' });
+    expect(text(dialog)).toContain('It lists this database and no others.');
+    expect(within(dialog).queryByRole('checkbox')).toBeNull();
+    expect(text(dialog)).not.toContain('Left out');
+    one.unmount();
+
+    render(<InstallAllModal installable={[]} leftOut={['mine']} filters={NO_COMBINED_FILTERS} onClose={() => {}} />);
+    dialog = screen.getByRole('dialog', { name: 'Install all loaded databases on MiSTer' });
+    expect(text(dialog)).toContain('None of the loaded databases can be installed.');
+    expect(within(dialog).queryByRole('button', { name: 'Download downloader.ini' })).toBeNull();
+    expect(within(dialog).queryByRole('figure')).toBeNull();
   });
 });
 

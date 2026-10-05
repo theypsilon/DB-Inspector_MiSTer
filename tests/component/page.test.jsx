@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import App from '../../src/App.jsx';
@@ -576,6 +576,42 @@ describe('the page and the app model', () => {
     expect(await screen.findByRole('dialog', { name: 'Install \u201Cinstall_db\u201D on MiSTer' })).toBeTruthy();
     expect(window.location.hash).toBe(`#db=${url}&filter=arcade&at=install`);
   });
+  test('install_all() in the console opens the install dialog of every loaded database over the explorer, puts it in the link, and closing takes it out', async () => {
+    const [alpha, beta] = ['https://example.com/install-alpha.json', 'https://example.com/install-beta.json'];
+    const user = openPage(`/#db=${alpha}&db=${beta}&filter=arcade`, { [alpha]: { body: database('alpha') }, [beta]: { body: database('beta') } });
+    expect(await screen.findByRole('heading', { name: '2 combined databases' })).toBeTruthy();
+    await user.click(within(document.getElementById('section-files')).getByRole('button', { name: 'Explorer' }));
+    expect(screen.getByRole('dialog', { name: 'Explorer' })).toBeTruthy();
+
+    act(() => window.install_all());
+    const dialog = screen.getByRole('dialog', { name: 'Install all loaded databases on MiSTer' });
+    expect(screen.queryByRole('dialog', { name: 'Explorer' })).toBeNull();
+    expect(window.location.hash).toBe(`#db=${alpha}&db=${beta}&filter=arcade&at=install-all`);
+    await user.click(within(dialog).getByLabelText('Include the current filters in the INI file'));
+    expect(within(dialog).getByRole('figure', { name: 'downloader.ini' }).querySelector('pre').textContent).toBe(
+      `[mister]\nfilter=arcade\n\n[alpha]\ndb_url=${alpha}\n\n[beta]\ndb_url=${beta}\n`,
+    );
+
+    await user.click(document.querySelector('.modal-overlay'));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(window.location.hash).toBe(`#db=${alpha}&db=${beta}&filter=arcade`);
+  });
+
+  test('a link to the install dialog of every loaded database opens it; with nothing loaded, install_all() says so', async () => {
+    const url = 'https://example.com/install-all.json';
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    openPage(`/#db=${url}&at=install-all`, { [url]: { body: database('install_db') } });
+    const dialog = await screen.findByRole('dialog', { name: 'Install all loaded databases on MiSTer' });
+    expect(within(dialog).getByRole('figure', { name: 'downloader.ini' }).querySelector('pre').textContent).toBe(`[install_db]\ndb_url=${url}\n`);
+    cleanup();
+
+    openPage('/', {});
+    act(() => window.install_all());
+    expect(warn).toHaveBeenCalledWith('install_all(): no databases are loaded. Open some first.');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(window.location.hash).toBe('');
+  });
+
   test('the Explorer buttons of Files and folders and of Archives open the SD card, with archive files in their folders, and it opens again where it was left', async () => {
     const url = 'https://example.com/explorer.json';
     const user = openPage(`/#db=${url}`, { [url]: { body: database('explorer_db', EXPLORER_ARCHIVES) } });

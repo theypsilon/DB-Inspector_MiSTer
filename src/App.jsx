@@ -10,6 +10,7 @@ import {
   writeLinkDetailed,
 } from './lib/urlState.js';
 import { buildExplorerTree } from './lib/explorer.js';
+import { INSTALL_ALL_ANCHOR, sessionInstallFilters, splitInstallableDatabases } from './lib/downloaderIni.js';
 import { DEFAULT_CLUSTER_SIZE_BYTES, buildCombinedFilterSummaryCopy, collectTextMatchRanges, runAfterNextPaint } from './lib/utils.js';
 import { createAppModel } from './model/appModel.js';
 import {
@@ -43,6 +44,7 @@ import SourcePickerModal from './components/modals/SourcePickerModal.jsx';
 import ReplaceLoadedModal from './components/modals/ReplaceLoadedModal.jsx';
 import FilterOverrideModal from './components/modals/FilterOverrideModal.jsx';
 import InstallModal from './components/modals/InstallModal.jsx';
+import InstallAllModal from './components/modals/InstallAllModal.jsx';
 import DownloadErrorModal from './components/modals/DownloadErrorModal.jsx';
 import FilesystemSection from './components/tree/FilesystemSection.jsx';
 import ArchiveSummariesSection from './components/tree/ArchiveSummariesSection.jsx';
@@ -69,8 +71,8 @@ const FIND_SHORTCUT_LABEL =
 
 // The page. Its state and what changes it live in the app model (src/model/appModel.js); this
 // renders that state, forwards user actions to it, and keeps what only the page needs: the
-// detailed toggle, tooltips, find-in-page, anchors, scrolling, and the install, download, explorer
-// and filter terms dialogs.
+// detailed toggle, tooltips, find-in-page, anchors, scrolling, and the install (of one database, or
+// of all of them from the console), download, explorer and filter terms dialogs.
 export default function App() {
   const fileInputRef = useRef(null);
   const [model] = useState(createAppModel);
@@ -112,6 +114,7 @@ export default function App() {
   const [clusterSizeBytes, setClusterSizeBytes] = useState(DEFAULT_CLUSTER_SIZE_BYTES);
   const [databaseDetailed, setDatabaseDetailed] = useState(() => readLink().detailed);
   const [installModalOpen, setInstallModalOpen] = useState(false);
+  const [installAllOpen, setInstallAllOpen] = useState(false);
   const [downloadError, setDownloadError] = useState(null);
   const [installDbId, setInstallDbId] = useState(null);
   const [nodeAnchor, setNodeAnchor] = useState(null);
@@ -260,6 +263,10 @@ export default function App() {
       setInstallModalOpen(true);
       return;
     }
+    if (at === INSTALL_ALL_ANCHOR) {
+      setInstallAllOpen(true);
+      return;
+    }
 
     // Other databases: the explorer starts again from the SD card, open only when the link says.
     explorerPathRef.current = null;
@@ -378,6 +385,28 @@ export default function App() {
     setInstallModalOpen(true);
     writeLinkAnchor('install');
   }
+
+  // install_all() in the browser's console opens the install dialog of every loaded database, which
+  // no button opens. The explorer and the terms make way for it, and the link names it.
+  const openInstallAll = useEffectEvent(() => {
+    if (!databases.length) {
+      console.warn('install_all(): no databases are loaded. Open some first.');
+      return;
+    }
+
+    setExplorer(null);
+    setTermsDialog(null);
+    setInstallAllOpen(true);
+    writeLinkAnchor(INSTALL_ALL_ANCHOR);
+  });
+
+  useEffect(() => {
+    const page = /** @type {any} */ (window);
+    page.install_all = () => openInstallAll();
+    return () => {
+      delete page.install_all;
+    };
+  }, []);
 
   const closeTerms = useCallback(() => {
     setTermsDialog(null);
@@ -652,6 +681,19 @@ export default function App() {
           onClose={() => {
             setInstallModalOpen(false);
             if (readLink().at === 'install') {
+              writeLinkAnchor('');
+            }
+          }}
+        />
+      ) : null}
+
+      {installAllOpen && databases.length ? (
+        <InstallAllModal
+          {...splitInstallableDatabases(databases)}
+          filters={sessionInstallFilters({ databases, combinedFilters: debouncedCombinedFilters, filterInput: debouncedFilterInput })}
+          onClose={() => {
+            setInstallAllOpen(false);
+            if (readLink().at === INSTALL_ALL_ANCHOR) {
               writeLinkAnchor('');
             }
           }}

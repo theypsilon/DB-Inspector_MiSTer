@@ -891,6 +891,9 @@ fieldset.mister-option legend { float: left; width: 100%; padding: 0; }
 .install-filter-option { display: flex; align-items: baseline; gap: 0.5rem; margin: 0.8rem 0; font-size: 0.92rem; cursor: pointer; }
 .install-filter-option code { padding: 0.15rem 0.4rem; border-radius: var(--radius-sm); background: var(--code); font-size: 0.85em; }
 .install-download-row { display: flex; justify-content: center; margin-top: 1.2rem; }
+/* The downloader.ini that installs every loaded database, as it is written; long URLs wrap. */
+.install-ini { display: grid; gap: 0.4rem; margin: 1.2rem 0 0; }
+.install-ini pre { margin: 0; padding: 0.7rem 0.8rem; border-radius: var(--radius-sm); background: var(--code); font-family: var(--mono); font-size: 0.82rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* Filter terms: the terms of a FILTER box, to keep or exclude. As in the pickers, the list fills
    the dialog and is the part that scrolls. A term's names and its counts share a line when they fit. */
