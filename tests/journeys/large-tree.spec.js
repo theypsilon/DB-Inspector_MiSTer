@@ -271,22 +271,11 @@ test('large trees render near the viewport, keep their spacing, and reach far ro
     const terms = page.getByRole('dialog', { name: 'Filter terms' });
     const names = terms.locator('.filter-term strong');
     await expect(names).toHaveCount(71);
-    const diag = await page.evaluate(async () => {
-      const out = [];
-      for (let i = 0; i < 8; i += 1) {
-        const first = document.querySelector('.filter-terms-panel .filter-term strong');
-        const row = first.closest('.filter-term');
-        const r = row.getBoundingClientRect();
-        const body = document.querySelector('.filter-terms-panel .modal-body')?.getBoundingClientRect();
-        out.push({ i, laid: first.checkVisibility({ contentVisibilityAuto: true }), rowTop: Math.round(r.top), rowH: Math.round(r.height), bodyTop: Math.round(body?.top), bodyH: Math.round(body?.height), vh: innerHeight, anims: document.getAnimations().map((a) => a.animationName ?? a.transitionProperty).join(','), t: Math.round(performance.now()) });
-        await new Promise((resolve) => requestAnimationFrame(resolve));
-      }
-      return out;
-    });
-    console.log('DIAG', JSON.stringify(diag));
     // Runs in the page: whether a term's name is laid out (not skipped as off screen).
     const laidOut = (name) => name.evaluate((element) => element.checkVisibility({ contentVisibilityAuto: true }));
-    expect(await laidOut(names.first())).toBe(true);
+    // The terms are in the page before the browser has told which are on screen, which it does by
+    // the next frame: until then they all count as skipped.
+    await expect.poll(() => laidOut(names.first())).toBe(true);
     expect(await laidOut(names.last())).toBe(false);
     await names.last().scrollIntoViewIfNeeded();
     await expect.poll(() => laidOut(names.last())).toBe(true);

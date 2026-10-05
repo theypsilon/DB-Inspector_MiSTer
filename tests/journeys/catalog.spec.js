@@ -206,8 +206,22 @@ test('the catalog lists known databases and opens them alone or together', async
     const link = new URL(page.url()).hash;
     const dbId = 'Coin-OpCollection/Distribution-MiSTerFPGA';
     await page.setViewportSize({ width: 360, height: 800 });
-    await page.getByLabel('Give a database its own filter').selectOption(dbId);
-    await expect(page.getByLabel(`FILTER for ${dbId}`)).toBeVisible();
+    // The databases to give a filter of their own fit it, the long db_id among them, and their
+    // list scrolls only up and down. Opened low on the screen, the list scrolls the page to show
+    // it whole, and nothing paints over it: neither the FILTER panel's own lines nor the panels below.
+    const picker = page.getByRole('button', { name: 'Own filter for a database' });
+    await picker.evaluate((button) => window.scrollBy(0, button.getBoundingClientRect().bottom - window.innerHeight + 8));
+    await picker.click();
+    const choices = page.getByRole('listbox', { name: 'Databases without their own filter' });
+    const longest = choices.getByRole('option').filter({ hasText: dbId });
+    await expect(longest).toBeVisible();
+    // Within a pixel: the page scrolls by whole pixels.
+    await expect.poll(() => page.evaluate(() => document.querySelector('.own-filter-popover').getBoundingClientRect().bottom < window.innerHeight + 1)).toBe(true);
+    expect(await page.evaluate(findOverOwnFilterList)).toEqual({ belowPanel: true, over: [] });
+    await expect.poll(() => page.evaluate(findWiderThanScreen)).toEqual([]);
+    expect(await choices.evaluate((list) => list.scrollWidth - list.clientWidth)).toBe(0);
+    await longest.click();
+    await expect(page.getByLabel(`FILTER for ${dbId}`)).toBeFocused();
     await expect.poll(() => page.evaluate(findWiderThanScreen)).toEqual([]);
 
     // Under the FILTER boxes, which keep the line's width, their buttons share it.
@@ -309,6 +323,24 @@ function findWiderThanScreen() {
     .filter((element) => sticksOut(element) && !sticksOut(element.parentElement))
     .map((element) => `<${element.localName} class="${element.getAttribute('class') ?? ''}"> ${element.textContent.slice(0, 60)}`);
   return [`${overflow}px wider than the screen`, ...culprits];
+}
+
+// Runs in the page. Whether the own-filter picker's list reaches past its panel onto the panels
+// below, and what paints over it, at points 10px apart across it (inside its rounded corners).
+function findOverOwnFilterList() {
+  const popover = document.querySelector('.own-filter-popover');
+  const box = popover.getBoundingClientRect();
+  const inset = parseFloat(getComputedStyle(popover).borderTopLeftRadius) + 1;
+  const over = new Set();
+  for (let y = box.top + inset; y < box.bottom - inset; y += 10) {
+    for (let x = box.left + inset; x < box.right - inset; x += 10) {
+      const hit = document.elementFromPoint(x, y);
+      if (hit && !popover.contains(hit)) {
+        over.add(`<${hit.localName} class="${hit.getAttribute('class') ?? ''}">`);
+      }
+    }
+  }
+  return { belowPanel: box.bottom > document.getElementById('section-filter').getBoundingClientRect().bottom, over: [...over] };
 }
 
 // Runs in the page. Nothing when the explorer fits the screen and nothing in it scrolls sideways;

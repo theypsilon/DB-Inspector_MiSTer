@@ -1283,7 +1283,21 @@ fieldset.mister-option legend { float: left; width: 100%; padding: 0; }
 .combined-database-row-body { display: grid; justify-items: start; gap: 0.8rem; padding: 0.2rem 0.85rem 0.95rem 1.85rem; }
 .combined-database-row-body .metadata-list { width: 100%; }
 .database-filters { display: grid; justify-items: start; gap: 0.7rem; margin: 0 0 0.9rem; }
-.database-filters select { max-width: 100%; }
+/* The own-filter picker's list opens over what follows, in the panels below too, as wide as the
+   panel allows. Its db_ids wrap; a filter that does not fit beside one goes under it. */
+.own-filter-picker { position: relative; justify-self: stretch; }
+.filter-panel:has(.own-filter-popover) { z-index: 30; }
+.own-filter-popover { position: absolute; top: calc(100% + 0.4rem); left: 0; z-index: 20; display: grid; gap: 0.35rem; width: min(36rem, 100%); padding: 0.35rem; border: 1px solid var(--panel-line); border-radius: var(--radius-md); background: var(--dialog); box-shadow: var(--tip-shadow); }
+.own-filter-popover .own-filter-search { padding: 0.6rem 0.9rem; }
+.own-filter-popover .own-filter-search:focus-visible { outline-offset: -2px; }
+.own-filter-list { max-height: min(20rem, 50vh); margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.own-filter-list:focus-visible { outline: none; }
+.own-filter-option { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.15rem 0.9rem; padding: 0.5rem 0.65rem; border-radius: var(--radius-sm); cursor: pointer; }
+.own-filter-option[aria-selected="true"] { background: var(--quiet); }
+.own-filter-list:focus-visible .own-filter-option[aria-selected="true"] { outline: 2px solid var(--focus); outline-offset: -2px; }
+.own-filter-option-id { min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+.own-filter-option-filter { margin-left: auto; color: var(--muted); font-size: 0.85rem; }
+.own-filter-empty { padding: 0.5rem 0.65rem; color: var(--muted); font-size: 0.9rem; }
 .database-filter-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 0.7rem; width: 100%; }
 .effective-filter-list { display: grid; gap: 0.45rem; margin: 0 0 0.9rem; padding: 0; list-style: none; }
 .effective-filter-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }

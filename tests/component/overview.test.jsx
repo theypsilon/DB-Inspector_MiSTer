@@ -239,8 +239,56 @@ describe('combined databases', () => {
     await user.click(screen.getByRole('button', { name: 'Terms for beta' }));
     expect(handlers.onBrowseTerms).toHaveBeenLastCalledWith('beta');
 
-    await user.selectOptions(screen.getByLabelText('Give a database its own filter'), 'alpha');
+    // Only the databases without a filter of their own can get one.
+    await user.click(screen.getByRole('button', { name: 'Own filter for a database' }));
+    const choices = within(screen.getByRole('listbox', { name: 'Databases without their own filter' })).getAllByRole('option');
+    expect(choices.map(text)).toEqual(['alpha arcade · shared filter']);
+    await user.click(choices[0]);
     expect(handlers.onOverrideAdd).toHaveBeenCalledWith('alpha');
+  });
+
+  test('a database given its own filter gets the cursor in its box, after the filter it had; with one each, there is none left to give', async () => {
+    const { view } = await combined({ shared: { isSet: true, value: 'arcade' }, overrides: {} });
+    const onOverrideAdd = vi.fn();
+    const panel = (overrides) => (
+      <CombinedFilterPanel
+        databases={view.databases}
+        sharedFilter={{ isSet: true, value: 'arcade' }}
+        overrides={overrides}
+        hasEssentialHint={false}
+        hasUntaggedItems={false}
+        onSearchEssential={() => {}}
+        filterPending={false}
+        summary=""
+        storageSummary={null}
+        clusterSizeBytes={131072}
+        onClusterSizeChange={() => {}}
+        onSharedFilterChange={() => {}}
+        onSharedFilterReset={() => {}}
+        onOverrideChange={() => {}}
+        onOverrideAdd={onOverrideAdd}
+        onOverrideRemove={() => {}}
+        onBrowseTerms={() => {}}
+      />
+    );
+    const { rerender } = render(panel({}));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Own filter for a database' }));
+    await user.keyboard('{ArrowDown}{Enter}');
+    expect(onOverrideAdd.mock.calls).toEqual([['beta']]);
+
+    // The page gives beta its own filter, with the filter it had.
+    rerender(panel({ beta: 'arcade' }));
+    const box = screen.getByLabelText('FILTER for beta');
+    expect(document.activeElement).toBe(box);
+    expect([box.selectionStart, box.selectionEnd]).toEqual([6, 6]);
+    // Only once: typing elsewhere and coming back to the page leaves the cursor where it is.
+    screen.getByLabelText('FILTER').focus();
+    rerender(panel({ beta: 'arcade!' }));
+    expect(document.activeElement).toBe(screen.getByLabelText('FILTER'));
+
+    rerender(panel({ alpha: '', beta: 'arcade' }));
+    expect(screen.queryByRole('button', { name: 'Own filter for a database' })).toBeNull();
   });
 
   test('without a shared filter, each database gets its default or everything', async () => {

@@ -84,8 +84,9 @@ function useGlobalSearch({ filesystemIndex, archivesIndex, collisionsIndex, hasE
           setFocusToken((t) => t + 1);
         }
       }
-      // An Escape inside a menu (the theme menu) closes the menu, not the find bar.
-      if (event.key === 'Escape' && openRef.current && !event.target?.closest?.('[role="menu"]')) {
+      // An Escape inside a menu or a list that a button opened (the theme menu, the own-filter
+      // picker's search and list) closes them, not the find bar.
+      if (event.key === 'Escape' && openRef.current && !event.target?.closest?.('[role="menu"], [role="listbox"], [role="combobox"]')) {
         closeSearchRef.current();
       }
     };

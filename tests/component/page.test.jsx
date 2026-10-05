@@ -200,6 +200,36 @@ describe('the page and the app model', () => {
     expect(screen.queryByRole('search')).toBeNull();
   });
 
+  test('a combined database picked for its own filter gets the filter it had, with the cursor in its box; Escape in the list leaves the find bar open', async () => {
+    const alpha = 'https://example.com/own-alpha.json';
+    const beta = 'https://example.com/own-beta.json';
+    const user = openPage(`/#db=${alpha}&db=${beta}&filter=arcade`, {
+      [alpha]: { body: database('alpha') },
+      [beta]: { body: database('beta', { default_options: { filter: '!cheats' } }) },
+    });
+    expect(await screen.findByRole('heading', { name: '2 combined databases' })).toBeTruthy();
+    await user.keyboard('{Control>}f{/Control}');
+    expect(await screen.findByRole('search', { name: 'Find in tree' })).toBeTruthy();
+
+    const button = screen.getByRole('button', { name: 'Own filter for a database' });
+    await user.click(button);
+    const list = screen.getByRole('listbox', { name: 'Databases without their own filter' });
+    expect(within(list).getAllByRole('option').map(text)).toEqual(['alpha arcade · shared filter', 'beta arcade · shared filter']);
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(document.activeElement).toBe(button);
+    expect(screen.getByRole('search', { name: 'Find in tree' })).toBeTruthy();
+
+    await user.click(button);
+    await user.click(within(screen.getByRole('listbox')).getAllByRole('option')[1]);
+    const box = screen.getByLabelText('FILTER for beta');
+    expect(box.value).toBe('arcade');
+    expect(document.activeElement).toBe(box);
+    expect([box.selectionStart, box.selectionEnd]).toEqual([6, 6]);
+    await user.keyboard(' !cheats');
+    await waitFor(() => expect(window.location.hash).toBe(`#db=${alpha}&db=${beta}&filter=arcade&filter.beta=arcade+!cheats`), { timeout: 3000 });
+  });
+
   test('fetching the loaded database again asks only whether to reload it, and reloading shows its new version', async () => {
     const url = 'https://example.com/reload.json';
     const routes = { [url]: { body: database('reload_db') } };

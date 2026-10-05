@@ -1,5 +1,7 @@
+import { useRef } from 'react';
 import CollapsibleSection from './ui/CollapsibleSection.jsx';
 import FilterInput from './FilterInput.jsx';
+import OwnFilterPicker from './OwnFilterPicker.jsx';
 import FilterHelp from './FilterHelp.jsx';
 import FilterResults from './FilterResults.jsx';
 import { describeAppliedFilter, listAppliedFilters } from '../lib/combinedFilters.js';
@@ -44,6 +46,15 @@ function CombinedFilterPanel({
   // With many databases, only those with a filter or a default of their own are listed; the rest,
   // which all get the shared filter (or none), are counted in a line.
   const applied = listAppliedFilters(databases, { listEach: databases.length <= COMBINED_DATABASES_IN_FULL_MAX });
+  // The database just given its own filter: its box takes the cursor, after the filter it had.
+  const pickedRef = useRef(null);
+  const focusPicked = (dbId) => (element) => {
+    if (element && pickedRef.current === dbId) {
+      pickedRef.current = null;
+      element.focus();
+      element.setSelectionRange(element.value.length, element.value.length);
+    }
+  };
 
   return (
     <CollapsibleSection
@@ -87,6 +98,7 @@ function CombinedFilterPanel({
             <span className="db-chip">{dbId}</span>
             <div className="catalog-search">
               <FilterInput
+                ref={focusPicked(dbId)}
                 label={`FILTER for ${dbId}`}
                 placeholder="[mister] !cheats"
                 value={overrides[dbId]}
@@ -104,23 +116,13 @@ function CombinedFilterPanel({
           </div>
         ))}
         {withoutOwnFilter.length ? (
-          <select
-            aria-label="Give a database its own filter"
-            className="cluster-size-select"
-            value=""
-            onChange={(event) => {
-              if (event.target.value) {
-                onOverrideAdd(event.target.value);
-              }
+          <OwnFilterPicker
+            databases={withoutOwnFilter}
+            onPick={(dbId) => {
+              pickedRef.current = dbId;
+              onOverrideAdd(dbId);
             }}
-          >
-            <option value="">+ Give a database its own filter</option>
-            {withoutOwnFilter.map(({ dbId }) => (
-              <option key={dbId} value={dbId}>
-                {dbId}
-              </option>
-            ))}
-          </select>
+          />
         ) : null}
       </div>
 

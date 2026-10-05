@@ -96,7 +96,8 @@ test('database lists and combined databases', async ({ page }) => {
     await expect(applied).toHaveText(['alphaEverythingno filter', 'beta!consoledatabase default']);
     await page.getByLabel('FILTER', { exact: true }).fill('arcade');
     await expect(applied).toHaveText(['alphaarcadeshared filter', 'betaarcadeshared filter']);
-    await page.getByLabel('Give a database its own filter').selectOption('beta');
+    await page.getByRole('button', { name: 'Own filter for a database' }).click();
+    await page.getByRole('option', { name: /^beta / }).click();
     await page.getByLabel('FILTER for beta').fill('[mister] console');
     await expect(applied).toHaveText(['alphaarcadeshared filter', 'betaarcade consoleits own filter']);
     await expect(page.locator('#section-files').getByRole('heading', { name: 'beta.rbf' })).toBeVisible();
