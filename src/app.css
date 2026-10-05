@@ -890,6 +890,92 @@ fieldset.mister-option legend { float: left; width: 100%; padding: 0; }
 .install-filter-option code { padding: 0.15rem 0.4rem; border-radius: var(--radius-sm); background: var(--code); font-size: 0.85em; }
 .install-download-row { display: flex; justify-content: center; margin-top: 1.2rem; }
 
+/* Explorer: the SD card, one folder at a time, in a dialog nearly the window's size (the whole
+   screen on phones). Rows, and rows of icons, have one height each, which the list reads from
+   these variables to render only those in view. */
+.explorer-open-button { display: inline-flex; align-items: center; gap: 0.5rem; }
+.explorer-open-button .explorer-entry-icon { flex-shrink: 0; }
+.explorer-panel { --explorer-row-height: 40px; --explorer-tile-width: 124px; --explorer-tile-height: 128px; display: flex; flex-direction: column; width: min(1400px, 100%); height: calc(100vh - 1.5rem); height: calc(100dvh - 1.5rem); overflow: hidden; border: 1px solid var(--panel-line); border-radius: var(--radius-lg); background: var(--dialog); box-shadow: var(--dialog-shadow); }
+.explorer-panel:focus { outline: none; }
+.explorer-bar { display: flex; align-items: center; gap: 0.5rem; min-height: 3.25rem; padding: 0 0.6rem; border-bottom: 1px solid var(--panel-line); background: var(--panel); }
+.explorer-bar-buttons { display: flex; align-items: center; align-self: stretch; gap: 0.15rem; padding-right: 0.6rem; border-right: 1px solid var(--panel-line); }
+.explorer-icon-button { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 2.25rem; height: 2.25rem; padding: 0; border-radius: var(--radius-sm); color: var(--on-quiet); background: transparent; box-shadow: none; }
+.explorer-icon-button:hover:not(:disabled) { background: var(--quiet-hover); filter: none; }
+.explorer-icon-button:disabled { opacity: 0.35; cursor: default; }
+.explorer-view-toggle { margin-left: 0.45rem; }
+.explorer-panel :is(button, a):focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+/* The list shows the focus around the box it scrolls in, and on its selected entry. */
+.explorer-items:has(> .explorer-listbox:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }
+.explorer-listbox:focus { outline: none; }
+.explorer-path { position: relative; flex: 1 1 auto; min-width: 0; }
+.explorer-path ol { display: flex; align-items: center; margin: 0; padding: 0; overflow: hidden; list-style: none; white-space: nowrap; }
+.explorer-path li { display: flex; flex-shrink: 0; align-items: center; min-width: 0; }
+.explorer-path li.explorer-crumb-current { flex-shrink: 1; }
+.explorer-crumb-current span { min-width: 0; padding: 0.3rem 0.45rem; overflow: hidden; color: var(--ink); font-weight: 700; text-overflow: ellipsis; }
+.explorer-crumb-button { padding: 0.3rem 0.45rem; border-radius: var(--radius-sm); color: var(--on-quiet); background: transparent; box-shadow: none; font-weight: 500; }
+.explorer-crumb-button:hover { background: var(--quiet-hover); filter: none; }
+.explorer-crumb-separator { margin: 0 0.1rem; color: var(--faint); }
+.explorer-crumb-menu { position: absolute; top: calc(100% + 0.4rem); left: 0; z-index: 2; display: grid; min-width: 12rem; max-width: min(24rem, 80vw); padding: 0.35rem; border: 1px solid var(--panel-line); border-radius: var(--radius-sm); background: var(--card); box-shadow: var(--tip-shadow); }
+.explorer-crumb-menu button { display: block; padding: 0.45rem 0.6rem; overflow: hidden; border-radius: var(--radius-sm); color: var(--ink); background: transparent; box-shadow: none; font-weight: 500; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.explorer-crumb-menu button:hover, .explorer-crumb-menu button:focus { background: var(--hover-tint); filter: none; }
+.explorer-main { position: relative; display: flex; flex: 1 1 auto; min-height: 0; }
+.explorer-items { position: relative; flex: 1 1 auto; min-width: 0; overflow: auto; overscroll-behavior: contain; background: var(--card); }
+.explorer-listbox { position: relative; }
+.explorer-listbox:focus-visible .is-selected { outline: 2px solid var(--focus); outline-offset: -2px; }
+.explorer-row { position: absolute; left: 0; right: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 0.65rem; height: var(--explorer-row-height); padding: 0 0.9rem; cursor: default; user-select: none; }
+.explorer-row:hover, .explorer-tile:hover { background: var(--card-hover); }
+.explorer-row.is-selected, .explorer-tile.is-selected { background: var(--selected); box-shadow: inset 0 0 0 1px var(--selected-line); }
+.explorer-name { display: flex; min-width: 0; color: var(--ink); white-space: nowrap; }
+.explorer-name-start { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.explorer-name-end { flex: 0 0 auto; }
+.explorer-meta { display: flex; align-items: center; justify-content: end; gap: 0.5rem; min-width: 0; }
+.explorer-size { color: var(--muted); font-size: 0.86rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.explorer-versions { padding: 0.08rem 0.5rem; border-radius: var(--radius-chip); color: var(--on-path); background: var(--path); font-size: 0.78rem; font-weight: 700; white-space: nowrap; }
+.explorer-entry-icon { display: block; flex-shrink: 0; }
+.explorer-folder-icon { fill: var(--dir); stroke: var(--on-dir); }
+.explorer-file-icon { fill: var(--file); stroke: var(--on-file); }
+.explorer-info-button { display: none; align-items: center; justify-content: center; width: 2.5rem; height: 2.5rem; padding: 0; border-radius: var(--radius-sm); color: var(--muted); background: transparent; box-shadow: none; }
+.explorer-tile-row { position: absolute; left: 0; right: 0; display: grid; height: var(--explorer-tile-height); padding: 0 0.25rem; }
+.explorer-tile { position: relative; display: flex; flex-direction: column; align-items: center; gap: 0.45rem; min-width: 0; margin: 0.25rem; padding: 0.6rem 0.4rem 0.4rem; border-radius: var(--radius-sm); cursor: default; user-select: none; }
+.explorer-tile-name { display: block; width: 100%; color: var(--ink); font-size: 0.86rem; line-height: 1.3; text-align: center; }
+.explorer-tile-name > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.explorer-tile-name.is-clamped { display: -webkit-box; overflow: hidden; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.explorer-tile-versions { position: absolute; top: 0.35rem; right: calc(50% - 2.4rem); }
+.explorer-tile .explorer-info-button { position: absolute; top: 0; right: 0; }
+.explorer-empty { margin: 0; padding: 1.5rem; flex: 1 1 auto; color: var(--muted); background: var(--card); }
+.explorer-details { display: flex; flex: 0 0 22rem; flex-direction: column; gap: 0.9rem; min-width: 0; padding: 1rem 1.1rem 1.25rem; overflow: auto; overscroll-behavior: contain; border-left: 1px solid var(--panel-line); background: var(--dialog); }
+.explorer-details-head { display: flex; align-items: start; gap: 0.5rem; }
+.explorer-details-head h3 { flex: 1 1 auto; min-width: 0; padding-top: 0.35rem; color: var(--ink); font-size: 1.1rem; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
+.explorer-details-summary { color: var(--muted); font-size: 0.9rem; }
+.explorer-facts { display: grid; gap: 0.7rem; margin: 0; font-size: 0.88rem; }
+.explorer-fact dt { margin-bottom: 0.2rem; color: var(--muted); font-size: 0.74rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.explorer-fact dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.explorer-fact code { font-family: var(--mono); font-size: 0.82rem; }
+.explorer-origins { display: grid; gap: 0.3rem; margin: 0; padding: 0; list-style: none; }
+.explorer-origins li { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.5rem; min-width: 0; }
+.explorer-origins .db-chip { flex-shrink: 1; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+.explorer-details-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.explorer-version { display: grid; gap: 0.7rem; padding-top: 0.9rem; border-top: 1px solid var(--card-line); }
+@media (pointer: coarse) {
+  .explorer-info-button { display: inline-flex; }
+}
+@media (max-width: 720px) {
+  .explorer-overlay { padding: 0; }
+  .explorer-panel { --explorer-row-height: 56px; --explorer-tile-width: 104px; --explorer-tile-height: 124px; width: 100%; height: 100vh; height: 100dvh; border: 0; border-radius: 0; }
+  .explorer-bar { gap: 0.3rem; padding: 0 0.35rem; }
+  .explorer-bar-buttons { gap: 0; padding-right: 0.3rem; }
+  .explorer-icon-button { width: 2.5rem; height: 2.75rem; }
+  .explorer-view-toggle { margin-left: 0; }
+  /* A row's size goes under its name. */
+  .explorer-row { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: 'icon name info' 'icon meta info'; align-content: center; row-gap: 0.1rem; padding: 0 0.6rem 0 0.9rem; }
+  .explorer-row > .explorer-entry-icon { grid-area: icon; }
+  .explorer-row > .explorer-name { grid-area: name; }
+  .explorer-row > .explorer-meta { grid-area: meta; justify-content: start; }
+  .explorer-row > .explorer-info-button { grid-area: info; }
+  /* The details come up over the lower part of the list. */
+  .explorer-details { position: absolute; left: 0; right: 0; bottom: 0; z-index: 1; max-height: 70%; border-top: 1px solid var(--panel-line); border-left: 0; border-radius: min(var(--radius-lg), 22px) min(var(--radius-lg), 22px) 0 0; box-shadow: var(--dialog-shadow); }
+}
+
 /* Copy link button */
 .copy-link-button-icon { position: relative; overflow: visible; display: flex; align-items: center; justify-content: center; width: 2.25rem; height: 2.25rem; padding: 0; border: 1px solid var(--control-line); border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; transition: color 0.15s, border-color 0.15s, background 0.15s; flex-shrink: 0; }
 .copy-link-button-icon:hover { color: var(--link); border-color: var(--link); background: var(--hover-tint); }

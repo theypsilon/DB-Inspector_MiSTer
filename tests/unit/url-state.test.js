@@ -5,11 +5,13 @@ import { deflateSync } from 'fflate';
 
 import {
   LINK_READABLE_MAX,
+  buildExplorerAnchor,
   buildLinkUrl,
   buildNodeAnchor,
   formatLink,
   isCombinedLink,
   linkedDatabaseUrl,
+  parseExplorerAnchor,
   parseLink,
   parseNodeAnchor,
   readLink,
@@ -211,9 +213,29 @@ test('anchors lead back to their row, in the right section, through the link', (
   }
 });
 
-test('anchors that name no row are left to the sections and the install dialog', () => {
-  for (const at of ['', 'install', 'filter', 'issues', 'files', 'archives', 'archives:', 'unknown:thing']) {
+test('anchors that name no row are left to the sections, the install dialog and the explorer', () => {
+  for (const at of ['', 'install', 'filter', 'issues', 'files', 'archives', 'archives:', 'unknown:thing', 'explorer', 'explorer:_Arcade/cores']) {
     assert.equal(parseNodeAnchor(at), null, at);
+  }
+});
+
+test('the explorer’s anchor names the SD card, a folder or a file, and reads back through the link', () => {
+  for (const [path, anchor] of [
+    ['', 'explorer'],
+    ['_Arcade', 'explorer:_Arcade'],
+    ['_Arcade/720 Degrees (rev 4).mra', 'explorer:_Arcade/720 Degrees (rev 4).mra'],
+    ['games/a&b=c+d #1/ü.rom', 'explorer:games/a&b=c+d #1/ü.rom'],
+  ]) {
+    assert.equal(buildExplorerAnchor(path), anchor);
+    const { at } = parseLink(formatLink(link({ databases: ['https://example.com/db.json'], at: anchor })));
+    assert.equal(parseExplorerAnchor(at), path, anchor);
+  }
+  assert.equal(formatLink(link({ at: buildExplorerAnchor('_Arcade/720 Degrees (rev 4).mra') })), 'at=explorer:_Arcade/720+Degrees+(rev+4).mra');
+  // An empty path is the SD card, and a trailing slash names the same folder.
+  assert.equal(parseExplorerAnchor('explorer:'), '');
+  assert.equal(parseExplorerAnchor('explorer:_Arcade/cores/'), '_Arcade/cores');
+  for (const at of ['', 'install', 'files:_Arcade', 'explorers', 'explorer_x:a']) {
+    assert.equal(parseExplorerAnchor(at), null, at);
   }
 });
 

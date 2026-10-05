@@ -1,5 +1,6 @@
 import { startTransition, useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { parseNodeAnchor, readLink, writeLinkAnchor, writeLinkDetailed } from './lib/urlState.js';
+import { buildExplorerAnchor, parseExplorerAnchor, parseNodeAnchor, readLink, writeLinkAnchor, writeLinkDetailed } from './lib/urlState.js';
+import { buildExplorerTree } from './lib/explorer.js';
 import { DEFAULT_CLUSTER_SIZE_BYTES, buildCombinedFilterSummaryCopy, collectTextMatchRanges, runAfterNextPaint } from './lib/utils.js';
 import { createAppModel } from './model/appModel.js';
 import {
@@ -49,13 +50,15 @@ import CombinedOverview from './components/CombinedOverview.jsx';
 import CombinedFilterPanel from './components/CombinedFilterPanel.jsx';
 import CollisionsSection from './components/tree/CollisionsSection.jsx';
 import LoadModeModal from './components/modals/LoadModeModal.jsx';
+import ExplorerModal from './components/explorer/ExplorerModal.jsx';
 
 const FIND_SHORTCUT_LABEL =
   typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘F' : 'Ctrl+F';
 
 // The page. Its state and what changes it live in the app model (src/model/appModel.js); this
 // renders that state, forwards user actions to it, and keeps what only the page needs: the
-// detailed toggle, tooltips, find-in-page, anchors, scrolling, and the install and download dialogs.
+// detailed toggle, tooltips, find-in-page, anchors, scrolling, and the install, download and
+// explorer dialogs.
 export default function App() {
   const fileInputRef = useRef(null);
   const [model] = useState(createAppModel);
@@ -100,6 +103,12 @@ export default function App() {
   const [downloadError, setDownloadError] = useState(null);
   const [installDbId, setInstallDbId] = useState(null);
   const [nodeAnchor, setNodeAnchor] = useState(null);
+  // The explorer, while it is open: the path it opens at, and a key that is new each time it opens.
+  const [explorer, setExplorer] = useState(null);
+  // Where the explorer was last, to open there again, until another database is shown.
+  const explorerPathRef = useRef(null);
+  const explorerOpenerRef = useRef(null);
+  const explorerKeyRef = useRef(0);
   const dropzone = useFileDropzone(model.openDrop);
   const handleDatabaseDetailedChange = useCallback((next) => {
     startTransition(() => {
@@ -119,6 +128,8 @@ export default function App() {
     [databases, debouncedCombinedFilters],
   );
   const activeView = combinedView ?? displayedInspection;
+  const explorerOpen = explorer !== null && Boolean(activeView);
+  const explorerTree = useMemo(() => (explorerOpen ? buildExplorerTree(activeView) : null), [explorerOpen, activeView]);
   const isFiltering = combinedView ? combinedView.isFiltering : Boolean(displayedInspection?.activeFilter.isFiltering);
   const filesystemIndex = useMemo(() => buildFilesystemIndex(activeView), [activeView]);
   const archivesIndex = useMemo(() => buildArchivesIndex(activeView), [activeView]);
@@ -138,7 +149,8 @@ export default function App() {
     collisionsIndex,
     tagGroups,
     hasEssentialHint,
-    hasInspection: !!activeView,
+    // The explorer covers the page, so find-in-page stands aside while it is open.
+    hasInspection: !!activeView && !explorerOpen,
   });
 
   // Effect Events run only when the dependencies listed on their effects change, and read
@@ -195,7 +207,7 @@ export default function App() {
     };
   }, []);
 
-  // Goes where the link's anchor points: a row, a section, or the install dialog.
+  // Goes where the link's anchor points: a row, a section, the install dialog, or the explorer.
   const openLinkAnchor = useEffectEvent(() => {
     if (!inspection && !isCombined) {
       return;
@@ -206,6 +218,16 @@ export default function App() {
       setInstallModalOpen(true);
       return;
     }
+
+    // Other databases: the explorer starts again from the SD card, open only when the link says.
+    explorerPathRef.current = null;
+    const explorerPath = parseExplorerAnchor(at);
+    if (explorerPath !== null) {
+      explorerKeyRef.current += 1;
+      setExplorer({ path: explorerPath, key: explorerKeyRef.current });
+      return;
+    }
+    setExplorer(null);
 
     const anchor = parseNodeAnchor(at, isCombined ? databases.map(({ inspection: database }) => database.overview.dbId) : null);
     if (anchor) {
@@ -239,7 +261,7 @@ export default function App() {
 
   useEffect(() => model.connect(), [model]);
 
-  const modalOpen = catalogModalOpen || choicePickerOpen || Boolean(prompt);
+  const modalOpen = catalogModalOpen || choicePickerOpen || Boolean(prompt) || explorerOpen;
   useEffect(() => {
     if (!modalOpen) {
       return undefined;
@@ -289,6 +311,30 @@ export default function App() {
     setInstallModalOpen(true);
     writeLinkAnchor('install');
   }
+
+  // The explorer opens where it was last, and closing it gives the focus back to what opened it.
+  const openExplorer = useCallback(() => {
+    explorerOpenerRef.current = document.activeElement;
+    explorerKeyRef.current += 1;
+    setExplorer({ path: explorerPathRef.current ?? '', key: explorerKeyRef.current });
+  }, []);
+
+  const handleExplorerLocation = useCallback((path) => {
+    explorerPathRef.current = path;
+    writeLinkAnchor(buildExplorerAnchor(path));
+  }, []);
+
+  const closeExplorer = useCallback(() => {
+    setExplorer(null);
+    if (parseExplorerAnchor(readLink().at) !== null) {
+      writeLinkAnchor('');
+    }
+    const opener = explorerOpenerRef.current;
+    explorerOpenerRef.current = null;
+    if (opener instanceof HTMLElement && opener.isConnected) {
+      opener.focus({ preventScroll: true });
+    }
+  }, []);
 
   function searchForEssential() {
     globalSearch.setQuery('essential');
@@ -407,6 +453,7 @@ export default function App() {
               searchMatch={globalSearch.currentMatch?.section === 'filesystem' ? globalSearch.currentMatch : null}
               searchQuery={globalSearch.activeQuery}
               onDownloadError={handleDownloadError}
+              onOpenExplorer={openExplorer}
             />
 
             {activeView.archiveViews.length ? (
@@ -425,6 +472,7 @@ export default function App() {
                 searchMatch={globalSearch.currentMatch?.section === 'archives' ? globalSearch.currentMatch : null}
                 searchQuery={globalSearch.activeQuery}
                 onDownloadError={handleDownloadError}
+                onOpenExplorer={openExplorer}
               />
             ) : null}
 
@@ -549,6 +597,19 @@ export default function App() {
         />
       ) : null}
 
+      {explorerTree ? (
+        <ExplorerModal
+          key={explorer.key}
+          tree={explorerTree}
+          initialPath={explorer.path}
+          filtering={isFiltering}
+          suspended={Boolean(downloadError)}
+          onLocationChange={handleExplorerLocation}
+          onClose={closeExplorer}
+          onDownloadError={handleDownloadError}
+        />
+      ) : null}
+
       {downloadError ? (
         <DownloadErrorModal
           error={downloadError}
@@ -575,7 +636,7 @@ export default function App() {
           Press <kbd>{FIND_SHORTCUT_LABEL}</kbd> to search
         </span>
       </p>
-      {globalSearch.open ? (
+      {globalSearch.open && !explorerOpen ? (
         <FindBar
           query={globalSearch.query}
           onQueryChange={globalSearch.setQuery}

@@ -29,6 +29,7 @@ import { collectTextMatchRanges } from '../../lib/utils.js';
  * @property {string} [searchQuery]
  * @property {string} anchor
  * @property {(error: any) => void} [onDownloadError]
+ * @property {() => void} [onOpenExplorer] Offers the explorer among the section's controls.
  */
 const TreeSection = memo(/** @param {TreeSectionProps} props */ function TreeSection({
   label,
@@ -44,6 +45,7 @@ const TreeSection = memo(/** @param {TreeSectionProps} props */ function TreeSec
   searchQuery,
   anchor,
   onDownloadError,
+  onOpenExplorer,
 }) {
   const rows = useTreeRowState(index, detailed);
   // The find-in-page match in a row's tags shows all of them, so a match in a hidden tag shows.
@@ -127,6 +129,7 @@ const TreeSection = memo(/** @param {TreeSectionProps} props */ function TreeSec
         <SectionControls
           onExpandAll={rows.handleExpandAll}
           onCollapseAll={rows.handleCollapseAll}
+          onOpenExplorer={onOpenExplorer}
         />
       }
     >

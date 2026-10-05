@@ -199,7 +199,7 @@ test('the catalog lists known databases and opens them alone or together', async
     await expect(rows.first()).toBeVisible();
   });
 
-  await test.step('on a phone, nothing on the page or in the catalog is wider than the screen', async () => {
+  await test.step('on a phone, nothing on the page, in the catalog or in the explorer is wider than the screen', async () => {
     // A long db_id in the compact list (one row open), on rows and in path collisions, in issues and
     // tags, and in the filters, with a filter of its own.
     const viewport = page.viewportSize();
@@ -218,6 +218,21 @@ test('the catalog lists known databases and opens them alone or together', async
     await expect(catalog.getByRole('button', { name: 'Open 6 selected databases' })).toBeVisible();
     expect(await catalog.locator('.modal-body').evaluate((body) => body.scrollWidth - body.clientWidth)).toBe(0);
     await catalog.getByRole('button', { name: 'Close', exact: true }).click();
+
+    // The explorer fills the screen, and a path every database installs lists each version, the
+    // long db_id wrapping in its details.
+    await page.locator('#section-files').getByRole('button', { name: 'Explorer' }).click();
+    const explorer = page.getByRole('dialog', { name: 'Explorer' });
+    await explorer.getByRole('option', { name: /^cores, folder/ }).dblclick();
+    await explorer.getByRole('option', { name: /^console\.rbf, file, 6 versions/ }).click();
+    await expect(explorer.getByRole('complementary').locator('.explorer-origins .db-chip', { hasText: dbId })).toBeVisible();
+    await expect.poll(() => page.evaluate(findWiderInExplorer)).toEqual([]);
+    // The details come up from the bottom, as wide as the screen.
+    const [panelBox, detailsBox] = await Promise.all([explorer.boundingBox(), explorer.getByRole('complementary').boundingBox()]);
+    expect([detailsBox.x, detailsBox.width, Math.round(detailsBox.y + detailsBox.height)]).toEqual([0, 360, Math.round(panelBox.height)]);
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await expect(explorer).toHaveCount(0);
     await page.setViewportSize(viewport);
   });
 
@@ -258,6 +273,19 @@ function findWiderThanScreen() {
     .filter((element) => sticksOut(element) && !sticksOut(element.parentElement))
     .map((element) => `<${element.localName} class="${element.getAttribute('class') ?? ''}"> ${element.textContent.slice(0, 60)}`);
   return [`${overflow}px wider than the screen`, ...culprits];
+}
+
+// Runs in the page. Nothing when the explorer fits the screen and nothing in it scrolls sideways;
+// otherwise what does not.
+function findWiderInExplorer() {
+  const panel = document.querySelector('.explorer-panel');
+  const problems = panel.getBoundingClientRect().right > window.innerWidth ? ['the explorer is wider than the screen'] : [];
+  for (const part of panel.querySelectorAll('.explorer-bar, .explorer-items, .explorer-details')) {
+    if (part.scrollWidth > part.clientWidth) {
+      problems.push(`.${part.className.split(' ')[0]} is ${part.scrollWidth - part.clientWidth}px wider than its place`);
+    }
+  }
+  return problems;
 }
 
 async function openCatalog(page, entryCount) {

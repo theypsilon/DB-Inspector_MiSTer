@@ -2,8 +2,8 @@ import { expect, test } from '@playwright/test';
 
 // A database opened from a shared link, in a real browser: an old link becoming its #db= link, its
 // default FILTER and the link, the detailed toggle, size hints and downloads, find-in-page with its
-// highlights and row flash, section and row anchors across a reload, back/forward between
-// databases, and a link typed in the address bar of the open page.
+// highlights and row flash, section and row anchors across a reload, the explorer and its link,
+// back/forward between databases, and a link typed in the address bar of the open page.
 
 const SHARED_URL = 'https://raw.githubusercontent.com/example-owner/example-repo/main/db.json';
 const SECOND_URL = 'https://example.com/second.json';
@@ -187,6 +187,73 @@ test('a shared link opens its database, and the page around it works', async ({ 
     await expect(page.locator('[id="row-database:file:cores/essential.rbf"]')).toBeInViewport();
   });
 
+  await test.step('the explorer shows the SD card one folder at a time, with the archive’s files in their folder, and its own link', async () => {
+    // A fresh page: the row anchor above keeps correcting its scroll for a moment after it lands.
+    await page.goto('about:blank');
+    await page.goto(`/#db=${SHARED_URL}`);
+    await expect(heading('shared_db')).toBeVisible();
+    const explorer = page.getByRole('dialog', { name: 'Explorer' });
+    const entry = (name) => explorer.getByRole('option', { name: new RegExp(`^${name.replaceAll('.', '\\.')},`) });
+    const shown = explorer.locator('.explorer-crumb-current');
+    const open = page.locator('#section-files').getByRole('button', { name: 'Explorer' });
+    await open.scrollIntoViewIfNeeded();
+    await untilScrollStops(page);
+    const scrollY = await page.evaluate(() => window.scrollY);
+
+    await open.click();
+    await expect(explorer).toBeVisible();
+    expect(link()).toBe(`#db=${SHARED_URL}&at=explorer`);
+    await entry('games').dblclick();
+    await entry('flows').dblclick();
+    await expect(shown).toHaveText('flows');
+    await entry('untagged.bin').click();
+    await expect(explorer.getByRole('complementary', { name: 'Details of untagged.bin' })).toContainText('Archive flows_archive');
+    await expect.poll(link).toBe(`#db=${SHARED_URL}&at=explorer:games/flows/untagged.bin`);
+
+    // Alt+← goes back a folder, not back a page; the details show the folder that leads back.
+    await page.keyboard.press('Alt+ArrowLeft');
+    await expect(shown).toHaveText('games');
+    await expect(entry('flows')).toHaveAttribute('aria-selected', 'true');
+    await expect.poll(link).toBe(`#db=${SHARED_URL}&at=explorer:games`);
+    await explorer.getByRole('button', { name: 'Forward' }).click();
+    await expect(shown).toHaveText('flows');
+    await explorer.getByRole('button', { name: 'Up to games' }).click();
+    await expect(shown).toHaveText('games');
+
+    // The page behind does not scroll under the explorer, and closing takes the explorer out of the
+    // link and leaves the page where it was.
+    await page.mouse.move(4, 400);
+    await page.mouse.wheel(0, 400);
+    await afterTwoFrames(page);
+    await explorer.getByRole('button', { name: 'Close explorer' }).click();
+    await expect(explorer).toHaveCount(0);
+    await expect.poll(link).toBe(`#db=${SHARED_URL}`);
+    expect(await page.evaluate(() => window.scrollY)).toBe(scrollY);
+    await expect(open).toBeFocused();
+
+    // A link to a file opens its folder with its details.
+    await page.goto('about:blank');
+    await page.goto(`/#db=${SHARED_URL}&at=explorer:games/flows/untagged.bin`);
+    await expect(explorer.getByRole('complementary', { name: 'Details of untagged.bin' })).toBeVisible();
+    await expect(entry('untagged.bin')).toHaveAttribute('aria-selected', 'true');
+
+    // The icons view is remembered across a reload.
+    await explorer.getByRole('button', { name: 'Show as icons' }).click();
+    await expect(explorer.locator('.explorer-tile')).toHaveCount(1);
+    await page.reload();
+    await expect(explorer.locator('.explorer-tile')).toHaveCount(1);
+    await explorer.getByRole('button', { name: 'Show as list' }).click();
+    await expect(explorer.locator('.explorer-row')).toHaveCount(1);
+
+    // Escape closes the details, then the explorer.
+    await page.keyboard.press('Escape');
+    await expect(explorer.getByRole('complementary')).toHaveCount(0);
+    await expect.poll(link).toBe(`#db=${SHARED_URL}&at=explorer:games/flows`);
+    await page.keyboard.press('Escape');
+    await expect(explorer).toHaveCount(0);
+    await expect.poll(link).toBe(`#db=${SHARED_URL}`);
+  });
+
   await test.step('back and forward reopen the databases opened before', async () => {
     await page.getByLabel('URL').fill(SECOND_URL);
     await page.getByRole('button', { name: 'Fetch database' }).click();
@@ -291,4 +358,9 @@ function readHighlightOwners(page, name) {
     const highlight = CSS.highlights.get(highlightName);
     return highlight ? [...highlight].map((range) => range.startContainer.parentElement?.closest('[id]')?.id ?? null) : [];
   }, name);
+}
+
+// Resolves once the page has drawn two more frames, so what it was doing has reached the screen.
+function afterTwoFrames(page) {
+  return page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 }

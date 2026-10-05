@@ -30,9 +30,15 @@ export function isBrowserOpenableFile(path) {
 // can show that file itself.
 export function getRowFileLinks(row) {
   const isFile = row.type !== 'archive' && row.node.kind === 'file';
-  const downloadUrl = isFile ? row.node.downloadUrl : null;
-  const openUrl = isFile && isBrowserOpenableFile(row.node.path) ? downloadUrl : null;
-  return { downloadUrl, openUrl };
+  return isFile ? getFileLinks(row.node) : { downloadUrl: null, openUrl: null };
+}
+
+// The same links for a file record, as the explorer shows it.
+export function getFileLinks({ path, downloadUrl }) {
+  return {
+    downloadUrl: downloadUrl ?? null,
+    openUrl: downloadUrl && isBrowserOpenableFile(path) ? downloadUrl : null,
+  };
 }
 
 export function resolveDownloadFileName(fileName, url) {

@@ -3,7 +3,8 @@ import { expect, test } from '@playwright/test';
 // The virtualized trees of a large database in a real browser: only rows near the viewport render,
 // rows keep touching as details and tags open and close, with each line between two rows drawn
 // once, the last rows can be reached, and URL anchors, find-in-page and ghost parent rows bring far
-// rows into view.
+// rows into view. The explorer renders only the entries near view of a large folder too, and folds
+// its path on a phone.
 
 const FILE_COUNT = 600;
 const ARCHIVE_COUNT = 220;
@@ -110,6 +111,54 @@ test('large trees render near the viewport, keep their spacing, and reach far ro
     await upload(page, 'large.json', buildLargeDatabase());
     await expect(page.getByRole('heading', { name: 'large_db' })).toBeVisible();
     await expect(page.locator(`[id="row-database:file:${FAR_FILE_PATH}"]`)).toBeInViewport();
+  });
+
+  await test.step('the explorer renders only the entries near view of a large folder, as a list and as icons, and reaches the last', async () => {
+    await page.goto('about:blank');
+    await page.goto('/#at=explorer:games/archive');
+    await upload(page, 'large.json', buildLargeDatabase());
+    const explorer = page.getByRole('dialog', { name: 'Explorer' });
+    const last = `rom_${String(ARCHIVE_COUNT - 1).padStart(3, '0')}.bin`;
+    const entry = (name) => explorer.getByRole('option', { name: new RegExp(`^${name.replace('.', '\\.')},`) });
+    await expect(explorer.locator('.explorer-crumb-current')).toHaveText('archive');
+    await expect(entry('rom_000.bin')).toBeVisible();
+    await expect(entry('rom_000.bin')).toHaveAttribute('aria-setsize', String(ARCHIVE_COUNT));
+
+    for (const [view, toggle] of [['list', null], ['icons', 'Show as icons']]) {
+      if (toggle) {
+        await explorer.getByRole('button', { name: toggle }).click();
+        await expect(explorer.locator('.explorer-tile').first()).toBeVisible();
+      }
+      const rendered = await explorer.getByRole('option').count();
+      expect(rendered, view).toBeGreaterThan(0);
+      expect(rendered, view).toBeLessThan(ARCHIVE_COUNT);
+      await explorer.locator('.explorer-items').evaluate((items) => {
+        items.scrollTop = items.scrollHeight;
+      });
+      await expect(entry(last), view).toBeInViewport();
+      await expect(entry('rom_000.bin'), view).toHaveCount(0);
+      // Home and End select the first and last entries, and bring them into view.
+      await explorer.getByRole('listbox').focus();
+      await page.keyboard.press('Home');
+      await expect(entry('rom_000.bin'), view).toBeInViewport();
+      await page.keyboard.press('End');
+      await expect(entry(last), view).toHaveAttribute('aria-selected', 'true');
+      await expect(entry(last), view).toBeInViewport();
+    }
+    await explorer.getByRole('button', { name: 'Show as list' }).click();
+
+    // On a phone the first folders of the path fold into …, which lists them.
+    await page.setViewportSize({ width: 360, height: 760 });
+    const more = explorer.getByRole('button', { name: 'Folders above' });
+    await expect(more).toBeVisible();
+    await expect(explorer.locator('.explorer-crumb-current')).toHaveText('archive');
+    await more.click();
+    const menu = explorer.getByRole('menu', { name: 'Folders above' });
+    await expect(menu.getByRole('menuitem').first()).toHaveText('SD card');
+    await menu.getByRole('menuitem', { name: 'SD card' }).click();
+    await expect(explorer.locator('.explorer-crumb-current')).toHaveText('SD card');
+    await expect(more).toHaveCount(0);
+    await page.setViewportSize({ width: 1440, height: 960 });
   });
 });
 

@@ -26,6 +26,20 @@ const database = (dbId, extra = {}) => ({
   ...extra,
 });
 
+// An archive that installs into a folder of its own, as the explorer shows it.
+const EXPLORER_ARCHIVES = {
+  archives: {
+    flows_archive: {
+      description: 'Flows archive',
+      format: 'zip',
+      extract: 'all',
+      target_folder: 'games/flows/',
+      archive_file: { url: 'https://example.com/flows.zip', size: 4096, hash: 'ah' },
+      summary_inline: { files: { 'games/flows/untagged.bin': { arc_id: 'flows_archive', size: 100, hash: 'u' } }, folders: {} },
+    },
+  },
+};
+
 function serve(routes) {
   vi.stubGlobal(
     'fetch',
@@ -385,5 +399,61 @@ describe('the page and the app model', () => {
     await user.click(screen.getByRole('button', { name: 'Install' }));
     expect(await screen.findByRole('dialog', { name: 'Install \u201Cinstall_db\u201D on MiSTer' })).toBeTruthy();
     expect(window.location.hash).toBe(`#db=${url}&filter=arcade&at=install`);
+  });
+  test('the Explorer buttons of Files and folders and of Archives open the SD card, with archive files in their folders, and it opens again where it was left', async () => {
+    const url = 'https://example.com/explorer.json';
+    const user = openPage(`/#db=${url}`, { [url]: { body: database('explorer_db', EXPLORER_ARCHIVES) } });
+    expect(await screen.findByRole('heading', { name: 'explorer_db' })).toBeTruthy();
+    const filesButton = within(document.getElementById('section-files')).getByRole('button', { name: 'Explorer' });
+    const archivesButton = within(document.getElementById('section-archives')).getByRole('button', { name: 'Explorer' });
+
+    await user.click(filesButton);
+    const dialog = screen.getByRole('dialog', { name: 'Explorer' });
+    expect(window.location.hash).toBe(`#db=${url}&at=explorer`);
+    const entries = () => within(screen.getByRole('dialog')).getAllByRole('option').map((entry) => entry.getAttribute('aria-label'));
+    expect(entries()).toEqual(['cores, folder, 3.0 KB', 'games, folder, 100 B']);
+    await user.dblClick(within(dialog).getByRole('option', { name: 'games, folder, 100 B' }));
+    await user.dblClick(within(dialog).getByRole('option', { name: 'flows, folder, 100 B' }));
+    // The archive's file, where it installs.
+    expect(entries()).toEqual(['untagged.bin, file, 100 B']);
+    expect(window.location.hash).toBe(`#db=${url}&at=explorer:games/flows`);
+
+    // Closing takes it out of the link, and gives the focus back to the button that opened it.
+    await user.click(within(dialog).getByRole('button', { name: 'Close explorer' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(window.location.hash).toBe(`#db=${url}`);
+    expect(document.activeElement).toBe(filesButton);
+
+    await user.click(archivesButton);
+    expect(entries()).toEqual(['untagged.bin, file, 100 B']);
+    expect(window.location.hash).toBe(`#db=${url}&at=explorer:games/flows`);
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.activeElement).toBe(archivesButton);
+  });
+
+  test('a link opens the explorer on a file’s details, and find-in-page stands aside while the explorer is open', async () => {
+    const url = 'https://example.com/explorer-link.json';
+    const user = openPage(`/#db=${url}&at=explorer:games/flows/untagged.bin`, { [url]: { body: database('explorer_link_db', EXPLORER_ARCHIVES) } });
+    const dialog = await screen.findByRole('dialog', { name: 'Explorer' });
+    const details = within(dialog).getByRole('complementary', { name: 'Details of untagged.bin' });
+    expect(text(details.querySelector('.explorer-origins'))).toBe('Archive flows_archive');
+    expect(within(dialog).getByRole('option', { name: 'untagged.bin, file, 100 B' }).getAttribute('aria-selected')).toBe('true');
+
+    // Ctrl+F is the browser's own while the explorer covers the page.
+    await user.keyboard('{Control>}f{/Control}');
+    expect(screen.queryByRole('search')).toBeNull();
+    await user.keyboard('{Escape}{Escape}');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(window.location.hash).toBe(`#db=${url}`);
+
+    // A find bar left open steps aside for the explorer, whose Escape is its own.
+    await user.keyboard('{Control>}f{/Control}');
+    expect(await screen.findByRole('search', { name: 'Find in tree' })).toBeTruthy();
+    await user.click(within(document.getElementById('section-files')).getByRole('button', { name: 'Explorer' }));
+    expect(screen.queryByRole('search')).toBeNull();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByRole('search', { name: 'Find in tree' })).toBeTruthy();
   });
 });

@@ -10,8 +10,8 @@ import { Inflate, deflateSync } from 'fflate';
 //   databases. Without it defaults apply; empty, nothing is filtered.
 // - filter.<db_id>=<terms>: a combined database's own filter.
 // - detailed: details are shown.
-// - at=<anchor>: a row (see buildNodeAnchor), a section (filter, files, issues...), or `install`,
-//   the install dialog of a database shown alone.
+// - at=<anchor>: a row (see buildNodeAnchor), a section (filter, files, issues...), `install`, the
+//   install dialog of a database shown alone, or the explorer (see buildExplorerAnchor).
 //
 // When the whole address would be longer than LINK_READABLE_MAX characters, the keys before `at`
 // are packed into z=<data>: their text, deflated, in base64url. Unknown keys are ignored. Only %,
@@ -303,6 +303,27 @@ export function buildNodeAnchor(row) {
 
 function archiveScope(dbId) {
   return dbId === undefined ? '' : `${dbId}:`;
+}
+
+// The explorer's anchor: `explorer` opens it at the SD card, and explorer:<path> in the folder at
+// that path, or, for a file, in its folder with the file's details shown.
+const EXPLORER_ANCHOR = 'explorer';
+
+/** @param {string} path A folder's or file's path, or '' for the SD card. */
+export function buildExplorerAnchor(path) {
+  return path ? `${EXPLORER_ANCHOR}:${path}` : EXPLORER_ANCHOR;
+}
+
+/**
+ * The path an explorer anchor names ('' for the SD card), or null when `at` names something else.
+ * @param {string} at
+ */
+export function parseExplorerAnchor(at) {
+  if (at === EXPLORER_ANCHOR) {
+    return '';
+  }
+
+  return at.startsWith(`${EXPLORER_ANCHOR}:`) ? at.slice(EXPLORER_ANCHOR.length + 1).replace(/\/+$/, '') : null;
 }
 
 /**
