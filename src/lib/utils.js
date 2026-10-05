@@ -13,6 +13,9 @@ export const COMBINED_DATABASES_IN_FULL_MAX = 3;
 // Screens where tree rows stack their heading (app.css's 960px rule): there a file's tags are left to
 // its details (see rowTagsHidden).
 export const NARROW_SCREEN_QUERY = '(max-width: 960px)';
+// Phones (app.css's 720px rules): there a tree row's heading is its name until its details show, and a
+// tap on the row shows them (see TreeEntryRow).
+export const PHONE_SCREEN_QUERY = '(max-width: 720px)';
 export const isTouchDevice = typeof window !== 'undefined' && (window.matchMedia?.('(pointer: coarse)').matches || navigator.maxTouchPoints > 0);
 
 const TOOLTIP_FLIP_THRESHOLD_PX = 80;

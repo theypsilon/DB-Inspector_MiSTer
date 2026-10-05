@@ -12,7 +12,7 @@ import useTreeNavigation from './useTreeNavigation.js';
 import useGhostParent from './useGhostParent.js';
 import { scrollToMeasuredRow, useMeasuredRowLayout, useVirtualRowWindow } from './useVirtualTree.js';
 import useMediaQuery from '../../hooks/useMediaQuery.js';
-import { NARROW_SCREEN_QUERY, collectTextMatchRanges } from '../../lib/utils.js';
+import { NARROW_SCREEN_QUERY, PHONE_SCREEN_QUERY, collectTextMatchRanges } from '../../lib/utils.js';
 
 // A collapsible tree list that renders only the rows near the viewport (plus overscan), with its
 // expand/collapse controls, empty state, and scroll-to-top button.
@@ -50,8 +50,12 @@ const TreeSection = memo(/** @param {TreeSectionProps} props */ function TreeSec
   onOpenExplorer,
 }) {
   const rows = useTreeRowState(index, detailed);
-  // On narrow screens files leave their tags to their details (see rowTagsHidden).
+  // The screen the rows are laid out for (see TreeScreen): on narrow ones files leave their tags to
+  // their details, and on phones a row's heading is its name until its details show.
   const narrow = useMediaQuery(NARROW_SCREEN_QUERY);
+  const phone = useMediaQuery(PHONE_SCREEN_QUERY);
+  /** @type {import('../../lib/treeLayout.js').TreeScreen} */
+  const screen = phone ? 'phone' : narrow ? 'narrow' : 'wide';
   // The find-in-page match in a row's tags shows all of them, so a match in a hidden tag shows.
   const revealedTagRowId = searchMatch?.matchPart === 'tags' ? searchMatch.rowId : null;
   const expandedTagIds = useMemo(
@@ -68,7 +72,7 @@ const TreeSection = memo(/** @param {TreeSectionProps} props */ function TreeSec
     detailOverrides: rows.detailOverrides,
     detailed,
     expandedTagIds,
-    narrow,
+    screen,
   });
   const navigation = useTreeNavigation({
     index,
@@ -88,7 +92,7 @@ const TreeSection = memo(/** @param {TreeSectionProps} props */ function TreeSec
     detailOverrides: rows.detailOverrides,
     detailed,
     expandedTagIds,
-    narrow,
+    screen,
     suppressAnchoringRef: navigation.suppressAnchoringRef,
   });
   const { containerRef } = layout;
@@ -198,7 +202,7 @@ const TreeSection = memo(/** @param {TreeSectionProps} props */ function TreeSec
                 trimTopGuide={trimTopGuide}
                 trimBottomGuide={trimBottomGuide}
                 tagFit={tagFit}
-                narrow={narrow}
+                screen={screen}
               />
             );
           })}

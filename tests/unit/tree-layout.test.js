@@ -7,6 +7,7 @@ import {
   buildVirtualRowLayout,
   buildVirtualRowStyle,
   buildVirtualRows,
+  estimateRowHeight,
   getMeasurementScrollDelta,
   getRowMeasurementKey,
   rowOutline,
@@ -164,47 +165,64 @@ test('on a narrow screen a file leaves its tags to its details, unless all of th
   assert.equal(hidden(folder), false);
   assert.equal(hidden({ id: 'archive:pack', type: 'archive', archive: {} }), false);
   assert.equal(hidden(undefined), false);
-  // Measured apart: a height measured with its tags is not one measured without.
-  assert.notEqual(
-    getRowMeasurementKey(file.id, { collapsed: false, detailsVisible: false, tagsHidden: true }),
-    getRowMeasurementKey(file.id, { collapsed: false, detailsVisible: false }),
-  );
+  // Measured apart on each screen: a height measured on one is not one measured on another.
+  const keys = ['wide', 'narrow', 'phone'].map((screen) => getRowMeasurementKey(file.id, { collapsed: false, detailsVisible: false, screen }));
+  assert.equal(new Set(keys).size, 3);
+  assert.equal(getRowMeasurementKey(file.id, { collapsed: false, detailsVisible: false }), keys[0]);
 });
 
-test('the list places a file with the height measured for whether its tags show, on a narrow screen and a wide one, and anchors the scroll with it', async () => {
+test('the list places a row with the height measured on the screen it is on, and anchors the scroll with it', async () => {
   const index = await filesystemIndex({ 'games/a.rbf': { tags: ['arcade'] }, 'games/b.rbf': { tags: ['arcade'] } }, { games: { tags: ['arcade'] } });
   const rowIds = collectVisibleRowIds(index.rootIds, index.rowsById, new Set());
   const [folderId, fileId] = rowIds;
-  const key = (rowId, tagsHidden) => getRowMeasurementKey(rowId, { collapsed: false, detailsVisible: false, tagsHidden });
-  // The folder and the first file measured on both screens; the last file on neither.
+  const key = (rowId, screen, detailsVisible = false) => getRowMeasurementKey(rowId, { collapsed: false, detailsVisible, screen });
+  // The folder and the first file measured on a wide screen and a narrow one; the last file on neither.
   const measuredHeights = new Map([
-    [key(folderId, false), 104],
-    [key(fileId, false), 101],
-    [key(fileId, true), 71],
+    [key(folderId, 'wide'), 104],
+    [key(folderId, 'narrow'), 146],
+    [key(fileId, 'wide'), 101],
+    [key(fileId, 'narrow'), 71],
+    [key(fileId, 'narrow', true), 300],
   ]);
-  const layout = (narrow, heights = measuredHeights, detailOverrides = new Map()) =>
-    buildVirtualRowLayout({ rowIds, rowsById: index.rowsById, collapsedIds: new Set(), detailOverrides, defaultDetailed: false, measuredHeights: heights, narrow });
-  assert.deepEqual(layout(false).bottoms.slice(0, 2), [104, 205]);
-  assert.deepEqual(layout(true).bottoms.slice(0, 2), [104, 175]);
-  // With its details the file shows its tags, on any screen.
-  assert.equal(layout(true, new Map([...measuredHeights, [getRowMeasurementKey(fileId, { collapsed: false, detailsVisible: true }), 300]]), new Map([[fileId, true]])).bottoms[1], 404);
+  const layout = (screen, detailOverrides = new Map()) =>
+    buildVirtualRowLayout({ rowIds, rowsById: index.rowsById, collapsedIds: new Set(), detailOverrides, defaultDetailed: false, measuredHeights, screen });
+  assert.deepEqual(layout('wide').bottoms, [104, 205, 328]);
+  assert.deepEqual(layout('narrow').bottoms, [146, 217, 340]);
+  assert.equal(layout('narrow', new Map([[fileId, true]])).bottoms[1], 446);
+  // On a phone, nothing measured yet: a folder's and a file's estimates there.
+  assert.deepEqual(layout('phone').bottoms, [92, 152, 212]);
 
   // A file above the viewport measured again on a narrow screen moves the rows below by its change.
-  const nextMeasuredHeights = new Map([...measuredHeights, [key(fileId, true), 81]]);
-  const delta = (narrow) =>
+  const nextMeasuredHeights = new Map([...measuredHeights, [key(fileId, 'narrow'), 81]]);
+  const delta = (screen) =>
     getMeasurementScrollDelta({
       rowIds,
       rowsById: index.rowsById,
       collapsedIds: new Set(),
       detailOverrides: new Map(),
       defaultDetailed: false,
-      narrow,
+      screen,
       currentMeasuredHeights: measuredHeights,
       nextMeasuredHeights,
-      viewportTop: 190,
+      viewportTop: 250,
     });
-  assert.equal(delta(true), 10);
-  assert.equal(delta(false), 0);
+  assert.equal(delta('narrow'), 10);
+  assert.equal(delta('wide'), 0);
+});
+
+test('on a phone, a file or folder without its details is estimated as its name and a folder’s line of tags, in the proportions of a wide screen', async () => {
+  const index = await filesystemIndex({ 'games/a.rbf': { tags: ['arcade'] } }, { games: { tags: ['arcade'] } });
+  const [folder, file] = [...index.rowsById.values()];
+  const estimate = (row, state = {}) => estimateRowHeight(row, { collapsed: false, detailsVisible: false, screen: 'phone', ...state });
+  assert.deepEqual([estimate(folder), estimate(file), estimate(file, { collapsed: true })], [92, 60, 60]);
+  // With their details, and on wider screens, as before.
+  assert.equal(estimate(file, { detailsVisible: true }), estimateRowHeight(file, { collapsed: false, detailsVisible: true }));
+  for (const screen of ['wide', 'narrow']) {
+    assert.deepEqual([estimate(folder, { screen }), estimate(file, { screen }), estimate(file, { screen, collapsed: true })], [104, 123, 86]);
+  }
+  // Archives as before.
+  const archive = { type: 'archive', childIds: ['x'], archive: { issues: [] } };
+  assert.equal(estimate(archive), estimateRowHeight(archive, { collapsed: false, detailsVisible: false }));
 });
 
 test('a row is drawn over its place in the list with its lines and corners, or as a card on its own outside the list', () => {

@@ -1178,6 +1178,16 @@ fieldset.mister-option legend { float: left; width: 100%; padding: 0; }
 .tree-heading:last-child, .primary-row:last-child { margin-bottom: 0; }
 .node-action-row .inline-action-button, .node-action-row .download-button { padding-block: 0.45rem; }
 .tree-heading-actions { display: flex; align-items: center; flex: 0 0 auto; }
+/* On phones a tap on a row shows its details (TreeEntryRow), so its details button shows only to the
+   keyboard, and while the row shows just its name its actions take no room. */
+.tree-details-toggle-keyboard:not(:focus-visible), .tree-heading-actions-keyboard:not(:focus-within) { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+/* With its details, a phone's row shows its full name and path, each on lines of their own. */
+.tree-entry-full-name .tree-title-row { flex-wrap: wrap; }
+.tree-entry-full-name .tree-title-row h3 { flex: 1 1 0; white-space: normal; overflow-wrap: anywhere; }
+.tree-entry-full-name .tree-identifier-inline { display: block; flex-basis: 100%; }
+.tree-entry-full-name .tree-identifier-inline code { display: inline; white-space: normal; overflow-wrap: anywhere; }
+.tree-entry-full-name .node-action-row { min-width: 0; }
+.tree-entry-full-name .node-action-row .db-chip { flex-shrink: 1; min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
 .node-action-row { display: flex; flex-wrap: wrap; justify-content: end; gap: 0.45rem; }
 .node-download-actions { display: inline-flex; flex: 0 0 auto; flex-wrap: nowrap; gap: 0.45rem; }
 .inline-action-button { display: inline-flex; align-items: center; justify-content: center; padding: 0.55rem 0.9rem; border-radius: var(--radius-button); color: var(--on-quiet); background: var(--quiet); font-size: 0.86rem; font-weight: 700; box-shadow: none; text-decoration: none; }

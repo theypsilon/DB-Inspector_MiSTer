@@ -18,6 +18,9 @@ import { updateTooltipPlacement } from '../../lib/utils.js';
  * @property {boolean} [tagsRevealed] all its tags shown, for the find-in-page match in one of them
  * @property {number} [tagsShown] how many tags it shows before "+N" (see fitTagCount); by default the first four
  * @property {boolean} [tagsHidden] its tags left off its line, for its details (see rowTagsHidden)
+ * @property {boolean} [phone] laid out for a phone: no badge or "Path" label, its details button only
+ *   for the keyboard, and a tap on the row shows or hides its details. Until they show, its heading
+ *   is its name; with them, its full name and path, then its database and download links.
  * @property {boolean} highlighted
  * @property {(rowId: string) => void} onToggleCollapsed
  * @property {(rowId: string) => void} onToggleDetails
@@ -36,6 +39,7 @@ const TreeEntryRow = memo(/** @param {TreeEntryRowProps} props */ function TreeE
   tagsRevealed = false,
   tagsShown,
   tagsHidden = false,
+  phone = false,
   highlighted,
   onToggleCollapsed,
   onToggleDetails,
@@ -71,10 +75,14 @@ const TreeEntryRow = memo(/** @param {TreeEntryRowProps} props */ function TreeE
     row.depth ? 'tree-entry-indented' : '',
     isArchive ? 'archive-card' : '',
     highlighted ? 'tree-entry-highlighted' : '',
+    phone && detailsVisible ? 'tree-entry-full-name' : '',
   ]
     .filter(Boolean)
     .join(' ');
   const Container = isArchive ? 'article' : 'div';
+  // On a phone, its name alone until its details show: no database or download links. Its database
+  // then shows beside them rather than before its name, which keeps its line.
+  const nameOnly = phone && !detailsVisible;
 
   const handleToggleRowDetails = () => {
     if (isFile && collapsed && !detailsVisible) {
@@ -98,6 +106,21 @@ const TreeEntryRow = memo(/** @param {TreeEntryRowProps} props */ function TreeE
     }
 
     onToggleCollapsed(row.id);
+  };
+
+  // On a phone a tap on the row shows or hides its details, as its details button does elsewhere: not
+  // a tap on a control, in its details or issues, or one that ends a selection of its text.
+  /** @param {import('react').MouseEvent<HTMLDivElement>} event */
+  const handleCardClick = (event) => {
+    const target = /** @type {Element} */ (event.target);
+    const selection = window.getSelection();
+    if (
+      target.closest('a, button, input, select, textarea, label, .metadata-list, .inline-issues') ||
+      (selection && !selection.isCollapsed && event.currentTarget.contains(selection.anchorNode))
+    ) {
+      return;
+    }
+    handleToggleRowDetails();
   };
 
   const handleDownload = () => {
@@ -141,11 +164,11 @@ const TreeEntryRow = memo(/** @param {TreeEntryRowProps} props */ function TreeE
             <span className="leaf-marker" />
           </span>
         )}
-        <div className={isArchive ? 'tree-card archive-surface' : 'tree-card'}>
+        <div className={isArchive ? 'tree-card archive-surface' : 'tree-card'} onClick={phone ? handleCardClick : undefined}>
           <div className="tree-heading">
             <div className="tree-title-row">
-              <span className={badgeClassName}>{badge}</span>
-              {dbId ? <span className="db-chip" title={dbId}>{dbId}</span> : null}
+              {phone ? null : <span className={badgeClassName}>{badge}</span>}
+              {dbId && !phone ? <span className="db-chip" title={dbId}>{dbId}</span> : null}
               <button
                 type="button"
                 className="copy-link-button"
@@ -156,6 +179,11 @@ const TreeEntryRow = memo(/** @param {TreeEntryRowProps} props */ function TreeE
               <h3 onMouseEnter={(e) => {
                 const h3 = e.currentTarget;
                 const heading = /** @type {HTMLElement} */ (h3.closest('.tree-heading'));
+                // On a phone a tap shows the details, with the full name and path: no tooltip.
+                if (phone) {
+                  heading.classList.add('tooltip-hidden');
+                  return;
+                }
                 const titleRow = h3.closest('.tree-title-row');
                 const nameTruncated = h3.scrollWidth > h3.clientWidth;
                 const idCode = titleRow.querySelector('.tree-identifier-inline code');
@@ -168,23 +196,24 @@ const TreeEntryRow = memo(/** @param {TreeEntryRowProps} props */ function TreeE
                   updateTooltipPlacement(heading, rect);
                 }
               }}>{title}</h3>
-              {showIdentifier ? (
+              {showIdentifier && !nameOnly ? (
                 <span className="tree-identifier-inline">
-                  <span className="tree-identifier-label">{identifierLabel}</span>
+                  {phone ? null : <span className="tree-identifier-label">{identifierLabel}</span>}
                   <code>{identifier}</code>
                 </span>
               ) : null}
             </div>
-            <div className="tree-heading-actions">
+            <div className={nameOnly ? 'tree-heading-actions tree-heading-actions-keyboard' : 'tree-heading-actions'}>
               <div className="node-action-row">
                 <button
                   type="button"
-                  className="inline-action-button"
+                  className={phone ? 'inline-action-button tree-details-toggle-keyboard' : 'inline-action-button'}
                   onClick={handleToggleRowDetails}
                 >
                   {detailsVisible ? 'Hide details' : 'Show details'}
                 </button>
-                {openUrl || downloadUrl ? (
+                {dbId && phone && !nameOnly ? <span className="db-chip" title={dbId}>{dbId}</span> : null}
+                {!nameOnly && (openUrl || downloadUrl) ? (
                   <div className="node-download-actions">
                     {openUrl ? (
                       <a

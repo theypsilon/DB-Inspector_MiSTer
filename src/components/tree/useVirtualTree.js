@@ -19,8 +19,8 @@ import { isTouchDevice } from '../../lib/utils.js';
 // Splitting them keeps the navigation effects running before the viewport and measurement
 // effects, which is the order the virtualization was tuned against.
 
-// `narrow`: a narrow screen, where files leave their tags off their line (see rowTagsHidden).
-export function useMeasuredRowLayout({ index, visibleRowIds, collapsedIds, detailOverrides, detailed, expandedTagIds, narrow = false }) {
+// `screen`: the screen the rows are laid out for (see TreeScreen in treeLayout.js).
+export function useMeasuredRowLayout({ index, visibleRowIds, collapsedIds, detailOverrides, detailed, expandedTagIds, screen = 'wide' }) {
   const containerRef = useRef(null);
   const pendingMeasuredHeightsRef = useRef(new Map());
   const measuredHeightsRef = useRef(new Map());
@@ -39,9 +39,9 @@ export function useMeasuredRowLayout({ index, visibleRowIds, collapsedIds, detai
         defaultDetailed: detailed,
         measuredHeights,
         expandedTagIds,
-        narrow,
+        screen,
       }),
-    [visibleRowIds, index.rowsById, collapsedIds, detailOverrides, detailed, measuredHeights, expandedTagIds, narrow],
+    [visibleRowIds, index.rowsById, collapsedIds, detailOverrides, detailed, measuredHeights, expandedTagIds, screen],
   );
   const virtualLayoutRef = useRef(virtualLayout);
   virtualLayoutRef.current = virtualLayout;
@@ -69,7 +69,7 @@ export function useVirtualRowWindow({
   detailOverrides,
   detailed,
   expandedTagIds,
-  narrow = false,
+  screen = 'wide',
   suppressAnchoringRef,
 }) {
   const {
@@ -130,7 +130,7 @@ export function useVirtualRowWindow({
         detailOverrides,
         defaultDetailed: detailed,
         expandedTagIds,
-        narrow,
+        screen,
         currentMeasuredHeights,
         nextMeasuredHeights,
         viewportTop: Math.max(0, viewport.scrollY - containerTop),
@@ -158,8 +158,8 @@ export function useVirtualRowWindow({
     heightFlushFrameRef,
     index.rowsById,
     measuredHeightsRef,
-    narrow,
     pendingMeasuredHeightsRef,
+    screen,
     setMeasuredHeights,
     suppressAnchoringRef,
     viewport.scrollY,

@@ -21,7 +21,7 @@ import { fitTagCount, getRowTags } from '../../lib/tagFit.js';
  * @property {boolean} [trimTopGuide]
  * @property {boolean} [trimBottomGuide]
  * @property {import('../../lib/tagFit.js').TagFitMetrics | null} [tagFit]
- * @property {boolean} [narrow] a narrow screen, where a file leaves its tags off its line (see rowTagsHidden)
+ * @property {import('../../lib/treeLayout.js').TreeScreen} [screen] the screen the row is laid out for
  */
 const VirtualTreeEntryRow = memo(
   /** @param {VirtualRowProps & Omit<import('./TreeEntryRow.jsx').TreeEntryRowProps, 'containerRef' | 'virtualStyle'>} props */
@@ -35,12 +35,12 @@ const VirtualTreeEntryRow = memo(
   trimTopGuide,
   trimBottomGuide,
   tagFit = null,
-  narrow = false,
+  screen = 'wide',
   ...rowProps
 }) {
   const { row, collapsed, detailsVisible, tagsExpanded, tagsRevealed } = rowProps;
   const allTags = Boolean(tagsExpanded || tagsRevealed);
-  const tagsHidden = rowTagsHidden(row, { narrow, detailsVisible, tagsExpanded: allTags });
+  const tagsHidden = rowTagsHidden(row, { narrow: screen !== 'wide', detailsVisible, tagsExpanded: allTags });
   const tags = getRowTags(row);
   const tagsShown = useMemo(() => fitTagCount(tags, tagFit, row.depth), [tags, tagFit, row.depth]);
   const rowRef = useRef(null);
@@ -64,8 +64,8 @@ const VirtualTreeEntryRow = memo(
       return undefined;
     }
 
-    const measurementSignature = `${collapsed ? '1' : '0'}:${detailsVisible ? '1' : '0'}:${allTags ? '1' : '0'}:${tagsHidden ? '1' : '0'}`;
-    const measurementKey = getRowMeasurementKey(row.id, { collapsed, detailsVisible, tagsExpanded: allTags, tagsHidden });
+    const measurementSignature = `${collapsed ? '1' : '0'}:${detailsVisible ? '1' : '0'}:${allTags ? '1' : '0'}:${screen}`;
+    const measurementKey = getRowMeasurementKey(row.id, { collapsed, detailsVisible, tagsExpanded: allTags, screen });
     const previousMeasurementSignature = previousMeasurementSignatureRef.current;
     const shouldFlushImmediately =
       previousMeasurementSignature !== null && previousMeasurementSignature !== measurementSignature;
@@ -88,9 +88,18 @@ const VirtualTreeEntryRow = memo(
     return () => {
       observer.disconnect();
     };
-  }, [row.id, collapsed, detailsVisible, allTags, tagsHidden, onHeightChange]);
+  }, [row.id, collapsed, detailsVisible, allTags, screen, onHeightChange]);
 
-  return <TreeEntryRow {...rowProps} tagsShown={tagsShown} tagsHidden={tagsHidden} containerRef={rowRef} virtualStyle={virtualStyle} />;
+  return (
+    <TreeEntryRow
+      {...rowProps}
+      tagsShown={tagsShown}
+      tagsHidden={tagsHidden}
+      phone={screen === 'phone'}
+      containerRef={rowRef}
+      virtualStyle={virtualStyle}
+    />
+  );
 });
 
 export default VirtualTreeEntryRow;

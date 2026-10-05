@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest';
-import { render, within } from '@testing-library/react';
+import { fireEvent, render, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import TreeEntryRow from '../../src/components/tree/TreeEntryRow.jsx';
@@ -199,6 +199,77 @@ describe('a tree row', () => {
     expect(element.querySelector('.primary-row')).toBeNull();
     expect(within(element).getByRole('heading', { name: 'eleven.mra' })).toBeTruthy();
     expect(within(element).getByRole('button', { name: 'Show details' })).toBeTruthy();
+  });
+
+  test('on a phone, a row is its name until its details show, and a tap on it shows or hides them; elsewhere a click on it does nothing', async () => {
+    const { row } = await filesystemRows(DOWNLOADS);
+    const LONG = 'Coin-OpCollection/Distribution-MiSTerFPGA';
+    // A file of combined databases, which names its database.
+    const notes = { ...row('notes.txt'), node: { ...row('notes.txt').node, dbId: LONG } };
+    const visible = (element) => element.querySelector('.tree-heading-actions-keyboard') === null;
+
+    const closed = renderRow(notes, { phone: true });
+    const heading = closed.element.querySelector('.tree-heading');
+    expect(text(heading.querySelector('.tree-title-row'))).toBe('notes.txt');
+    expect(closed.element.querySelector('.node-badge, .db-chip, .tree-identifier-inline')).toBeNull();
+    expect(within(closed.element).queryByRole('link', { name: 'OPEN' })).toBeNull();
+    expect(within(closed.element).queryByRole('button', { name: 'Download' })).toBeNull();
+    // Its details button is there for the keyboard and screen readers, out of sight.
+    const toggle = within(closed.element).getByRole('button', { name: 'Show details' });
+    expect(toggle.classList.contains('tree-details-toggle-keyboard')).toBe(true);
+    expect(visible(closed.element)).toBe(false);
+    await closed.user.click(heading.querySelector('h3'));
+    expect(closed.onToggleDetails.mock.calls).toEqual([[notes.id]]);
+    // Not a tap on a control.
+    await closed.user.click(toggle);
+    expect(closed.onToggleDetails).toHaveBeenCalledTimes(2);
+    await closed.user.click(closed.element.querySelector('.copy-link-button'));
+    expect(closed.onToggleDetails).toHaveBeenCalledTimes(2);
+    expect(closed.onAnchorRow).toHaveBeenCalledTimes(1);
+    closed.unmount();
+
+    // With its details: its full name and path, without a label, then its database and links.
+    const open = renderRow(notes, { phone: true, detailsVisible: true });
+    expect(open.element.classList.contains('tree-entry-full-name')).toBe(true);
+    expect(open.element.querySelector('.node-badge')).toBeNull();
+    expect(text(open.element.querySelector('.tree-identifier-inline'))).toBe('docs/notes.txt');
+    expect(open.element.querySelector('.tree-title-row .tree-identifier-label')).toBeNull();
+    expect(text(open.element.querySelector('.node-action-row .db-chip'))).toBe(LONG);
+    expect(open.element.querySelector('.tree-title-row .db-chip')).toBeNull();
+    expect(within(open.element).getByRole('link', { name: 'OPEN' })).toBeTruthy();
+    expect(within(open.element).getByRole('button', { name: 'Download' })).toBeTruthy();
+    expect(within(open.element).getByRole('button', { name: 'Hide details' }).classList.contains('tree-details-toggle-keyboard')).toBe(true);
+    expect(visible(open.element)).toBe(true);
+    // A tap in its details, or one that ends a selection of its text, leaves them open; one on its name closes them.
+    await open.user.click(open.element.querySelector('.metadata-list dd'));
+    const name = open.element.querySelector('h3');
+    // The click that ends dragging over its text, with the text still selected.
+    window.getSelection().selectAllChildren(name);
+    fireEvent.click(name);
+    expect(open.onToggleDetails).not.toHaveBeenCalled();
+    window.getSelection().removeAllRanges();
+    await open.user.click(name);
+    expect(open.onToggleDetails.mock.calls).toEqual([[notes.id]]);
+    open.unmount();
+
+    // On a wider screen a click on the row does nothing, and it shows all it shows today.
+    const wide = renderRow(notes);
+    await wide.user.click(wide.element.querySelector('h3'));
+    expect(wide.onToggleDetails).not.toHaveBeenCalled();
+    expect(text(wide.element.querySelector('.tree-title-row .db-chip'))).toBe(LONG);
+    expect(text(wide.element.querySelector('.tree-identifier-inline .tree-identifier-label'))).toBe('Path');
+    expect(text(wide.element.querySelector('.tree-identifier-inline code'))).toBe('docs/notes.txt');
+    expect(wide.element.querySelector('.tree-title-row .node-badge')).not.toBeNull();
+    expect(within(wide.element).getByRole('button', { name: 'Show details' }).classList.contains('tree-details-toggle-keyboard')).toBe(false);
+    expect(visible(wide.element)).toBe(true);
+  });
+
+  test('on a phone, a tap on a closed file shows it with its details', async () => {
+    const { row } = await filesystemRows(DOWNLOADS);
+    const { element, user, onSetRowState, onToggleDetails } = renderRow(row('notes.txt'), { phone: true, collapsed: true });
+    await user.click(element.querySelector('h3'));
+    expect(onSetRowState).toHaveBeenCalledWith(row('notes.txt').id, { collapsed: false, detailsVisible: true });
+    expect(onToggleDetails).not.toHaveBeenCalled();
   });
 
   test('a highlighted row says so', async () => {

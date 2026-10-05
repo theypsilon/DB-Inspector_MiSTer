@@ -65,8 +65,17 @@ export function rowOutline(rowIds, rowsById, index) {
 
 // A row's measured height depends on what it shows: open or collapsed, its details, and all its
 // tags or only the first few (`tagsExpanded`).
-export function getRowMeasurementKey(rowId, { collapsed, detailsVisible, tagsExpanded = false, tagsHidden = false }) {
-  return `${rowId}:${collapsed ? '1' : '0'}:${detailsVisible ? '1' : '0'}:${tagsExpanded ? '1' : '0'}:${tagsHidden ? '1' : '0'}`;
+// The screens a tree lays its rows out for: 'wide', 'narrow' (NARROW_SCREEN_QUERY in utils.js:
+// headings stacked, files' tags left to their details) and 'phone' (PHONE_SCREEN_QUERY: headings
+// just the row's name until its details show). A row is measured apart on each.
+/** @typedef {'wide' | 'narrow' | 'phone'} TreeScreen */
+
+/**
+ * @param {string} rowId
+ * @param {{ collapsed: boolean, detailsVisible: boolean, tagsExpanded?: boolean, screen?: string }} state `screen`: a TreeScreen
+ */
+export function getRowMeasurementKey(rowId, { collapsed, detailsVisible, tagsExpanded = false, screen = 'wide' }) {
+  return `${rowId}:${collapsed ? '1' : '0'}:${detailsVisible ? '1' : '0'}:${tagsExpanded ? '1' : '0'}:${screen}`;
 }
 
 // Whether a row leaves its tags off its line: a file on a narrow screen (NARROW_SCREEN_QUERY in
@@ -86,7 +95,7 @@ export function buildVirtualRowLayout({
   defaultDetailed,
   measuredHeights,
   expandedTagIds = NO_ROW_IDS,
-  narrow = false,
+  screen = 'wide',
 }) {
   if (!rowIds.length) {
     return {
@@ -110,10 +119,9 @@ export function buildVirtualRowLayout({
     const collapsed = collapsedIds.has(rowId);
     const detailsVisible = detailOverrides.get(rowId) ?? defaultDetailed;
     const tagsExpanded = expandedTagIds.has(rowId);
-    const tagsHidden = rowTagsHidden(row, { narrow, detailsVisible, tagsExpanded });
-    const measuredHeight = measuredHeights.get(getRowMeasurementKey(rowId, { collapsed, detailsVisible, tagsExpanded, tagsHidden }));
+    const measuredHeight = measuredHeights.get(getRowMeasurementKey(rowId, { collapsed, detailsVisible, tagsExpanded, screen }));
     const rowHeight =
-      measuredHeight ?? estimateRowHeight(row, { collapsed, detailsVisible });
+      measuredHeight ?? estimateRowHeight(row, { collapsed, detailsVisible, screen });
 
     // Rows touch: each one starts where the one above ends.
     offsets[index] = totalHeight;
@@ -247,7 +255,7 @@ export function getMeasurementScrollDelta({
   detailOverrides,
   defaultDetailed,
   expandedTagIds = NO_ROW_IDS,
-  narrow = false,
+  screen = 'wide',
   currentMeasuredHeights,
   nextMeasuredHeights,
   viewportTop,
@@ -257,7 +265,7 @@ export function getMeasurementScrollDelta({
   }
 
   const layoutFor = (measuredHeights) =>
-    buildVirtualRowLayout({ rowIds, rowsById, collapsedIds, detailOverrides, defaultDetailed, measuredHeights, expandedTagIds, narrow });
+    buildVirtualRowLayout({ rowIds, rowsById, collapsedIds, detailOverrides, defaultDetailed, measuredHeights, expandedTagIds, screen });
   return getViewportAnchorOffsetDelta({
     currentLayout: layoutFor(currentMeasuredHeights),
     nextLayout: layoutFor(nextMeasuredHeights),
@@ -294,9 +302,20 @@ export function getRowJumpScrollTop({ containerTop, offset, viewportHeight }) {
 // A row's height before it is measured. The estimates keep the ratios to the measured heights they
 // were tuned with (a file with a line of tags measures about 101px, a row without tags 61px, and a
 // file with its details about 353px), which the scrolling of the virtual tree relies on.
-export function estimateRowHeight(row, { collapsed, detailsVisible }) {
+/**
+ * @param {any} row
+ * @param {{ collapsed: boolean, detailsVisible: boolean, screen?: string }} state `screen`: a TreeScreen
+ */
+export function estimateRowHeight(row, { collapsed, detailsVisible, screen = 'wide' }) {
   if (!row) {
     return 129;
+  }
+
+  // On a phone, a file or folder without its details is its name, and a folder's line of tags
+  // (measured at 49px and 89px), estimated in the proportions above: 123 to 101 for a file, 104 to
+  // 101 for a folder.
+  if (screen === 'phone' && row.type !== 'archive' && !detailsVisible) {
+    return row.node.kind === 'folder' ? 92 : 60;
   }
 
   if (row.type === 'archive') {

@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 
 import App from '../../src/App.jsx';
-import { NARROW_SCREEN_QUERY } from '../../src/lib/utils.js';
+import { NARROW_SCREEN_QUERY, PHONE_SCREEN_QUERY } from '../../src/lib/utils.js';
 import { text } from './support.js';
 
 // The whole page in jsdom, with fetch answered from `routes`: how it is wired to the app model.
@@ -53,6 +53,30 @@ function serve(routes) {
       return new Response(body, { status: route.status ?? 200, headers: { 'content-type': route.contentType ?? 'application/json' } });
     }),
   );
+}
+
+// A window as wide as `width` says ('narrow', 960px and narrower, or 'phone'), as matchMedia tells
+// the page's screen queries, and tells again when `resize` changes it.
+function stubScreen(width) {
+  let current = width;
+  const listeners = new Map([[NARROW_SCREEN_QUERY, new Set()], [PHONE_SCREEN_QUERY, new Set()]]);
+  const matches = (query) => (query === NARROW_SCREEN_QUERY && current !== 'wide') || (query === PHONE_SCREEN_QUERY && current === 'phone');
+  vi.stubGlobal('matchMedia', (query) => ({
+    media: query,
+    get matches() {
+      return matches(query);
+    },
+    addEventListener: (type, listener) => listeners.get(query)?.add(listener),
+    removeEventListener: (type, listener) => listeners.get(query)?.delete(listener),
+  }));
+  return {
+    resize(next) {
+      act(() => {
+        current = next;
+        for (const [query, set] of listeners) set.forEach((listener) => listener({ media: query, matches: matches(query) }));
+      });
+    },
+  };
 }
 
 function openPage(path, routes) {
@@ -445,17 +469,7 @@ describe('the page and the app model', () => {
   });
 
   test('on a narrow screen a file leaves its tags to its details or a find-in-page match in one, a folder keeps its own, and on a wider one they show again', async () => {
-    // The window, narrow until it is widened: what matchMedia says, and tells as it changes.
-    let narrow = true;
-    const listeners = new Set();
-    vi.stubGlobal('matchMedia', (query) => ({
-      media: query,
-      get matches() {
-        return query === NARROW_SCREEN_QUERY && narrow;
-      },
-      addEventListener: (type, listener) => query === NARROW_SCREEN_QUERY && listeners.add(listener),
-      removeEventListener: (type, listener) => listeners.delete(listener),
-    }));
+    const screenSize = stubScreen('narrow');
     const url = 'https://example.com/narrow.json';
     const tag_dictionary = { arcade: 0, hidden_gem: 1 };
     const user = openPage(`/#db=${url}`, {
@@ -480,12 +494,33 @@ describe('the page and the app model', () => {
     await user.keyboard('{Escape}');
     await waitFor(() => expect(row('game.rbf').querySelector('.primary-row')).toBeNull());
 
-    act(() => {
-      narrow = false;
-      listeners.forEach((listener) => listener({ media: NARROW_SCREEN_QUERY, matches: false }));
-    });
+    screenSize.resize('wide');
     expect(chips('game.rbf')).toEqual(['hidden_gem', 'arcade']);
     expect(chips('cores')).toEqual(['arcade']);
+  });
+
+  test('on a phone a row is its name, and a tap on it shows or hides its details, with its links; on a wider screen a click on it does not', async () => {
+    const screenSize = stubScreen('phone');
+    const url = 'https://example.com/phone.json';
+    const user = openPage(`/#db=${url}`, { [url]: { body: database('phone_db') } });
+    expect(await screen.findByRole('heading', { name: 'phone_db' })).toBeTruthy();
+    const row = () => [...document.querySelectorAll('#section-files .tree-entry')].find((entry) => text(entry.querySelector('h3')) === 'arcade.rbf');
+    await waitFor(() => expect(row()).toBeTruthy());
+    expect(text(row().querySelector('.tree-title-row'))).toBe('arcade.rbf');
+    expect(within(row()).queryByRole('button', { name: 'Download' })).toBeNull();
+
+    await user.click(row().querySelector('h3'));
+    expect(within(row()).getByText('MD5 HASH')).toBeTruthy();
+    expect(within(row()).getByRole('button', { name: 'Download' })).toBeTruthy();
+    expect(text(row().querySelector('.tree-identifier-inline'))).toBe('cores/arcade.rbf');
+    await user.click(row().querySelector('h3'));
+    expect(within(row()).queryByText('MD5 HASH')).toBeNull();
+
+    // Wider, the row shows what it always did, and a click on its name is just a click.
+    screenSize.resize('narrow');
+    expect(within(row()).getByRole('button', { name: 'Download' })).toBeTruthy();
+    await user.click(row().querySelector('h3'));
+    expect(within(row()).queryByText('MD5 HASH')).toBeNull();
   });
 
   test('the top of the page shows the project’s repository, and folds to its title once a database is loaded', async () => {
