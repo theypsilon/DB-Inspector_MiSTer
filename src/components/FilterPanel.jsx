@@ -4,12 +4,14 @@ import FilterHelp from './FilterHelp.jsx';
 import FilterResults from './FilterResults.jsx';
 import { buildFilterSummaryCopy } from '../lib/utils.js';
 
-// The FILTER box of a single database, its help text, and the resulting counts and size estimate.
+// The FILTER box of a single database, with its terms to choose from, its help text, and the
+// resulting counts and size estimate.
 function FilterPanel({
   filterInput,
   onFilterInputChange,
   canReset,
   onReset,
+  onBrowseTerms,
   hasEssentialHint,
   hasUntaggedItems,
   onSearchEssential,
@@ -32,15 +34,20 @@ function FilterPanel({
         <div className="catalog-search">
           <FilterInput id="inspection-filter" label="FILTER" value={filterInput} onChange={onFilterInputChange} />
         </div>
-        {canReset ? (
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={onReset}
-          >
-            Clear
+        <div className="button-row filter-toolbar-actions">
+          <button type="button" className="secondary-button" onClick={onBrowseTerms}>
+            Terms
           </button>
-        ) : null}
+          {canReset ? (
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={onReset}
+            >
+              Clear
+            </button>
+          ) : null}
+        </div>
       </div>
       <FilterHelp
         hasEssentialHint={hasEssentialHint}

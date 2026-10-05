@@ -36,7 +36,7 @@ const DATABASE = {
 
 async function renderPanel({ filter = '', clusterSizeBytes = DEFAULT_CLUSTER_SIZE_BYTES, ...props } = {}) {
   const displayed = applyInspectionFilter(await inspect(DATABASE), filter);
-  const handlers = { onFilterInputChange: vi.fn(), onReset: vi.fn(), onSearchEssential: vi.fn(), onClusterSizeChange: vi.fn() };
+  const handlers = { onFilterInputChange: vi.fn(), onReset: vi.fn(), onSearchEssential: vi.fn(), onClusterSizeChange: vi.fn(), onBrowseTerms: vi.fn() };
   render(
     <FilterPanel
       filterInput={filter}
@@ -64,6 +64,13 @@ describe('the FILTER panel', () => {
     expect(onFilterInputChange).toHaveBeenCalledWith('x');
     expect(onFilterInputChange).not.toHaveBeenCalledWith('\n');
     expect(document.activeElement).not.toBe(box);
+  });
+
+  test('offers the terms to choose from, beside the box', async () => {
+    const { user, onBrowseTerms, panel } = await renderPanel();
+    const toolbar = panel.querySelector('.filter-toolbar');
+    await user.click(within(toolbar).getByRole('button', { name: 'Terms' }));
+    expect(onBrowseTerms).toHaveBeenCalledTimes(1);
   });
 
   test('offers Clear when FILTER differs from its default', async () => {

@@ -890,6 +890,30 @@ fieldset.mister-option legend { float: left; width: 100%; padding: 0; }
 .install-filter-option code { padding: 0.15rem 0.4rem; border-radius: var(--radius-sm); background: var(--code); font-size: 0.85em; }
 .install-download-row { display: flex; justify-content: center; margin-top: 1.2rem; }
 
+/* Filter terms: the terms of a FILTER box, to keep or exclude. As in the pickers, the list fills
+   the dialog and is the part that scrolls. */
+.filter-toolbar-actions { flex-wrap: nowrap; }
+.filter-terms-list { display: grid; align-content: start; gap: 0.5rem; margin: 0; padding: 0 0.25rem 0 0; list-style: none; }
+.filter-term { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem 1rem; padding: 0.7rem 1rem; border: 1px solid var(--card-line); border-radius: var(--radius-sm); background: var(--card); }
+.filter-term-text { display: grid; gap: 0.25rem; min-width: 0; }
+.filter-term-names { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.2rem 0.6rem; min-width: 0; }
+.filter-term-names strong { font-family: var(--mono); font-size: 0.92rem; overflow-wrap: anywhere; }
+.filter-term-aliases { color: var(--muted); font-size: 0.85rem; overflow-wrap: anywhere; }
+.filter-term-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.5rem; min-width: 0; color: var(--muted); font-size: 0.85rem; }
+.filter-term-meta .db-chip, .filter-terms-without .db-chip { flex-shrink: 1; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+.filter-term-actions { display: inline-flex; flex-shrink: 0; gap: 0.35rem; padding: 0.3rem; border-radius: var(--radius-button); background: var(--quiet); }
+.filter-term-use { padding: 0.45rem 0.85rem; border-radius: var(--radius-button); color: var(--ink); background: transparent; box-shadow: none; font-size: 0.86rem; }
+.filter-term-use:hover { background: var(--quiet-hover); filter: none; }
+.filter-term-use.active { color: var(--on-toggle-on); background: var(--toggle-on); }
+.filter-term-use:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.filter-terms-current { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.7rem; min-width: 0; margin-right: auto; }
+.filter-terms-current code { padding: 0.25rem 0.5rem; border-radius: var(--radius-sm); background: var(--code); overflow-wrap: anywhere; }
+.filter-terms-empty { color: var(--muted); }
+@media (max-width: 560px) {
+  /* A term's Keep and Exclude go under its names. */
+  .filter-term { flex-wrap: wrap; }
+}
+
 /* Explorer: the SD card, one folder at a time, in a dialog nearly the window's size (the whole
    screen on phones). Rows, and rows of icons, have one height each, which the list reads from
    these variables to render only those in view. The details slide in and out, and the icons glide
@@ -1056,16 +1080,10 @@ fieldset.mister-option legend { float: left; width: 100%; padding: 0; }
 .metadata-card { padding: 1rem; background: var(--card); }
 
 /* Tags */
-.tag-dictionary { border-radius: var(--radius-md); background: var(--card); }
-.tag-cloud { display: flex; flex-wrap: wrap; gap: 0.7rem; margin-top: 0; }
-.dictionary-pill, .mini-chip, .tag-chip, .node-badge, .issue-level { font-family: 'IBM Plex Mono', monospace; font-size: 0.82rem; }
+.mini-chip, .tag-chip, .node-badge, .issue-level { font-family: 'IBM Plex Mono', monospace; font-size: 0.82rem; }
 .dictionary-summary { display: flex; justify-content: space-between; align-items: center; gap: 1rem; list-style: none; cursor: pointer; }
 .dictionary-summary::-webkit-details-marker { display: none; }
 .dictionary-count { display: inline-flex; align-items: center; padding: 0.45rem 0.7rem; border-radius: var(--radius-chip); background: var(--quiet); color: var(--muted); font-family: 'IBM Plex Mono', monospace; font-size: 0.82rem; }
-.dictionary-meta { margin: 0 0 1rem; color: var(--muted); font-family: 'IBM Plex Mono', monospace; font-size: 0.82rem; }
-.dictionary-pill { display: inline-flex; gap: 0.7rem; align-items: center; padding: 0.6rem 0.8rem; border-radius: var(--radius-chip); background: var(--quiet); overflow-wrap: anywhere; }
-/* A database's tags are headed by its db_id, which wraps when it is wider than the line, as a tag name does in its pill. */
-.dictionary-meta .db-chip { white-space: normal; overflow-wrap: anywhere; }
 
 /* Tree structure */
 .tree-root, .archive-list { position: relative; min-height: 1px; overflow-anchor: none; }
@@ -1075,15 +1093,15 @@ fieldset.mister-option legend { float: left; width: 100%; padding: 0; }
 /* CSS Highlights API */
 /* Highlights take literal colors, rules for each theme (--hl and --on-hl, and --hl-current and
    --on-hl-current, in the theme blocks): highlight pseudo-elements do not read variables in every browser. */
-::highlight(search-match-all-filter), ::highlight(search-match-all-files), ::highlight(search-match-all-archives), ::highlight(search-match-all-collisions), ::highlight(search-match-all-tags) { background-color: #ffe066; color: #1b1b29; }
+::highlight(search-match-all-filter), ::highlight(search-match-all-files), ::highlight(search-match-all-archives), ::highlight(search-match-all-collisions) { background-color: #ffe066; color: #1b1b29; }
 ::highlight(search-match) { background-color: #4d4196; color: #ffffff; }
-:root[data-theme="dark"] ::highlight(search-match-all-filter), :root[data-theme="dark"] ::highlight(search-match-all-files), :root[data-theme="dark"] ::highlight(search-match-all-archives), :root[data-theme="dark"] ::highlight(search-match-all-collisions), :root[data-theme="dark"] ::highlight(search-match-all-tags) { background-color: #ffd27a; color: #1a0d2e; }
+:root[data-theme="dark"] ::highlight(search-match-all-filter), :root[data-theme="dark"] ::highlight(search-match-all-files), :root[data-theme="dark"] ::highlight(search-match-all-archives), :root[data-theme="dark"] ::highlight(search-match-all-collisions) { background-color: #ffd27a; color: #1a0d2e; }
 :root[data-theme="dark"] ::highlight(search-match) { background-color: #ff5ea3; color: #1a0d2e; }
-:root[data-theme="classic"] ::highlight(search-match-all-filter), :root[data-theme="classic"] ::highlight(search-match-all-files), :root[data-theme="classic"] ::highlight(search-match-all-archives), :root[data-theme="classic"] ::highlight(search-match-all-collisions), :root[data-theme="classic"] ::highlight(search-match-all-tags) { background-color: #ffff00; color: #000000; }
+:root[data-theme="classic"] ::highlight(search-match-all-filter), :root[data-theme="classic"] ::highlight(search-match-all-files), :root[data-theme="classic"] ::highlight(search-match-all-archives), :root[data-theme="classic"] ::highlight(search-match-all-collisions) { background-color: #ffff00; color: #000000; }
 :root[data-theme="classic"] ::highlight(search-match) { background-color: #ff9632; color: #000000; }
-:root[data-theme="dot-matrix"] ::highlight(search-match-all-filter), :root[data-theme="dot-matrix"] ::highlight(search-match-all-files), :root[data-theme="dot-matrix"] ::highlight(search-match-all-archives), :root[data-theme="dot-matrix"] ::highlight(search-match-all-collisions), :root[data-theme="dot-matrix"] ::highlight(search-match-all-tags) { background-color: #9bbc0f; color: #0f380f; }
+:root[data-theme="dot-matrix"] ::highlight(search-match-all-filter), :root[data-theme="dot-matrix"] ::highlight(search-match-all-files), :root[data-theme="dot-matrix"] ::highlight(search-match-all-archives), :root[data-theme="dot-matrix"] ::highlight(search-match-all-collisions) { background-color: #9bbc0f; color: #0f380f; }
 :root[data-theme="dot-matrix"] ::highlight(search-match) { background-color: #306230; color: #e7f5c4; }
-:root[data-theme="phosphor"] ::highlight(search-match-all-filter), :root[data-theme="phosphor"] ::highlight(search-match-all-files), :root[data-theme="phosphor"] ::highlight(search-match-all-archives), :root[data-theme="phosphor"] ::highlight(search-match-all-collisions), :root[data-theme="phosphor"] ::highlight(search-match-all-tags) { background-color: #ffb000; color: #1a1205; }
+:root[data-theme="phosphor"] ::highlight(search-match-all-filter), :root[data-theme="phosphor"] ::highlight(search-match-all-files), :root[data-theme="phosphor"] ::highlight(search-match-all-archives), :root[data-theme="phosphor"] ::highlight(search-match-all-collisions) { background-color: #ffb000; color: #1a1205; }
 :root[data-theme="phosphor"] ::highlight(search-match) { background-color: #fff0c2; color: #1a1205; }
 
 /* Find bar */
@@ -1267,7 +1285,6 @@ fieldset.mister-option legend { float: left; width: 100%; padding: 0; }
 .filter-panel code { overflow-wrap: anywhere; }
 .effective-filter-source { color: var(--muted); font-size: 0.85rem; }
 .effective-filter-count { color: var(--muted); font-size: 0.85rem; font-weight: 700; }
-.tag-groups { display: grid; gap: 1.2rem; }
 
 @media (max-width: 960px) {
   .hero, .loader-grid, .catalog-toolbar, .filter-toolbar, .modal-toolbar, .picker-toolbar, .catalog-selected-grid, .overview-grid, .highlight-row, .metadata-list { grid-template-columns: 1fr; }
@@ -1278,6 +1295,8 @@ fieldset.mister-option legend { float: left; width: 100%; padding: 0; }
   .tree-identifier-inline { width: 100%; }
   .catalog-count { text-align: left; }
   .modal-footer { justify-content: start; }
+  /* Under the FILTER box, its buttons share its width. */
+  .filter-toolbar > .filter-toolbar-actions > button { flex: 1 1 0; }
 }
 
 @media (max-width: 720px) {
@@ -1295,8 +1314,10 @@ fieldset.mister-option legend { float: left; width: 100%; padding: 0; }
   .modal-panel { padding: 1rem; border-radius: min(var(--radius-lg), 22px); }
   .tree-entry { --tree-indent-step: 1rem; --tree-row-gap: 0.6rem; padding-left: calc(var(--tree-depth, 0) * var(--tree-indent-step)); }
   .tree-guide-elbow { width: var(--tree-indent-step); }
-  .database-filter-row { grid-template-columns: minmax(0, 1fr) auto; }
+  /* A database's own filter: its db_id, its box, then Terms and Remove, each a line of its own. */
+  .database-filter-row { grid-template-columns: minmax(0, 1fr); }
   .database-filter-row .db-chip { grid-column: 1 / -1; justify-self: start; }
+  .database-filter-row .filter-toolbar-actions > button { flex: 1 1 0; }
 }
 
 @media (hover: none), (pointer: coarse) {

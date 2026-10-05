@@ -175,7 +175,7 @@ describe('the page and the app model', () => {
     await user.click(screen.getByRole('button', { name: 'essential' }));
     const search = await screen.findByRole('search', { name: 'Find in tree' });
     expect(within(search).getByLabelText('Search text').value).toBe('essential');
-    await waitFor(() => expect(text(search.querySelector('.find-bar-count'))).toBe('1 of 3'));
+    await waitFor(() => expect(text(search.querySelector('.find-bar-count'))).toBe('1 of 2'));
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('search')).toBeNull();
   });
@@ -455,5 +455,64 @@ describe('the page and the app model', () => {
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(screen.getByRole('search', { name: 'Find in tree' })).toBeTruthy();
+  });
+  test('the terms open from beside FILTER, and keeping one writes FILTER and the link; the page no longer lists them', async () => {
+    const url = 'https://example.com/terms.json';
+    const user = openPage(`/#db=${url}`, { [url]: { body: database('terms_db') } });
+    expect(await screen.findByRole('heading', { name: 'terms_db' })).toBeTruthy();
+    // The section that listed the terms at the bottom of the page is gone.
+    expect(document.getElementById('section-tags')).toBeNull();
+
+    await user.click(within(document.getElementById('section-filter')).getByRole('button', { name: 'Terms' }));
+    const dialog = screen.getByRole('dialog', { name: 'Filter terms' });
+    expect(text(dialog.querySelector('.helper-copy'))).toBe("Keep or exclude terms_db's terms in FILTER. Choosing a term again takes it out.");
+    expect([...dialog.querySelectorAll('.filter-term strong')].map(text)).toEqual(['arcade', 'essential']);
+    await user.click(within(dialog).getByRole('button', { name: 'Keep arcade' }));
+    expect(screen.getByLabelText('FILTER').value).toBe('arcade');
+    await waitFor(() => expect(window.location.hash).toBe(`#db=${url}&filter=arcade`), { timeout: 3000 });
+    // Find-in-page stands aside while the terms cover the page.
+    await user.keyboard('{Control>}f{/Control}');
+    expect(screen.queryByRole('search')).toBeNull();
+
+    await user.click(within(dialog).getByRole('button', { name: 'Done' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  test('a link to the section the terms were in opens them, and closing them takes them out of the link', async () => {
+    const url = 'https://example.com/terms-link.json';
+    const user = openPage(`/#db=${url}&at=tags`, { [url]: { body: database('terms_link_db') } });
+    expect(await screen.findByRole('dialog', { name: 'Filter terms' })).toBeTruthy();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(window.location.hash).toBe(`#db=${url}`);
+  });
+
+  test('combined databases: the shared filter’s terms are all of theirs, and a database’s own filter has its own', async () => {
+    const alpha = 'https://example.com/terms-alpha.json';
+    const beta = 'https://example.com/terms-beta.json';
+    const user = openPage(`/#db=${alpha}&db=${beta}&filter.beta=console`, {
+      [alpha]: { body: database('alpha', { tag_dictionary: { arcade: 0 }, files: { 'a.rbf': { size: 1, hash: 'a', tags: [0] } } }) },
+      [beta]: { body: database('beta', { tag_dictionary: { arcade: 0, console: 1 }, files: { 'b.rbf': { size: 1, hash: 'b', tags: [0] }, 'b.rom': { size: 1, hash: 'c', tags: [1] } } }) },
+    });
+    expect(await screen.findByRole('heading', { name: '2 combined databases' })).toBeTruthy();
+    const filters = document.getElementById('section-filter');
+
+    await user.click(within(filters).getByRole('button', { name: 'Terms' }));
+    let dialog = screen.getByRole('dialog', { name: 'Filter terms' });
+    const lines = (term) => [...term.querySelectorAll('p')].map(text).join(' ');
+    expect([...dialog.querySelectorAll('.filter-term-text')].map(lines)).toEqual(['arcade 2 entries alpha beta', 'console 1 entry beta']);
+    await user.click(within(dialog).getByRole('button', { name: 'Exclude console' }));
+    expect(screen.getByLabelText('FILTER').value).toBe('!console');
+    await user.click(within(dialog).getByRole('button', { name: 'Done' }));
+
+    await user.click(within(filters).getByRole('button', { name: 'Terms for beta' }));
+    dialog = screen.getByRole('dialog', { name: 'Filter terms' });
+    expect(text(dialog.querySelector('.helper-copy'))).toBe("Keep or exclude beta's terms in its own filter. Choosing a term again takes it out.");
+    // Only beta's: its own entries, its own name.
+    expect([...dialog.querySelectorAll('.filter-term-text')].map(lines)).toEqual(['arcade 1 entry beta', 'console 1 entry beta']);
+    expect(within(dialog).getByRole('button', { name: 'Keep console' }).getAttribute('aria-pressed')).toBe('true');
+    await user.click(within(dialog).getByRole('button', { name: 'Keep arcade' }));
+    expect(screen.getByLabelText('FILTER for beta').value).toBe('console arcade');
+    expect(screen.getByLabelText('FILTER').value).toBe('!console');
   });
 });

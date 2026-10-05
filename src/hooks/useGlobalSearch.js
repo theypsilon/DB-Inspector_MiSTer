@@ -1,16 +1,15 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { findSearchMatches, matchIndexAt, nextMatchIndex, previousMatchIndex } from '../lib/search.js';
 
-// `tagGroups` is [{ dbId, tags }]: one group with a null dbId for a single database.
-function useGlobalSearch({ filesystemIndex, archivesIndex, collisionsIndex, tagGroups, hasEssentialHint, hasInspection }) {
+function useGlobalSearch({ filesystemIndex, archivesIndex, collisionsIndex, hasEssentialHint, hasInspection }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
   const [token, setToken] = useState(0);
 
   const matches = useMemo(
-    () => findSearchMatches({ query, filesystemIndex, archivesIndex, collisionsIndex, tagGroups, hasEssentialHint }),
-    [query, filesystemIndex, archivesIndex, collisionsIndex, tagGroups, hasEssentialHint],
+    () => findSearchMatches({ query, filesystemIndex, archivesIndex, collisionsIndex, hasEssentialHint }),
+    [query, filesystemIndex, archivesIndex, collisionsIndex, hasEssentialHint],
   );
 
   const clampedIndex = matches.length ? currentMatchIndex % matches.length : 0;
@@ -46,7 +45,6 @@ function useGlobalSearch({ filesystemIndex, archivesIndex, collisionsIndex, tagG
     CSS.highlights?.delete('search-match-all-filter');
     CSS.highlights?.delete('search-match-all-files');
     CSS.highlights?.delete('search-match-all-archives');
-    CSS.highlights?.delete('search-match-all-tags');
   }, [query]);
 
   const goToNextMatch = useCallback(() => {

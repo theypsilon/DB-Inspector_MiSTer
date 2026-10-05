@@ -199,7 +199,7 @@ describe('combined databases', () => {
 
   test('share a FILTER, can have their own, and list the filter each one gets', async () => {
     const { view } = await combined({ shared: { isSet: true, value: 'arcade' }, overrides: { beta: '[mister] console' } });
-    const handlers = { onSharedFilterChange: vi.fn(), onSharedFilterReset: vi.fn(), onOverrideChange: vi.fn(), onOverrideAdd: vi.fn(), onOverrideRemove: vi.fn() };
+    const handlers = { onSharedFilterChange: vi.fn(), onSharedFilterReset: vi.fn(), onOverrideChange: vi.fn(), onOverrideAdd: vi.fn(), onOverrideRemove: vi.fn(), onBrowseTerms: vi.fn() };
     render(
       <CombinedFilterPanel
         databases={view.databases}
@@ -232,6 +232,12 @@ describe('combined databases', () => {
     expect(handlers.onOverrideChange).toHaveBeenLastCalledWith('beta', '[mister] consolex');
     await user.click(screen.getByRole('button', { name: 'Remove' }));
     expect(handlers.onOverrideRemove).toHaveBeenCalledWith('beta');
+
+    // Each FILTER box has its terms: the shared one's, and a database's own.
+    await user.click(screen.getByRole('button', { name: 'Terms' }));
+    expect(handlers.onBrowseTerms).toHaveBeenLastCalledWith('shared');
+    await user.click(screen.getByRole('button', { name: 'Terms for beta' }));
+    expect(handlers.onBrowseTerms).toHaveBeenLastCalledWith('beta');
 
     await user.selectOptions(screen.getByLabelText('Give a database its own filter'), 'alpha');
     expect(handlers.onOverrideAdd).toHaveBeenCalledWith('alpha');

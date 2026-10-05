@@ -18,6 +18,8 @@ function describeRest(count, { others, grouped }) {
 
 // FILTER for combined databases, as in downloader.ini: a shared filter for all of them (the
 // [mister] filter), filters of their own for some, and the filter that ends up applying to each.
+// Each FILTER box has its terms to choose from: `onBrowseTerms` gets 'shared', or the db_id of a
+// database's own filter.
 function CombinedFilterPanel({
   databases,
   sharedFilter,
@@ -27,6 +29,7 @@ function CombinedFilterPanel({
   onOverrideChange,
   onOverrideAdd,
   onOverrideRemove,
+  onBrowseTerms,
   hasEssentialHint,
   hasUntaggedItems,
   onSearchEssential,
@@ -61,11 +64,16 @@ function CombinedFilterPanel({
             onChange={onSharedFilterChange}
           />
         </div>
-        {sharedFilter.isSet ? (
-          <button type="button" className="secondary-button" onClick={onSharedFilterReset}>
-            Clear
+        <div className="button-row filter-toolbar-actions">
+          <button type="button" className="secondary-button" onClick={() => onBrowseTerms('shared')}>
+            Terms
           </button>
-        ) : null}
+          {sharedFilter.isSet ? (
+            <button type="button" className="secondary-button" onClick={onSharedFilterReset}>
+              Clear
+            </button>
+          ) : null}
+        </div>
       </div>
       <p className="helper-copy">
         Applies to every database, like the <code>[mister]</code> filter in downloader.ini. A
@@ -85,9 +93,14 @@ function CombinedFilterPanel({
                 onChange={(value) => onOverrideChange(dbId, value)}
               />
             </div>
-            <button type="button" className="secondary-button" onClick={() => onOverrideRemove(dbId)}>
-              Remove
-            </button>
+            <div className="button-row filter-toolbar-actions">
+              <button type="button" className="secondary-button" aria-label={`Terms for ${dbId}`} onClick={() => onBrowseTerms(dbId)}>
+                Terms
+              </button>
+              <button type="button" className="secondary-button" onClick={() => onOverrideRemove(dbId)}>
+                Remove
+              </button>
+            </div>
           </div>
         ))}
         {withoutOwnFilter.length ? (

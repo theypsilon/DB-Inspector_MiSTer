@@ -1,6 +1,4 @@
-import { tagPillId } from './utils.js';
-
-// Find-in-page: the rows, tags and FILTER hint that match a query, in page order.
+// Find-in-page: the rows and FILTER hint that match a query, in page order.
 
 // No query matches nothing, always with the same array, so it never looks like new matches.
 const EMPTY_MATCHES = Object.freeze([]);
@@ -28,9 +26,8 @@ function searchIndex(index, section, query, result) {
 }
 
 // The matches of `query`: the FILTER panel's `essential` hint, then rows of the Files and folders,
-// Archives and Path collisions sections (by name, else path, else tags), then tags. `tagGroups` is
-// [{ dbId, tags }]: one group with a null dbId for a single database.
-export function findSearchMatches({ query, filesystemIndex, archivesIndex, collisionsIndex, tagGroups, hasEssentialHint }) {
+// Archives and Path collisions sections (by name, else path, else tags).
+export function findSearchMatches({ query, filesystemIndex, archivesIndex, collisionsIndex, hasEssentialHint }) {
   const trimmed = query.trim().toLowerCase();
   if (!trimmed) return EMPTY_MATCHES;
   const result = [];
@@ -42,14 +39,6 @@ export function findSearchMatches({ query, filesystemIndex, archivesIndex, colli
   searchIndex(filesystemIndex, 'filesystem', trimmed, result);
   searchIndex(archivesIndex, 'archives', trimmed, result);
   searchIndex(collisionsIndex, 'collisions', trimmed, result);
-
-  for (const { dbId, tags } of tagGroups) {
-    for (const tag of tags) {
-      if (tag.name.toLowerCase().includes(trimmed)) {
-        result.push({ rowId: tagPillId(tag, dbId), section: 'tags', matchPart: 'name' });
-      }
-    }
-  }
 
   return result;
 }

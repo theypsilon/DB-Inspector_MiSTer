@@ -1851,7 +1851,8 @@ function ensureTrailingSlash(value) {
   return value.endsWith('/') ? value : `${value}/`;
 }
 
-function normalizeTagName(value) {
+// A tag's name as FILTER compares it: lowercase, without `_` and `-`.
+export function normalizeTagName(value) {
   return String(value).toLowerCase().replaceAll(/[_-]/g, '');
 }
 

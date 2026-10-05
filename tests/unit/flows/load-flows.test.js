@@ -282,8 +282,8 @@ describe('filter panel', () => {
 
 describe('find in page', () => {
   function searchMatches(query) {
-    const { filesystemIndex, archivesIndex, collisionsIndex, tagGroups, hasEssentialHint } = app.view;
-    return findSearchMatches({ query, filesystemIndex, archivesIndex, collisionsIndex, tagGroups, hasEssentialHint });
+    const { filesystemIndex, archivesIndex, collisionsIndex, hasEssentialHint } = app.view;
+    return findSearchMatches({ query, filesystemIndex, archivesIndex, collisionsIndex, hasEssentialHint });
   }
 
   test('the essential hint opens search and highlights matches across sections', async () => {
@@ -293,10 +293,11 @@ describe('find in page', () => {
     const matches = searchMatches('essential');
     assert.deepEqual(
       matches.map(({ section, rowId }) => `${section}:${rowId}`),
-      ['filter:filter-essential-hint', 'filesystem:database:file:cores/essential.rbf', 'tags:tagdict-essential-0'],
+      ['filter:filter-essential-hint', 'filesystem:database:file:cores/essential.rbf'],
     );
-    // 1 of 3 is the hint itself; Enter moves to the tree row, while the hint and the tag stay
-    // highlighted as other matches.
+    // 1 of 2 is the hint itself; Enter moves to the tree row, while the hint stays highlighted as the
+    // other match. The terms are in their dialog, out of the page, so they are not matches.
+    assert.ok(!matches.some(({ section }) => section === 'tags'));
     const second = matches[nextMatchIndex(0, matches.length)];
     assert.deepEqual(second, { rowId: 'database:file:cores/essential.rbf', section: 'filesystem', matchPart: 'name' });
     assert.deepEqual(searchMatches(''), []);
@@ -375,13 +376,12 @@ describe('navigation in large trees', () => {
     await app.upload(file('large.json', buildLargeDatabase()));
     assert.equal(app.view.heading, 'large_db');
 
-    const { filesystemIndex, archivesIndex, collisionsIndex, tagGroups, hasEssentialHint } = app.view;
+    const { filesystemIndex, archivesIndex, collisionsIndex, hasEssentialHint } = app.view;
     const matches = findSearchMatches({
       query: 'file_00599.rbf',
       filesystemIndex,
       archivesIndex,
       collisionsIndex,
-      tagGroups,
       hasEssentialHint,
     });
     assert.deepEqual(matches.map(({ rowId }) => rowId), [FAR_ROW_ID]);

@@ -199,7 +199,7 @@ test('the catalog lists known databases and opens them alone or together', async
     await expect(rows.first()).toBeVisible();
   });
 
-  await test.step('on a phone, nothing on the page, in the catalog or in the explorer is wider than the screen', async () => {
+  await test.step('on a phone, nothing on the page, in the catalog, in the filter terms or in the explorer is wider than the screen', async () => {
     // A long db_id in the compact list (one row open), on rows and in path collisions, in issues and
     // tags, and in the filters, with a filter of its own.
     const viewport = page.viewportSize();
@@ -209,6 +209,27 @@ test('the catalog lists known databases and opens them alone or together', async
     await page.getByLabel('Give a database its own filter').selectOption(dbId);
     await expect(page.getByLabel(`FILTER for ${dbId}`)).toBeVisible();
     await expect.poll(() => page.evaluate(findWiderThanScreen)).toEqual([]);
+
+    // Under the FILTER boxes, which keep the line's width, their buttons share it.
+    const box = (locator) => locator.boundingBox();
+    const [shared, own, ownTerms, remove] = await Promise.all([
+      box(page.getByLabel('FILTER', { exact: true })),
+      box(page.getByLabel(`FILTER for ${dbId}`)),
+      box(page.getByRole('button', { name: `Terms for ${dbId}` })),
+      box(page.locator('.database-filter-row').getByRole('button', { name: 'Remove' })),
+    ]);
+    expect(own.width).toBe(shared.width);
+    expect([ownTerms.y > own.y, ownTerms.width]).toEqual([true, remove.width]);
+
+    // Its terms name it on every term, and the dialog scrolls only up and down.
+    await page.getByRole('button', { name: `Terms for ${dbId}` }).click();
+    const terms = page.getByRole('dialog', { name: 'Filter terms' });
+    await expect(terms.locator('.filter-term .db-chip', { hasText: dbId })).toHaveCount(2);
+    for (const part of ['.modal-body', '.modal-footer']) {
+      expect(await terms.locator(part).evaluate((element) => element.scrollWidth - element.clientWidth), part).toBe(0);
+    }
+    expect(await terms.evaluate((panel) => panel.getBoundingClientRect().right <= window.innerWidth)).toBe(true);
+    await terms.getByRole('button', { name: 'Done' }).click();
     await page.locator('.database-filter-row').getByRole('button', { name: 'Remove' }).click();
     await expect.poll(() => new URL(page.url()).hash).toBe(link);
 

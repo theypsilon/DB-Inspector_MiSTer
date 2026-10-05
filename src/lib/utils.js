@@ -130,11 +130,6 @@ export function collectTextMatchRanges(root, query, { firstMatchPerNode = false 
   return ranges;
 }
 
-// The element id of a tag in the Filter terms section; combined databases scope it by database.
-export function tagPillId(tag, dbId = null) {
-  return dbId ? `tagdict-${dbId}-${tag.name}-${tag.index}` : `tagdict-${tag.name}-${tag.index}`;
-}
-
 // How many tags a tree row shows before "+N"; a row with just one more shows them all.
 export const TAGS_SHOWN = 4;
 

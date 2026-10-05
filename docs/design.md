@@ -29,6 +29,7 @@ The app is meant to run entirely in the browser, including on GitHub Pages, with
 - Let users upload several files, or whole folders, and choose among the databases they hold.
 - Offer a light and a dark theme that follow the system's setting, unless the visitor picks one from the menu in the page's top corner.
 - Let users browse what the databases would install, one folder at a time, as a file explorer shows a drive.
+- Let users choose FILTER terms from the tags of the databases, beside FILTER.
 
 ## Important Technical Decisions
 
@@ -191,7 +192,7 @@ Everything a link names lives after the `#` of the address (`src/lib/urlState.js
   - `filter=<terms>`: FILTER of a database shown alone, or the shared (`[mister]`) filter of combined ones. Absent, defaults apply; present but empty, nothing is filtered.
   - `filter.<db_id>=<terms>`: a combined database's own filter.
   - `detailed`: details are shown.
-  - `at=<anchor>`: a row (`files:<path>`, `folders:<path>`, `archives:<id>`, `archives:<id>:files:<path>`, `archives:<id>:folders:<path>`, `collisions:<path>`), a section (`database`, `filter`, `files`, `archives`, `collisions`, `issues`, `tags`), `install`, the install dialog of a database shown alone, or the explorer (`explorer` at the SD card, `explorer:<path>` at a folder, or at a file's folder with its details shown; see 15). Combined databases put the db_id before an archive's id (`archives:<db_id>:<id>`); reading it matches the loaded db_ids, longest first, since a db_id can hold a colon.
+  - `at=<anchor>`: a row (`files:<path>`, `folders:<path>`, `archives:<id>`, `archives:<id>:files:<path>`, `archives:<id>:folders:<path>`, `collisions:<path>`), a section (`database`, `filter`, `files`, `archives`, `collisions`, `issues`), `tags`, which opens the filter terms of FILTER (see 16; it named the section that listed the terms before), `install`, the install dialog of a database shown alone, or the explorer (`explorer` at the SD card, `explorer:<path>` at a folder, or at a file's folder with its details shown; see 15). Combined databases put the db_id before an archive's id (`archives:<db_id>:<id>`); reading it matches the loaded db_ids, longest first, since a db_id can hold a colon.
 - Only `%`, `&`, `+`, `=`, `#`, whitespace, control and non-ASCII characters are escaped, and `"`, `<`, `>` and `` ` ``, which browsers escape in an address themselves; a space is written as `+`. URLs and filters stay legible: `#db=https://example.com/db.json&filter=arcade+!cheats`.
 - A link stays readable while the whole address is at most 2,000 characters (`LINK_READABLE_MAX`, Discord's message limit); past that, every key but `at` is packed into `z=<data>`: the readable text, raw deflate (fflate, no preset dictionary), in base64url without padding. Packed keys read as if they were written in place of `z`; a `z` inside one is ignored, and unpacking stops past 1 MiB.
 - Unknown keys are ignored. A `z` that cannot be unpacked shows "This link is damaged, so what it names could not be opened." and opens nothing; the next write replaces the link. Broken escapes never throw.
@@ -209,8 +210,8 @@ Nothing on the page, or in its dialogs, should be wider than a phone screen, dow
 - Issues: on phones, the message takes a line of its own, and the db_id and context wrap.
 - Path collisions: on phones, the pill's databases go under its label, and the pill keeps round corners rather than round ends.
 - Combined databases: card headings and compact rows break a db_id after `_` and `/` (`breakableId` in `CombinedOverview.jsx`), and the cards' grid never asks for a column wider than the page.
-- FILTER: the section's one column is its width (`minmax(0, 1fr)`), so the own-filter menu, whose options are db_ids, shrinks to it. db_ids and filter terms wider than the line wrap.
-- Tags: the tag groups' db_ids, and tag names, wrap when they are wider than the line.
+- FILTER: the section's one column is its width (`minmax(0, 1fr)`), so the own-filter menu, whose options are db_ids, shrinks to it. db_ids and filter terms wider than the line wrap. Under a FILTER box (960px and narrower), Terms and Clear share its width; on phones a database's own filter puts Terms and Remove under its box, which keeps the line's width.
+- Filter terms (16): a term's names, its db_ids and FILTER wrap, and on phones Keep and Exclude go under the term's names.
 - Pickers: the selection summary and the entries wrap a db_id wider than the dialog, which otherwise scrolled sideways and hid "Review selected".
 - The explorer (15) fills the screen; its path folds its first folders into …, and the details come up from the bottom, wrapping a long db_id.
 
@@ -249,4 +250,14 @@ The tree sections show a database as it is written: its files and folders, and i
   - They slide in from the right in 200 ms (`--explorer-motion`): their place widens from nothing while they keep their own width (`--explorer-details-width`, 352px), so they do not reflow on the way; on phones they come up from the bottom over the list, which keeps its width. Closed, they stay in the page, hidden (`aria-hidden`, `inert`), so they can slide out too.
   - Each icon is placed on its own (`transform`), so when the columns change the icons glide to their new places in the same 200 ms. They are laid out at once for the width the list will have when the details are in or out, so they glide while the details slide, rather than follow the list's width frame by frame. They glide only once the list has its width, never from where they are first drawn, and nothing moves for visitors who ask for less motion (`prefers-reduced-motion`).
 - Rows, and rows of icons, have one height each, set in `app.css` (`--explorer-row-height` and the tile sizes, taller on phones), so the list renders only those in view and places them by their index (`explorerWindow`). None of the tree's measurement and scroll anchoring (6) is involved.
+
+### 16. Filter Terms
+
+The terms a FILTER can use are the tags of the databases it applies to. They used to be listed in a Filter terms section at the bottom of the page, each tag dictionary in a group of its own: far from FILTER, below every tree; repeated for each combined database; with each tag dictionary's numbers, which read as counts (bios_db's `famicom 0 · nes 0 · nintendo 0` is one tag with three names); and saying "No tag dictionary was provided" for databases whose entries carry tags by name, which FILTER can use too. They are now a dialog opened beside each FILTER box (`FilterTermsModal`, built by `buildFilterTerms` in `src/lib/filterTerms.js`).
+
+- The Terms button beside a FILTER box opens its terms: FILTER's for a database alone; with combined databases, every database's for the shared filter, and one database's for its own filter.
+- A term is a tag with all its names (the dictionary's aliases, compared as FILTER compares them: lowercase, without `_` and `-`), merged across databases where tags share a name, since a FILTER term matches every tag with that name. The name written is the one most of its databases know it by, else the shortest (nes rather than famicom or nintendo). Each term counts the files, folders and archive entries tagged with it, before any filter, and, when combined, names its databases (more than three as a count, with them all in its tooltip). A tag's number in the dictionary is in its name's tooltip, for database authors. Tags nothing uses are terms too, since FILTER accepts them; tags whose names FILTER cannot hold (spaces, `none`, a number the dictionary does not have) are not. Combined databases without terms are named in one line.
+- Keep writes the term in its FILTER box, Exclude writes it with `!`, and choosing what is already there takes it out; the button shows when the term is there, by any of its names. The box's other terms stay as written, in their order. The change goes through the box as typing does: FILTER's debounce and its link.
+- A search box finds terms by any of their names, as typed or as FILTER compares them. Done, Escape or a click outside close the dialog; while it is open, find-in-page stands aside, as for the explorer.
+- Find-in-page no longer finds terms, since they are not on the page. The `tags` anchor of old links opens the terms of FILTER (or of the shared filter), and closing them takes it out of the link.
 

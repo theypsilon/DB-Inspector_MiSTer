@@ -120,14 +120,14 @@ test('a shared link opens its database, and the page around it works', async ({ 
     await page.locator('#filter-essential-hint').click();
     const findInput = page.getByLabel('Search text');
     await expect(findInput).toHaveValue('essential');
-    await expect(page.locator('.find-bar-count')).toHaveText('1 of 3');
+    await expect(page.locator('.find-bar-count')).toHaveText('1 of 2');
     await expect.poll(() => readHighlight(page, 'search-match')).toEqual(['essential']);
 
     // From here the page's time moves only when the test moves it, so however slowly the page runs,
     // the flash is timed exactly.
     await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1_000));
     await findInput.press('Enter');
-    await expect(page.locator('.find-bar-count')).toHaveText('2 of 3');
+    await expect(page.locator('.find-bar-count')).toHaveText('2 of 2');
     // The jump lands after the next paint, and the row's text takes the highlight: the page's time
     // moves a frame at a time until it does.
     await expect
@@ -139,7 +139,6 @@ test('a shared link opens its database, and the page around it works', async ({ 
     const row = page.locator('[id="row-database:file:cores/essential.rbf"]');
     await expect(row).toHaveClass(/tree-entry-highlighted/);
     await expect.poll(() => readHighlight(page, 'search-match-all-filter')).toEqual(['essential']);
-    await expect.poll(() => readHighlight(page, 'search-match-all-tags')).toEqual(['essential']);
 
     // Waiting for the jump took at most a few frames, so the flash is still on well before its three
     // seconds end, and over after them.

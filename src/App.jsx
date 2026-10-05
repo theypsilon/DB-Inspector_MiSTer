@@ -36,7 +36,6 @@ import InstallModal from './components/modals/InstallModal.jsx';
 import DownloadErrorModal from './components/modals/DownloadErrorModal.jsx';
 import FilesystemSection from './components/tree/FilesystemSection.jsx';
 import ArchiveSummariesSection from './components/tree/ArchiveSummariesSection.jsx';
-import TagDictionary from './components/TagDictionary.jsx';
 import FindBar from './components/FindBar.jsx';
 import SourceLoaders from './components/SourceLoaders.jsx';
 import Hero from './components/Hero.jsx';
@@ -51,14 +50,16 @@ import CombinedFilterPanel from './components/CombinedFilterPanel.jsx';
 import CollisionsSection from './components/tree/CollisionsSection.jsx';
 import LoadModeModal from './components/modals/LoadModeModal.jsx';
 import ExplorerModal from './components/explorer/ExplorerModal.jsx';
+import FilterTermsModal from './components/modals/FilterTermsModal.jsx';
+import { buildFilterTerms } from './lib/filterTerms.js';
 
 const FIND_SHORTCUT_LABEL =
   typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent) ? '⌘F' : 'Ctrl+F';
 
 // The page. Its state and what changes it live in the app model (src/model/appModel.js); this
 // renders that state, forwards user actions to it, and keeps what only the page needs: the
-// detailed toggle, tooltips, find-in-page, anchors, scrolling, and the install, download and
-// explorer dialogs.
+// detailed toggle, tooltips, find-in-page, anchors, scrolling, and the install, download, explorer
+// and filter terms dialogs.
 export default function App() {
   const fileInputRef = useRef(null);
   const [model] = useState(createAppModel);
@@ -109,6 +110,9 @@ export default function App() {
   const explorerPathRef = useRef(null);
   const explorerOpenerRef = useRef(null);
   const explorerKeyRef = useRef(0);
+  // The FILTER box whose terms are shown: 'main' (FILTER, or the shared filter of combined
+  // databases), or the db_id of a combined database's own filter; null while they are not.
+  const [termsTarget, setTermsTarget] = useState(null);
   const dropzone = useFileDropzone(model.openDrop);
   const handleDatabaseDetailedChange = useCallback((next) => {
     startTransition(() => {
@@ -130,6 +134,19 @@ export default function App() {
   const activeView = combinedView ?? displayedInspection;
   const explorerOpen = explorer !== null && Boolean(activeView);
   const explorerTree = useMemo(() => (explorerOpen ? buildExplorerTree(activeView) : null), [explorerOpen, activeView]);
+  const termsOpen = termsTarget !== null && Boolean(activeView);
+  // The terms of the databases the FILTER box applies to, before their filters.
+  const filterTerms = useMemo(() => {
+    if (!termsOpen) {
+      return null;
+    }
+    const loaded = isCombined
+      ? databases.map(({ inspection: database }) => ({ dbId: database.overview.dbId, inspection: database }))
+      : [{ dbId: inspection.overview.dbId, inspection }];
+    return buildFilterTerms(isCombined && termsTarget !== 'main' ? loaded.filter(({ dbId }) => dbId === termsTarget) : loaded);
+  }, [termsOpen, termsTarget, isCombined, databases, inspection]);
+  // The explorer and the terms cover the page.
+  const pageCovered = explorerOpen || termsOpen;
   const isFiltering = combinedView ? combinedView.isFiltering : Boolean(displayedInspection?.activeFilter.isFiltering);
   const filesystemIndex = useMemo(() => buildFilesystemIndex(activeView), [activeView]);
   const archivesIndex = useMemo(() => buildArchivesIndex(activeView), [activeView]);
@@ -147,10 +164,9 @@ export default function App() {
     filesystemIndex,
     archivesIndex,
     collisionsIndex,
-    tagGroups,
     hasEssentialHint,
-    // The explorer covers the page, so find-in-page stands aside while it is open.
-    hasInspection: !!activeView && !explorerOpen,
+    // Find-in-page stands aside while a dialog covers the page.
+    hasInspection: !!activeView && !pageCovered,
   });
 
   // Effect Events run only when the dependencies listed on their effects change, and read
@@ -207,7 +223,8 @@ export default function App() {
     };
   }, []);
 
-  // Goes where the link's anchor points: a row, a section, the install dialog, or the explorer.
+  // Goes where the link's anchor points: a row, a section, the install dialog, the explorer, or
+  // the filter terms (`tags`, the link of the section that listed them before).
   const openLinkAnchor = useEffectEvent(() => {
     if (!inspection && !isCombined) {
       return;
@@ -228,6 +245,11 @@ export default function App() {
       return;
     }
     setExplorer(null);
+    if (at === 'tags') {
+      setTermsTarget('main');
+      return;
+    }
+    setTermsTarget(null);
 
     const anchor = parseNodeAnchor(at, isCombined ? databases.map(({ inspection: database }) => database.overview.dbId) : null);
     if (anchor) {
@@ -261,7 +283,7 @@ export default function App() {
 
   useEffect(() => model.connect(), [model]);
 
-  const modalOpen = catalogModalOpen || choicePickerOpen || Boolean(prompt) || explorerOpen;
+  const modalOpen = catalogModalOpen || choicePickerOpen || Boolean(prompt) || pageCovered;
   useEffect(() => {
     if (!modalOpen) {
       return undefined;
@@ -311,6 +333,13 @@ export default function App() {
     setInstallModalOpen(true);
     writeLinkAnchor('install');
   }
+
+  const closeTerms = useCallback(() => {
+    setTermsTarget(null);
+    if (readLink().at === 'tags') {
+      writeLinkAnchor('');
+    }
+  }, []);
 
   // The explorer opens where it was last, and closing it gives the focus back to what opened it.
   const openExplorer = useCallback(() => {
@@ -397,6 +426,7 @@ export default function App() {
               onOverrideChange={model.setOwnFilter}
               onOverrideAdd={model.addOwnFilter}
               onOverrideRemove={model.removeOwnFilter}
+              onBrowseTerms={(target) => setTermsTarget(target === 'shared' ? 'main' : target)}
               hasEssentialHint={hasEssentialHint}
               hasUntaggedItems={hasUntaggedItems}
               onSearchEssential={searchForEssential}
@@ -423,6 +453,7 @@ export default function App() {
               onFilterInputChange={model.setFilterInput}
               canReset={canResetFilter(filterInput, effectiveDefaultFilter)}
               onReset={model.resetFilter}
+              onBrowseTerms={() => setTermsTarget('main')}
               hasEssentialHint={hasEssentialHint}
               hasUntaggedItems={hasUntaggedItems}
               onSearchEssential={searchForEssential}
@@ -492,22 +523,6 @@ export default function App() {
             ) : null}
 
             <IssuesSection issues={activeView.issues} />
-
-            {combinedView ? (
-              tagGroups.some(({ tags }) => tags.length) ? (
-                <TagDictionary
-                  groups={tagGroups}
-                  searchQuery={globalSearch.activeQuery}
-                  searchMatch={globalSearch.currentMatch?.section === 'tags' ? globalSearch.currentMatch : null}
-                />
-              ) : null
-            ) : displayedInspection.overview.tagDictionary.length ? (
-              <TagDictionary
-                tags={displayedInspection.overview.tagDictionary}
-                searchQuery={globalSearch.activeQuery}
-                searchMatch={globalSearch.currentMatch?.section === 'tags' ? globalSearch.currentMatch : null}
-              />
-            ) : null}
           </>
         ) : loadingMessage ? (
           <section className="panel empty-screen loading-screen">
@@ -597,6 +612,26 @@ export default function App() {
         />
       ) : null}
 
+      {filterTerms ? (
+        <FilterTermsModal
+          intro={
+            !isCombined
+              ? `Keep or exclude ${inspection.overview.dbId}'s terms in FILTER.`
+              : termsTarget === 'main'
+                ? 'Keep or exclude the terms of all databases in the filter they share ([mister]).'
+                : `Keep or exclude ${termsTarget}'s terms in its own filter.`
+          }
+          terms={filterTerms.terms}
+          withoutTerms={filterTerms.withoutTerms}
+          combined={isCombined}
+          filter={!isCombined ? filterInput : termsTarget === 'main' ? combinedFilters.shared.value : combinedFilters.overrides[termsTarget] ?? ''}
+          onFilterChange={
+            !isCombined ? model.setFilterInput : termsTarget === 'main' ? model.setSharedFilter : (value) => model.setOwnFilter(termsTarget, value)
+          }
+          onClose={closeTerms}
+        />
+      ) : null}
+
       {explorerTree ? (
         <ExplorerModal
           key={explorer.key}
@@ -636,7 +671,7 @@ export default function App() {
           Press <kbd>{FIND_SHORTCUT_LABEL}</kbd> to search
         </span>
       </p>
-      {globalSearch.open && !explorerOpen ? (
+      {globalSearch.open && !pageCovered ? (
         <FindBar
           query={globalSearch.query}
           onQueryChange={globalSearch.setQuery}

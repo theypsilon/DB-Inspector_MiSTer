@@ -375,8 +375,8 @@ function startApp(browser) {
     },
     // The find bar's matches for a query, in the order Enter goes through them.
     find(query) {
-      const { filesystemIndex, archivesIndex, collisionsIndex, tagGroups, hasEssentialHint } = app.view;
-      return findSearchMatches({ query, filesystemIndex, archivesIndex, collisionsIndex, tagGroups, hasEssentialHint });
+      const { filesystemIndex, archivesIndex, collisionsIndex, hasEssentialHint } = app.view;
+      return findSearchMatches({ query, filesystemIndex, archivesIndex, collisionsIndex, hasEssentialHint });
     },
 
     // Chosen files: one opens as it is; several offer their databases to choose from.
