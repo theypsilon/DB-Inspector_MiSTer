@@ -6,6 +6,7 @@ import LoadModeModal from '../../src/components/modals/LoadModeModal.jsx';
 import ReplaceLoadedModal from '../../src/components/modals/ReplaceLoadedModal.jsx';
 import FilterOverrideModal from '../../src/components/modals/FilterOverrideModal.jsx';
 import DbIdConflictModal from '../../src/components/modals/DbIdConflictModal.jsx';
+import ClearDatabasesModal from '../../src/components/modals/ClearDatabasesModal.jsx';
 import { inspect, text } from './support.js';
 
 describe('the question before combining', () => {
@@ -37,6 +38,28 @@ describe('the question before combining', () => {
     render(<LoadModeModal loadedDbIds={['alpha']} onLoadAlone={() => {}} onCombine={() => {}} onCancel={onCancel} />);
     await userEvent.setup().click(document.querySelector('.modal-overlay'));
     expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('the question before clearing the loaded databases', () => {
+  test('says what closes, for one database or several, and each button answers', async () => {
+    const answers = { onClear: vi.fn(), onCancel: vi.fn() };
+    const one = render(<ClearDatabasesModal loadedDbIds={['Coin-OpCollection/Distribution-MiSTerFPGA']} {...answers} />);
+    let dialog = screen.getByRole('dialog', { name: 'Clear the loaded database?' });
+    expect(text(dialog)).toContain('This closes Coin-OpCollection/Distribution-MiSTerFPGA and its filter, and goes back to the start page.');
+    one.unmount();
+
+    render(<ClearDatabasesModal loadedDbIds={['alpha', 'beta', 'gamma']} {...answers} />);
+    dialog = screen.getByRole('dialog', { name: 'Clear the loaded databases?' });
+    expect(text(dialog)).toContain('This closes the 3 loaded databases and their filters, and goes back to the start page.');
+    const user = userEvent.setup();
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect([answers.onClear.mock.calls.length, answers.onCancel.mock.calls.length]).toEqual([0, 1]);
+    await user.click(within(dialog).getByRole('button', { name: 'Clear' }));
+    expect([answers.onClear.mock.calls.length, answers.onCancel.mock.calls.length]).toEqual([1, 1]);
+    // A click outside cancels.
+    await user.click(document.querySelector('.modal-overlay'));
+    expect([answers.onClear.mock.calls.length, answers.onCancel.mock.calls.length]).toEqual([1, 2]);
   });
 });
 

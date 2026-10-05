@@ -70,7 +70,7 @@ test('a shared link opens its database, and the page around it works', async ({ 
     await expect(heading('arcade.rbf')).toHaveCount(0);
     await expect.poll(link).toBe(`#db=${SHARED_URL}&filter=console`);
 
-    await page.getByRole('button', { name: 'Clear' }).click();
+    await page.getByRole('button', { name: 'Clear', exact: true }).click();
     await expect(filter).toHaveValue('arcade');
     await expect.poll(link).toBe(`#db=${SHARED_URL}`);
 
@@ -78,7 +78,7 @@ test('a shared link opens its database, and the page around it works', async ({ 
     await expect(page.getByText(/^Showing the full database: \d+ files/)).toBeVisible();
     await expect(heading('console.rbf')).toBeVisible();
     await expect.poll(link).toBe(`#db=${SHARED_URL}&filter=`);
-    await page.getByRole('button', { name: 'Clear' }).click();
+    await page.getByRole('button', { name: 'Clear', exact: true }).click();
     await expect(filter).toHaveValue('arcade');
   });
 

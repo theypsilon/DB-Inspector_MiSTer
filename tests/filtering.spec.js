@@ -97,7 +97,7 @@ test('missing FILTER param uses the database default, clear returns to that defa
   await expect.poll(() => page.url()).not.toContain('filter=');
 
   await page.getByLabel('FILTER').fill('b');
-  await page.getByRole('button', { name: 'Clear' }).click();
+  await page.getByRole('button', { name: 'Clear', exact: true }).click();
   await expect(page.getByLabel('FILTER')).toHaveValue('a');
   await expect.poll(() => page.url()).not.toContain('filter=');
 

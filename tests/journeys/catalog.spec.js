@@ -3,7 +3,7 @@ import { strToU8, zipSync } from 'fflate';
 
 // The catalog in a real browser: entries from Update All and MultiDatabases, databases fetched by
 // URL joining it, approximate IDs, the Update All defaults, the db_id question, select all, when
-// opening asks to combine, and reviewing the selection.
+// opening asks to combine, reviewing the selection, and Clear going back to the start page.
 
 const RUNTIME_CATALOG_URL = 'https://raw.githubusercontent.com/theypsilon/Update_All_MiSTer/master/src/update_all/databases.py';
 const MULTIDATABASES_CATALOG_URL = 'https://raw.githubusercontent.com/theypsilon/MultiDatabases_MiSTer/main/README.md';
@@ -124,6 +124,9 @@ test('the catalog lists known databases and opens them alone or together', async
 
   await test.step('the Update All defaults, the db_id question, and select all', async () => {
     const catalog = await openCatalog(page, 8);
+    // The search box's focus ring shows all round, inside what the scrolling body shows.
+    await catalog.getByLabel('Search catalog').focus();
+    expect(await catalog.getByLabel('Search catalog').evaluate(focusRingShown)).toEqual([true, 'solid', true]);
     await catalog.getByRole('button', { name: 'Select Update All defaults' }).click();
     await expect.poll(() => selectedNames(page)).toEqual(UPDATE_ALL_DEFAULTS);
 
@@ -190,6 +193,14 @@ test('the catalog lists known databases and opens them alone or together', async
     await expect(row('jtcores').getByText('Default filter')).toBeVisible();
     await toggle.click();
     await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+
+    // So does Clear databases, which asks first; Cancel leaves the section as it was.
+    await section.locator('summary.section-summary').getByRole('button', { name: 'Clear databases' }).click();
+    const clear = page.getByRole('dialog', { name: 'Clear the loaded databases?' });
+    await expect(clear).toContainText('This closes the 6 loaded databases');
+    await clear.getByRole('button', { name: 'Cancel' }).click();
+    await expect(clear).toHaveCount(0);
+    await expect(rows.first()).toBeVisible();
 
     const indicator = section.locator('summary.section-summary .summary-indicator');
     await indicator.click();
@@ -288,11 +299,16 @@ test('the catalog lists known databases and opens them alone or together', async
     await page.locator('.database-filter-row').getByRole('button', { name: 'Remove' }).click();
     await expect.poll(() => new URL(page.url()).hash).toBe(link);
 
-    // The catalog's selection names it too, and the catalog scrolls only up and down.
+    // The catalog's selection names it too, and the catalog scrolls only up and down, with the
+    // search's longer labels too.
     const catalog = await openCatalog(page, 8);
     await catalog.getByRole('button', { name: 'Select all' }).click();
     await expect(catalog.getByRole('button', { name: 'Open 6 selected databases' })).toBeVisible();
     expect(await catalog.locator('.modal-body').evaluate((body) => body.scrollWidth - body.clientWidth)).toBe(0);
+    await catalog.getByLabel('Search catalog').fill('distribution');
+    await expect(catalog.getByRole('button', { name: 'Unselect shown' })).toBeVisible();
+    expect(await catalog.locator('.modal-body').evaluate((body) => body.scrollWidth - body.clientWidth)).toBe(0);
+    expect(await catalog.getByLabel('Search catalog').evaluate(focusRingShown)).toEqual([true, 'solid', true]);
     await catalog.getByRole('button', { name: 'Close', exact: true }).click();
 
     // The explorer fills the screen, and a path every database installs lists each version, the
@@ -335,6 +351,28 @@ test('the catalog lists known databases and opens them alone or together', async
     await expect(page.getByRole('heading', { name: 'jtcores', exact: true })).toBeVisible();
     await expect.poll(() => new URL(page.url()).hash).toBe(`#db=${JTCORES_URL}`);
   });
+
+  await test.step('Clear asks first, then opens the start page afresh, and Back opens the database again', async () => {
+    // On a phone, the Detailed toggle, Install and Clear database wrap rather than leave the screen.
+    const viewport = page.viewportSize();
+    await page.setViewportSize({ width: 360, height: 800 });
+    await expect.poll(() => page.evaluate(findWiderThanScreen)).toEqual([]);
+    await page.setViewportSize(viewport);
+
+    await page.getByRole('button', { name: 'Clear database' }).click();
+    const clear = page.getByRole('dialog', { name: 'Clear the loaded database?' });
+    await clear.getByRole('button', { name: 'Clear', exact: true }).click();
+    // The page loads again without its link: nothing loaded, the introduction open, and the
+    // catalog without the database fetched from another URL that joined it.
+    await page.waitForURL((url) => url.pathname === '/' && !url.hash);
+    await expect(page.getByText('7 entries available')).toBeVisible();
+    await expect(page.locator('#section-database')).toHaveCount(0);
+    await expect(page.locator('.hero-compact')).toHaveCount(0);
+
+    await page.goBack();
+    await expect(page.getByRole('heading', { name: 'jtcores', exact: true })).toBeVisible();
+    await expect.poll(() => new URL(page.url()).hash).toBe(`#db=${JTCORES_URL}`);
+  });
 });
 
 async function fetchDatabase(page, url) {
@@ -354,6 +392,16 @@ function findWiderThanScreen() {
     .filter((element) => sticksOut(element) && !sticksOut(element.parentElement))
     .map((element) => `<${element.localName} class="${element.getAttribute('class') ?? ''}"> ${element.textContent.slice(0, 60)}`);
   return [`${overflow}px wider than the screen`, ...culprits];
+}
+
+// Runs in the page, on a focused input in a dialog: whether its focus ring shows, how it is drawn,
+// and whether it is all inside what the dialog's scrolling body shows.
+function focusRingShown(input) {
+  const style = getComputedStyle(input);
+  const reach = parseFloat(style.outlineWidth) + parseFloat(style.outlineOffset);
+  const box = input.getBoundingClientRect();
+  const body = input.closest('.modal-body').getBoundingClientRect();
+  return [input.matches(':focus-visible'), style.outlineStyle, box.left - reach >= body.left && box.right + reach <= body.right && box.top - reach >= body.top];
 }
 
 // Runs in the page. Whether the own-filter picker's list reaches past its panel onto the panels

@@ -65,6 +65,13 @@ describe('the database overview', () => {
     expect(screen.queryByText('Read through')).toBeNull();
   });
 
+  test('Clear database asks to clear it, uploaded or not', async () => {
+    const onClear = vi.fn();
+    render(<DatabaseOverview inspection={await inspect(database('mine'))} detailed={false} onDetailedChange={() => {}} onInstall={() => {}} onClear={onClear} />);
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Clear database' }));
+    expect(onClear).toHaveBeenCalledTimes(1);
+  });
+
   test('uploaded databases have no Install button', async () => {
     render(<DatabaseOverview inspection={await inspect(database('mine'))} detailed={false} onDetailedChange={() => {}} onInstall={() => {}} />);
     expect(screen.queryByRole('button', { name: 'Install' })).toBeNull();
@@ -125,6 +132,20 @@ describe('combined databases', () => {
     expect(document.querySelector('#section-database').tagName).toBe('DETAILS');
     expect(document.querySelectorAll('article.combined-database-card')).toHaveLength(0);
     expect([...document.querySelectorAll('.combined-database-row h3')].map(text)).toEqual(['alpha', 'beta', 'gamma', 'delta']);
+  });
+
+  test('Clear databases asks to clear them, from the cards and from the compact list\'s summary', async () => {
+    const onClear = vi.fn();
+    const user = userEvent.setup();
+    const cards = render(<CombinedOverview databases={await several(2)} detailed={false} onDetailedChange={() => {}} onInstall={() => {}} onClear={onClear} />);
+    await user.click(within(document.querySelector('.overview-header')).getByRole('button', { name: 'Clear databases' }));
+    expect(onClear).toHaveBeenCalledTimes(1);
+    cards.unmount();
+
+    // In the summary, so it is there while the list is collapsed.
+    render(<CombinedOverview databases={await several(4)} detailed={false} onDetailedChange={() => {}} onInstall={() => {}} onClear={onClear} />);
+    await user.click(within(document.querySelector('#section-database > summary')).getByRole('button', { name: 'Clear databases' }));
+    expect(onClear).toHaveBeenCalledTimes(2);
   });
 
   test('a long db_id in the compact list keeps its full name in its tooltip, and can break after _ and /', async () => {

@@ -866,6 +866,8 @@ label.catalog-option { cursor: pointer; }
 /* Pickers: the list fills what the controls leave of the dialog, and is the part that scrolls. */
 .picker-panel .modal-body { display: flex; flex-direction: column; }
 .picker-toolbar { grid-template-columns: minmax(0, 1fr) auto auto; }
+/* The scrolling body would clip a focus ring drawn outside the search box, so it is drawn inside. */
+.picker-toolbar .catalog-search input:focus-visible { outline-offset: -2px; }
 .picker-panel .modal-list { flex: 1 1 auto; min-height: min(12rem, 30vh); max-height: none; }
 .picker-panel .selection-chips { max-height: none; overflow: visible; }
 .picker-panel .catalog-list { gap: 0.5rem; }
@@ -1330,6 +1332,8 @@ fieldset.mister-option legend { float: left; width: 100%; padding: 0; }
   .hero, .loader-grid, .catalog-toolbar, .filter-toolbar, .modal-toolbar, .picker-toolbar, .catalog-selected-grid, .overview-grid, .highlight-row, .metadata-list { grid-template-columns: 1fr; }
   .overview-header, .section-heading, .tree-heading, .combined-overview-panel > .section-summary { align-items: stretch; flex-direction: column; }
   .overview-controls, .section-controls, .dictionary-summary, .section-summary, .section-summary-side, .collapsible-actions { justify-content: start; }
+  /* Stacked under the title, the Detailed toggle, Install and Clear wrap rather than leave the screen. */
+  .overview-controls { flex-wrap: wrap; }
   .tree-heading-actions { align-items: start; }
   .node-action-row { justify-content: start; }
   .tree-identifier-inline { width: 100%; }
