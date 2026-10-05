@@ -5,9 +5,9 @@ import SectionAnchor from './ui/SectionAnchor.jsx';
 import GitHubRepoLink from './ui/GitHubRepoLink.jsx';
 import { readThroughFields } from '../lib/utils.js';
 
-// The loaded database: its identity, source, counts and options, with the Detailed toggle and
-// the Install button.
-function DatabaseOverview({ inspection, detailed, onDetailedChange, onInstall }) {
+// The loaded database: its identity, source, counts and options, with the Detailed toggle, the
+// Install button, and Clear, which goes back to the start page.
+function DatabaseOverview({ inspection, detailed, onDetailedChange, onInstall, onClear }) {
   return (
     <section id="section-database" className="panel overview-panel">
       <div className="overview-header">
@@ -47,6 +47,9 @@ function DatabaseOverview({ inspection, detailed, onDetailedChange, onInstall })
                 Install
               </button>
             ) : null}
+            <button type="button" className="secondary-button" onClick={onClear}>
+              Clear database
+            </button>
           </div>
         </div>
       </div>

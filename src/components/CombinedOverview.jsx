@@ -55,20 +55,24 @@ function InstallButton({ inspection, onInstall }) {
 
 /**
  * Several combined databases: a card for each, or a compact list when there are many, with the
- * Detailed toggle for all of them.
+ * Detailed toggle for all of them, and Clear, which goes back to the start page.
  * @param {{
  *   databases: { inspection: any }[],
  *   detailed: boolean,
  *   onDetailedChange: (detailed: boolean) => void,
  *   onInstall: (dbId: string) => void,
+ *   onClear: () => void,
  * }} props
  */
-function CombinedOverview({ databases, detailed, onDetailedChange, onInstall }) {
+function CombinedOverview({ databases, detailed, onDetailedChange, onInstall, onClear }) {
   const title = `${databases.length} combined databases`;
-  // In the compact list it sits in the section's summary, so it stays at hand while collapsed.
-  const toggle = (
+  // In the compact list they sit in the section's summary, so they stay at hand while collapsed.
+  const controls = (
     <div className="overview-controls">
       <DetailedToggle detailed={detailed} onDetailedChange={onDetailedChange} />
+      <button type="button" className="secondary-button" onClick={onClear}>
+        Clear databases
+      </button>
     </div>
   );
 
@@ -80,7 +84,7 @@ function CombinedOverview({ databases, detailed, onDetailedChange, onInstall }) 
         defaultOpen
         anchor="database"
         className="combined-overview-panel"
-        summaryAside={toggle}
+        summaryAside={controls}
       >
         <ul className="combined-database-list">
           {databases.map(({ inspection }) => (
@@ -117,7 +121,7 @@ function CombinedOverview({ databases, detailed, onDetailedChange, onInstall }) 
             {title}
           </h2>
         </div>
-        <div className="overview-side">{toggle}</div>
+        <div className="overview-side">{controls}</div>
       </div>
 
       <div className="combined-database-grid">

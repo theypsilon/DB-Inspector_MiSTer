@@ -59,6 +59,7 @@ import CombinedOverview from './components/CombinedOverview.jsx';
 import CombinedFilterPanel from './components/CombinedFilterPanel.jsx';
 import CollisionsSection from './components/tree/CollisionsSection.jsx';
 import LoadModeModal from './components/modals/LoadModeModal.jsx';
+import ClearDatabasesModal from './components/modals/ClearDatabasesModal.jsx';
 import ExplorerModal from './components/explorer/ExplorerModal.jsx';
 import FilterTermsModal from './components/modals/FilterTermsModal.jsx';
 import { buildFilterTerms } from './lib/filterTerms.js';
@@ -459,6 +460,7 @@ export default function App() {
               detailed={databaseDetailed}
               onDetailedChange={handleDatabaseDetailedChange}
               onInstall={setInstallDbId}
+              onClear={model.clearDatabases}
             />
 
             <CombinedFilterPanel
@@ -490,6 +492,7 @@ export default function App() {
               detailed={databaseDetailed}
               onDetailedChange={handleDatabaseDetailedChange}
               onInstall={openInstallModal}
+              onClear={model.clearDatabases}
             />
 
             <FilterPanel
@@ -620,6 +623,15 @@ export default function App() {
 
       {prompt?.kind === 'replaceLoaded' ? (
         <ReplaceLoadedModal key={prompt.id} conflicts={prompt.conflicts} onAnswer={model.answerPrompt} />
+      ) : null}
+
+      {prompt?.kind === 'clearDatabases' ? (
+        <ClearDatabasesModal
+          key={prompt.id}
+          loadedDbIds={databases.map(({ inspection: database }) => database.overview.dbId)}
+          onClear={() => model.answerPrompt(true)}
+          onCancel={() => model.answerPrompt(false)}
+        />
       ) : null}
 
       {prompt?.kind === 'filterOverride' ? (

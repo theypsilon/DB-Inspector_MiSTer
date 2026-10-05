@@ -301,6 +301,10 @@ function startApp(browser) {
     get historyLength() {
       return browser.window.history.length;
     },
+    // The pages loaded afresh, by their address.
+    get pageLoads() {
+      return browser.window.pageLoads;
+    },
     get prompt() {
       return model.getState().prompt;
     },
@@ -459,6 +463,11 @@ function startApp(browser) {
     },
     async escape() {
       model.escape();
+      await settle();
+    },
+    // The Clear button of the loaded databases, which asks first.
+    async clearDatabases() {
+      model.clearDatabases();
       await settle();
     },
     openCatalog() {

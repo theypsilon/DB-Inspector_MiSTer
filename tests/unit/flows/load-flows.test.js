@@ -224,6 +224,37 @@ describe('links', () => {
     assert.equal(app.filter, '');
   });
 
+  test('Clear asks first, then loads the start page: the address without its link', async () => {
+    app = await openApp(`/inspector/?from=forum#db=${ENTRY_WITH_FILTER_URL}&filter=arcade`, { routes: ROUTES });
+    assert.equal(app.view.heading, 'with_filter_db');
+
+    // Escape and Cancel leave everything as it was.
+    await app.clearDatabases();
+    assert.equal(app.prompt.kind, 'clearDatabases');
+    await app.escape();
+    assert.equal(app.prompt, null);
+    await app.clearDatabases();
+    await app.answer('clearDatabases', false);
+    assert.equal(app.view.heading, 'with_filter_db');
+    assert.deepEqual(app.pageLoads, []);
+
+    await app.clearDatabases();
+    await app.answer('clearDatabases', true);
+    assert.deepEqual(app.pageLoads, ['http://localhost/inspector/?from=forum']);
+    // In a new history entry, so Back opens the link again.
+    assert.equal(app.historyLength, 2);
+
+    // Uploaded databases are not in the link: the page loads again where it is.
+    await app.close();
+    app = await openApp('/', { routes: ROUTES });
+    await app.upload(file('current.json', buildDatabase('current_db')));
+    assert.equal(app.view.heading, 'current_db');
+    await app.clearDatabases();
+    await app.answer('clearDatabases', true);
+    assert.deepEqual(app.pageLoads, ['http://localhost/']);
+    assert.equal(app.historyLength, 1);
+  });
+
   test('a damaged link says so, and the page works as usual', async () => {
     app = await openApp('/#z=damaged!&at=issues', { routes: ROUTES });
     assert.equal(app.errorMessage, 'This link is damaged, so what it names could not be opened.');
