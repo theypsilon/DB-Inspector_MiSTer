@@ -25,6 +25,18 @@ function describeEntries(count) {
   return `${count.toLocaleString()} ${count === 1 ? 'entry' : 'entries'}`;
 }
 
+// How many files the FILTERs leave of all the loaded databases list, once they have settled.
+function describeMatches({ kept, total, pending, invalid }) {
+  const files = (count) => `${count.toLocaleString()} ${count === 1 ? 'file' : 'files'}`;
+  if (pending) {
+    return 'Counting matches…';
+  }
+  if (invalid) {
+    return `Not a valid filter, so it matches all ${files(total)}`;
+  }
+  return kept === total ? `Matches all ${files(total)}` : `Matches ${kept.toLocaleString()} of ${files(total)}`;
+}
+
 // A term's numbers in the tag dictionaries, for database authors.
 function describeNumbers(term, combined) {
   if (!term.numbers.length) {
@@ -44,11 +56,13 @@ function describeNumbers(term, combined) {
  *   withoutTerms: string[],
  *   combined: boolean,
  *   filter: string,
+ *   matches: { kept: number, total: number, pending: boolean, invalid: boolean },
  *   onFilterChange: (filter: string) => void,
  *   onClose: () => void,
- * }} props `intro` says which FILTER box the terms go in.
+ * }} props `intro` says which FILTER box the terms go in; `matches`, how many files of all the
+ * loaded databases the FILTERs leave (`kept`, of `total`), or that they are settling.
  */
-export default function FilterTermsModal({ intro, terms, withoutTerms, combined, filter, onFilterChange, onClose }) {
+export default function FilterTermsModal({ intro, terms, withoutTerms, combined, filter, matches, onFilterChange, onClose }) {
   const [query, setQuery] = useState('');
   const shown = searchFilterTerms(terms, query);
 
@@ -75,7 +89,10 @@ export default function FilterTermsModal({ intro, terms, withoutTerms, combined,
         <>
           <p className="filter-terms-current">
             <span className="catalog-meta-label">FILTER</span>{' '}
-            {filter.trim() ? <code>{filter.trim()}</code> : <span className="filter-terms-empty">No terms</span>}
+            {filter.trim() ? <code>{filter.trim()}</code> : <span className="filter-terms-empty">No terms</span>}{' '}
+            <span className="filter-terms-matches" aria-live="polite">
+              {describeMatches(matches)}
+            </span>
           </p>
           <button type="button" onClick={onClose}>
             Done
@@ -86,19 +103,15 @@ export default function FilterTermsModal({ intro, terms, withoutTerms, combined,
       <p className="helper-copy">
         {intro} Choosing a term again takes it out.
       </p>
-      <div className="catalog-search">
-        <label className="field-label" htmlFor="filter-terms-search">
-          Search terms
-        </label>
-        <input
-          id="filter-terms-search"
-          type="search"
-          placeholder="Name of a term"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          autoFocus
-        />
-      </div>
+      <input
+        className="filter-terms-search"
+        type="search"
+        aria-label="Search terms"
+        placeholder="Search terms"
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        autoFocus
+      />
       <ul className="filter-terms-list modal-list" aria-label="Terms">
         {shown.map((term) => {
           const use = termUse(filter, term);

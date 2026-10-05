@@ -891,24 +891,28 @@ fieldset.mister-option legend { float: left; width: 100%; padding: 0; }
 .install-download-row { display: flex; justify-content: center; margin-top: 1.2rem; }
 
 /* Filter terms: the terms of a FILTER box, to keep or exclude. As in the pickers, the list fills
-   the dialog and is the part that scrolls. */
+   the dialog and is the part that scrolls. A term's names and its counts share a line when they fit. */
 .filter-toolbar-actions { flex-wrap: nowrap; }
-.filter-terms-list { display: grid; align-content: start; gap: 0.5rem; margin: 0; padding: 0 0.25rem 0 0; list-style: none; }
-.filter-term { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem 1rem; padding: 0.7rem 1rem; border: 1px solid var(--card-line); border-radius: var(--radius-sm); background: var(--card); }
-.filter-term-text { display: grid; gap: 0.25rem; min-width: 0; }
+.filter-terms-panel .modal-body { gap: 0.75rem; }
+.filter-terms-panel .filter-terms-search { padding: 0.6rem 0.9rem; }
+/* The scrolling body would clip a focus ring drawn outside the box, so it is drawn inside. */
+.filter-terms-panel .filter-terms-search:focus-visible { outline-offset: -2px; }
+.filter-terms-list { display: grid; align-content: start; gap: 0.35rem; margin: 0; padding: 0 0.25rem 0 0; list-style: none; }
+.filter-term { display: flex; align-items: center; justify-content: space-between; gap: 0.4rem 1rem; padding: 0.4rem 0.45rem 0.4rem 0.9rem; border: 1px solid var(--card-line); border-radius: var(--radius-sm); background: var(--card); }
+.filter-term-text { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.15rem 0.9rem; min-width: 0; }
 .filter-term-names { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.2rem 0.6rem; min-width: 0; }
 .filter-term-names strong { font-family: var(--mono); font-size: 0.92rem; overflow-wrap: anywhere; }
 .filter-term-aliases { color: var(--muted); font-size: 0.85rem; overflow-wrap: anywhere; }
 .filter-term-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.5rem; min-width: 0; color: var(--muted); font-size: 0.85rem; }
 .filter-term-meta .db-chip, .filter-terms-without .db-chip { flex-shrink: 1; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
-.filter-term-actions { display: inline-flex; flex-shrink: 0; gap: 0.35rem; padding: 0.3rem; border-radius: var(--radius-button); background: var(--quiet); }
-.filter-term-use { padding: 0.45rem 0.85rem; border-radius: var(--radius-button); color: var(--ink); background: transparent; box-shadow: none; font-size: 0.86rem; }
+.filter-term-actions { display: inline-flex; flex-shrink: 0; gap: 0.2rem; padding: 0.2rem; border-radius: var(--radius-button); background: var(--quiet); }
+.filter-term-use { padding: 0.3rem 0.75rem; border-radius: var(--radius-button); color: var(--ink); background: transparent; box-shadow: none; font-size: 0.84rem; }
 .filter-term-use:hover { background: var(--quiet-hover); filter: none; }
 .filter-term-use.active { color: var(--on-toggle-on); background: var(--toggle-on); }
 .filter-term-use:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .filter-terms-current { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.7rem; min-width: 0; margin-right: auto; }
 .filter-terms-current code { padding: 0.25rem 0.5rem; border-radius: var(--radius-sm); background: var(--code); overflow-wrap: anywhere; }
-.filter-terms-empty { color: var(--muted); }
+.filter-terms-empty, .filter-terms-matches { color: var(--muted); }
 @media (max-width: 560px) {
   /* A term's Keep and Exclude go under its names. */
   .filter-term { flex-wrap: wrap; }

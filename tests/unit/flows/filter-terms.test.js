@@ -3,6 +3,7 @@ import { afterEach, test } from 'node:test';
 
 import { openApp } from '../support/app.js';
 import { buildFilterTerms, toggleTerm } from '../../../src/lib/filterTerms.js';
+import { countLoadedFiles } from '../../../src/model/views.js';
 
 // The filter terms dialog over databases opened as the page opens them: the terms it lists for
 // each FILTER box, and the FILTER a choice writes, which then works as typed FILTER does (the link,
@@ -67,4 +68,35 @@ test('combined databases: the shared filter’s terms are every database’s, a 
   assert.equal(app.ownFilter('beta'), 'arcade console');
   assert.deepEqual(app.view.appliedFilters, ['alphaarcadeshared filter', 'betaarcade consoleits own filter']);
   assert.equal(app.hash, `#db=${ALPHA_URL}&db=${BETA_URL}&filter=arcade&filter.beta=arcade+console`);
+});
+
+test('the dialog counts what FILTER matches against all the files the loaded databases list: archive entries in, a shared path once', async () => {
+  const archived = {
+    ...database('archived', { arcade: 0 }, { 'cores/shared.rbf': { size: 1, hash: 's', tags: [0] } }),
+    archives: {
+      roms: {
+        description: 'ROMs',
+        format: 'zip',
+        extract: 'all',
+        target_folder: 'games/',
+        archive_file: { url: 'https://example.com/roms.zip', size: 1, hash: 'z' },
+        summary_inline: { files: { 'games/one.rom': { arc_id: 'roms', size: 1, hash: 'o' }, 'games/two.rom': { arc_id: 'roms', size: 1, hash: 't' } }, folders: {} },
+      },
+    },
+  };
+  const ARCHIVED_URL = 'https://example.com/archived.json';
+  app = await openApp(`/#db=${ARCHIVED_URL}`, { routes: { ...ROUTES, [ARCHIVED_URL]: { body: archived } } });
+  assert.equal(countLoadedFiles(app.state.databases), 3);
+  await app.typeFilter('!arcade');
+  // What FILTER leaves does not change what there is to count.
+  assert.equal(countLoadedFiles(app.state.databases), 3);
+  assert.equal(app.view.inspection.activeFilter.resultCounts.files, 2);
+  app.close();
+
+  // Alpha's and the archived database's cores/shared.rbf is one path when they are combined.
+  const alpha = { ...database('alpha', { arcade: 0 }, { 'cores/shared.rbf': { size: 1, hash: 'x', tags: [0] }, 'a.rbf': { size: 1, hash: 'a', tags: [0] } }) };
+  app = await openApp(`/#db=${ALPHA_URL}&db=${ARCHIVED_URL}`, { routes: { [ALPHA_URL]: { body: alpha }, [ARCHIVED_URL]: { body: archived } } });
+  assert.equal(app.view.heading, '2 combined databases');
+  assert.equal(countLoadedFiles(app.state.databases), 4);
+  assert.equal(app.view.combined.resultCounts.files, 4);
 });

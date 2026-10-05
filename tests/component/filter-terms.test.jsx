@@ -31,8 +31,10 @@ async function termsOf(...databases) {
   return buildFilterTerms(await Promise.all(databases.map(async (db) => ({ dbId: db.db_id, inspection: await inspect(db) }))));
 }
 
+const SETTLED = { kept: 3, total: 3, pending: false, invalid: false };
+
 // The dialog as the page holds it: FILTER in state, changed by the dialog.
-function Harness({ terms, withoutTerms, combined, initialFilter, onChange, onClose }) {
+function Harness({ terms, withoutTerms, combined, initialFilter, matches = SETTLED, onChange, onClose }) {
   const [filter, setFilter] = useState(initialFilter);
   return (
     <FilterTermsModal
@@ -41,6 +43,7 @@ function Harness({ terms, withoutTerms, combined, initialFilter, onChange, onClo
       withoutTerms={withoutTerms}
       combined={combined}
       filter={filter}
+      matches={matches}
       onFilterChange={(next) => {
         onChange(next);
         setFilter(next);
@@ -50,10 +53,10 @@ function Harness({ terms, withoutTerms, combined, initialFilter, onChange, onClo
   );
 }
 
-function open({ terms, withoutTerms }, { combined = false, filter = '' } = {}) {
+function open({ terms, withoutTerms }, { combined = false, filter = '', matches } = {}) {
   const handlers = { onChange: vi.fn(), onClose: vi.fn() };
-  render(<Harness terms={terms} withoutTerms={withoutTerms} combined={combined} initialFilter={filter} {...handlers} />);
-  return { ...handlers, user: userEvent.setup(), dialog: screen.getByRole('dialog', { name: 'Filter terms' }) };
+  const result = render(<Harness terms={terms} withoutTerms={withoutTerms} combined={combined} initialFilter={filter} matches={matches} {...handlers} />);
+  return { ...handlers, ...result, user: userEvent.setup(), dialog: screen.getByRole('dialog', { name: 'Filter terms' }) };
 }
 
 // Each term's lines: its names, then its entries and databases.
@@ -68,7 +71,8 @@ function row(name) {
 describe('the filter terms', () => {
   test('list each term once, with its other names and the entries tagged with it; the dictionary number is in its tooltip', async () => {
     open(await termsOf(ALPHA));
-    expect(rows()).toEqual(['cheats 1 entry', 'nes also famicom, nintendo 2 entries']);
+    // The most used first.
+    expect(rows()).toEqual(['nes also famicom, nintendo 2 entries', 'cheats 1 entry']);
     expect(row('nes').querySelector('strong').title).toBe('Tag 0 in the tag dictionary');
     // The search box has the focus.
     expect(document.activeElement).toBe(screen.getByLabelText('Search terms'));
@@ -83,7 +87,7 @@ describe('the filter terms', () => {
     await user.click(keep);
     expect(onChange).toHaveBeenLastCalledWith('[mister] arcade nes');
     expect(keep.getAttribute('aria-pressed')).toBe('true');
-    expect(text(document.querySelector('.filter-terms-current'))).toBe('FILTER [mister] arcade nes');
+    expect(text(document.querySelector('.filter-terms-current code'))).toBe('[mister] arcade nes');
 
     await user.click(exclude);
     expect(onChange).toHaveBeenLastCalledWith('[mister] arcade !nes');
@@ -101,6 +105,24 @@ describe('the filter terms', () => {
     expect(within(row('nes')).getByRole('button', { name: 'Keep nes' }).getAttribute('aria-pressed')).toBe('true');
   });
 
+  test('FILTER says how many files of all the loaded databases it matches, once it settles', async () => {
+    const terms = await termsOf(ALPHA);
+    const matches = (value) => {
+      document.body.innerHTML = '';
+      open(terms, { filter: 'nes', matches: { ...SETTLED, ...value } });
+      return text(document.querySelector('.filter-terms-matches'));
+    };
+    expect(matches({ kept: 1234, total: 21514 })).toBe('Matches 1,234 of 21,514 files');
+    expect(matches({ kept: 1, total: 3 })).toBe('Matches 1 of 3 files');
+    expect(matches({ kept: 1, total: 1 })).toBe('Matches all 1 file');
+    expect(matches({ kept: 0, total: 3 })).toBe('Matches 0 of 3 files');
+    // While FILTER settles, the count waits for it.
+    expect(matches({ pending: true })).toBe('Counting matches…');
+    expect(matches({ invalid: true })).toBe('Not a valid filter, so it matches all 3 files');
+    // Screen readers hear the count change.
+    expect(document.querySelector('.filter-terms-matches').getAttribute('aria-live')).toBe('polite');
+  });
+
   test('the search finds terms by any of their names, and says when none has it', async () => {
     const { user } = open(await termsOf(ALPHA));
     await user.type(screen.getByLabelText('Search terms'), 'nintendo');
@@ -114,10 +136,10 @@ describe('the filter terms', () => {
   test('combined databases: each term names its databases, a few in full and more as a count, and those without terms are named once', async () => {
     open(await termsOf(ALPHA, LONG, NAMES), { combined: true });
     expect(rows()).toEqual([
-      // A tag the dictionary has and nothing uses is still a term.
-      'arcade No entries Coin-OpCollection/Distribution-MiSTerFPGA',
-      'cheats 1 entry alpha',
       'nes also famicom, nintendo 3 entries alpha Coin-OpCollection/Distribution-MiSTerFPGA',
+      'cheats 1 entry alpha',
+      // A tag the dictionary has and nothing uses is still a term, last.
+      'arcade No entries Coin-OpCollection/Distribution-MiSTerFPGA',
     ]);
     expect(row('nes').querySelector('strong').title).toBe('Tag 0 in alpha\nTag 0 in Coin-OpCollection/Distribution-MiSTerFPGA');
     expect(text(document.querySelector('.filter-terms-without'))).toBe('No terms in names_txt.');
@@ -133,7 +155,7 @@ describe('the filter terms', () => {
   test('one database without terms says so, and Done, Escape and a click outside close it', async () => {
     const { user, onClose } = open(await termsOf(NAMES));
     expect(screen.getByText('There are no terms to filter by.')).toBeTruthy();
-    expect(text(document.querySelector('.filter-terms-current'))).toBe('FILTER No terms');
+    expect(text(document.querySelector('.filter-terms-current'))).toBe('FILTER No terms Matches all 3 files');
     // One database's lack of terms is said once, not as a list.
     expect(document.querySelector('.filter-terms-without')).toBeNull();
 

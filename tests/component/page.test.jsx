@@ -501,8 +501,13 @@ describe('the page and the app model', () => {
     let dialog = screen.getByRole('dialog', { name: 'Filter terms' });
     const lines = (term) => [...term.querySelectorAll('p')].map(text).join(' ');
     expect([...dialog.querySelectorAll('.filter-term-text')].map(lines)).toEqual(['arcade 2 entries alpha beta', 'console 1 entry beta']);
-    await user.click(within(dialog).getByRole('button', { name: 'Exclude console' }));
-    expect(screen.getByLabelText('FILTER').value).toBe('!console');
+    // Beta's own filter keeps only its console file.
+    expect(text(dialog.querySelector('.filter-terms-matches'))).toBe('Matches 2 of 3 files');
+    await user.click(within(dialog).getByRole('button', { name: 'Exclude arcade' }));
+    expect(screen.getByLabelText('FILTER').value).toBe('!arcade');
+    // The count waits for FILTER to settle, then counts every database's files.
+    expect(text(dialog.querySelector('.filter-terms-matches'))).toBe('Counting matches…');
+    await waitFor(() => expect(text(dialog.querySelector('.filter-terms-matches'))).toBe('Matches 1 of 3 files'), { timeout: 3000 });
     await user.click(within(dialog).getByRole('button', { name: 'Done' }));
 
     await user.click(within(filters).getByRole('button', { name: 'Terms for beta' }));
@@ -513,6 +518,6 @@ describe('the page and the app model', () => {
     expect(within(dialog).getByRole('button', { name: 'Keep console' }).getAttribute('aria-pressed')).toBe('true');
     await user.click(within(dialog).getByRole('button', { name: 'Keep arcade' }));
     expect(screen.getByLabelText('FILTER for beta').value).toBe('console arcade');
-    expect(screen.getByLabelText('FILTER').value).toBe('!console');
+    expect(screen.getByLabelText('FILTER').value).toBe('!arcade');
   });
 });

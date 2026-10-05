@@ -50,15 +50,16 @@ const CONSOLES = database('consoles_db', {
   },
 });
 
-test('a database’s terms: each tag once with all its names, the entries tagged with it, and the dictionary’s unused tags', async () => {
+test('a database’s terms: each tag once with all its names, the entries tagged with it, and the dictionary’s unused tags, the most used first', async () => {
   const consoles = buildFilterTerms([await inspect(CONSOLES)]);
   assert.deepEqual(describe(consoles), [
-    'arcade (arcade_cores) 1 [consoles_db]',
-    // Files, folders and archive entries all count.
+    // The most used first, and terms used as much by name. Files, folders and archive entries all
+    // count.
     'cheats 3 [consoles_db]',
-    'Docs 1 [consoles_db]',
     // The shortest of a tag's names is the one written.
     'nes (famicom, nintendo) 3 [consoles_db]',
+    'arcade (arcade_cores) 1 [consoles_db]',
+    'Docs 1 [consoles_db]',
     'unused_tag 0 [consoles_db]',
   ]);
   assert.deepEqual(consoles.withoutTerms, []);

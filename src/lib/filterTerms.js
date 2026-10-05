@@ -27,7 +27,7 @@ function isTermName(name) {
 
 /**
  * The terms of `databases` ([{ dbId, inspection }], in order, each inspection before its filter),
- * by name, and the databases that have none.
+ * the most used first, and the databases that have none.
  * @param {{ dbId: string, inspection: any }[]} databases
  * @returns {{ terms: FilterTerm[], withoutTerms: string[] }}
  */
@@ -102,7 +102,8 @@ export function buildFilterTerms(databases) {
   });
 
   const terms = [...merged.values()].map(buildTerm);
-  terms.sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: 'base' }));
+  // The most used first; terms used as much, by name.
+  terms.sort((left, right) => right.entries - left.entries || left.name.localeCompare(right.name, undefined, { sensitivity: 'base' }));
   return { terms, withoutTerms };
 }
 

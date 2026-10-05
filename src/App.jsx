@@ -21,6 +21,7 @@ import {
   buildStorageSummary,
   buildTagGroups,
   canResetFilter,
+  countLoadedFiles,
   hasEssentialTag,
   hasUntaggedRows,
   selectInspectionKey,
@@ -145,6 +146,8 @@ export default function App() {
       : [{ dbId: inspection.overview.dbId, inspection }];
     return buildFilterTerms(isCombined && termsTarget !== 'main' ? loaded.filter(({ dbId }) => dbId === termsTarget) : loaded);
   }, [termsOpen, termsTarget, isCombined, databases, inspection]);
+  // What the FILTERs leave of the files the loaded databases list, for the terms' dialog.
+  const loadedFileCount = useMemo(() => (termsOpen ? countLoadedFiles(databases) : 0), [termsOpen, databases]);
   // The explorer and the terms cover the page.
   const pageCovered = explorerOpen || termsOpen;
   const isFiltering = combinedView ? combinedView.isFiltering : Boolean(displayedInspection?.activeFilter.isFiltering);
@@ -625,6 +628,12 @@ export default function App() {
           withoutTerms={filterTerms.withoutTerms}
           combined={isCombined}
           filter={!isCombined ? filterInput : termsTarget === 'main' ? combinedFilters.shared.value : combinedFilters.overrides[termsTarget] ?? ''}
+          matches={{
+            kept: isCombined ? combinedView.resultCounts.files : displayedInspection.activeFilter.resultCounts.files,
+            total: loadedFileCount,
+            pending: isCombined ? combinedFilters !== debouncedCombinedFilters : filterInput !== debouncedFilterInput,
+            invalid: !isCombined && displayedInspection.activeFilter.hasError,
+          }}
           onFilterChange={
             !isCombined ? model.setFilterInput : termsTarget === 'main' ? model.setSharedFilter : (value) => model.setOwnFilter(termsTarget, value)
           }

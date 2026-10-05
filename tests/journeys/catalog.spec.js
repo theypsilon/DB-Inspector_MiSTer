@@ -229,6 +229,16 @@ test('the catalog lists known databases and opens them alone or together', async
       expect(await terms.locator(part).evaluate((element) => element.scrollWidth - element.clientWidth), part).toBe(0);
     }
     expect(await terms.evaluate((panel) => panel.getBoundingClientRect().right <= window.innerWidth)).toBe(true);
+    // The search box has the focus, and its ring all round: inside what the scrolling body shows.
+    expect(
+      await terms.getByRole('searchbox', { name: 'Search terms' }).evaluate((input) => {
+        const style = getComputedStyle(input);
+        const reach = parseFloat(style.outlineWidth) + parseFloat(style.outlineOffset);
+        const box = input.getBoundingClientRect();
+        const body = input.closest('.modal-body').getBoundingClientRect();
+        return [input.matches(':focus-visible'), style.outlineStyle, box.left - reach >= body.left && box.right + reach <= body.right];
+      }),
+    ).toEqual([true, 'solid', true]);
     await terms.getByRole('button', { name: 'Done' }).click();
     await page.locator('.database-filter-row').getByRole('button', { name: 'Remove' }).click();
     await expect.poll(() => new URL(page.url()).hash).toBe(link);
