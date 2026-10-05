@@ -41,6 +41,7 @@ import {
 import {
   isCombinedLink,
   linkedDatabaseUrl,
+  openStartPage,
   readLink,
   rewriteOldLink,
   writeLinkDatabase,
@@ -106,7 +107,8 @@ function initialState() {
     catalogModalOpen: false,
     customCatalogOptions: [],
     runtimeCatalog: { entries: [], status: 'loading', error: '' },
-    // The question waiting for an answer: { kind: 'loadMode' | 'filterOverride' | 'replaceLoaded', ... }.
+    // The question waiting for an answer: { kind: 'loadMode' | 'filterOverride' | 'replaceLoaded' |
+    // 'clearDatabases', ... }.
     prompt: null,
   };
 }
@@ -342,6 +344,16 @@ export function createAppModel() {
     if (pendingPrompt) {
       answerPrompt(dismissAnswer(pendingPrompt.prompt));
     }
+  }
+
+  // Clear asks first, then opens the start page afresh, which leaves nothing of the loaded
+  // databases behind.
+  function clearDatabases() {
+    ask({ kind: 'clearDatabases' }, (confirmed) => {
+      if (confirmed) {
+        openStartPage();
+      }
+    });
   }
 
   // Escape closes the pickers and dismisses the question.
@@ -1295,6 +1307,7 @@ export function createAppModel() {
     connect,
     answerPrompt,
     escape,
+    clearDatabases,
     setDatabaseUrl: (databaseUrl) => setState({ databaseUrl }),
     loadUrl: () => loadUrl(makeCtx()),
     openDrop: (drop) => openDrop(makeCtx(), drop),

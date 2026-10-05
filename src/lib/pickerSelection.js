@@ -65,10 +65,22 @@ export function listedPickerEntries(entries, { query, reviewKeys = null }) {
   return reviewKeys ? matching.filter((entry) => reviewKeys.has(entry.key)) : matching;
 }
 
-// Whether every db_id among the entries has a selected entry ("Select all" turns into "Select none").
+// Whether every db_id among the entries has one of them selected ("Select all" turns into "Select
+// none"). Among the entries shown, a db_id selected through an entry the search hides does not count.
 export function allPickerDbIdsSelected(entries, selection) {
   const selectedDbIds = new Set(selectedPickerEntries(entries, selection).map((entry) => entry.dbId));
   return entries.length > 0 && entries.every((entry) => selectedDbIds.has(entry.dbId));
+}
+
+// The label of the button that selects or unselects the entries shown: all of them, or the ones the
+// search or the review of the selection leaves.
+export function pickerToggleAllLabel(entries, shown, selection) {
+  const all = shown.length === entries.length;
+  if (allPickerDbIdsSelected(shown, selection)) {
+    return all ? 'Select none' : 'Unselect shown';
+  }
+
+  return all ? 'Select all' : 'Select shown';
 }
 
 // Applies a picker action. `entries` are the picker's entries, and `preferredKeys` decide which
@@ -76,7 +88,8 @@ export function allPickerDbIdsSelected(entries, selection) {
 //   { type: 'toggle', entry }: selects or unselects an entry; a db_id that is already selected
 //     raises a conflict instead.
 //   { type: 'replaceConflict' } / { type: 'cancelConflict' }: answers the conflict.
-//   { type: 'toggleAll' }: selects one entry per db_id, or none when all are selected.
+//   { type: 'toggleAll', shown }: selects one entry per db_id among the shown entries (all of them
+//     unless given), or unselects them when all are selected; the rest of the selection stays.
 //   { type: 'preset', keys }: selects the preset's entries, one per db_id.
 export function reducePickerSelection(selection, action, { entries, preferredKeys = [] }) {
   const { selectedKeys, conflict } = selection;
@@ -108,19 +121,23 @@ export function reducePickerSelection(selection, action, { entries, preferredKey
     }
     case 'cancelConflict':
       return conflict ? { ...selection, conflict: null } : selection;
-    case 'toggleAll':
-      // Select all keeps the entries already chosen for a db_id, then prefers `preferredKeys`.
-      return {
-        ...selection,
-        selectedKeys: allPickerDbIdsSelected(entries, selection)
-          ? new Set()
-          : new Set(
-              selectOnePerDbId(entries, [
-                ...selectedPickerEntries(entries, selection).map((entry) => entry.key),
-                ...preferredKeys,
-              ]),
-            ),
-      };
+    case 'toggleAll': {
+      const shown = action.shown ?? entries;
+      const selected = selectedPickerEntries(entries, selection);
+      if (allPickerDbIdsSelected(shown, selection)) {
+        const shownKeys = new Set(shown.map((entry) => entry.key));
+        const kept = selected.filter((entry) => !shownKeys.has(entry.key)).map((entry) => entry.key);
+        return { ...selection, selectedKeys: new Set(kept) };
+      }
+
+      // Selecting keeps the shown entries already chosen for a db_id, then prefers `preferredKeys`.
+      // A db_id chosen through an entry the search hides takes a shown one instead, so that every
+      // entry shown ends up checked or sharing its db_id with one that is.
+      const shownDbIds = new Set(shown.map((entry) => entry.dbId));
+      const kept = selected.filter((entry) => !shownDbIds.has(entry.dbId)).map((entry) => entry.key);
+      const chosen = selectOnePerDbId(shown, [...selected.map((entry) => entry.key), ...preferredKeys]);
+      return { ...selection, selectedKeys: new Set([...kept, ...chosen]) };
+    }
     case 'preset':
       return { ...selection, selectedKeys: new Set(selectPreset(entries, action.keys)) };
     default:

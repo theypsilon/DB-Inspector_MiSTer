@@ -7,10 +7,10 @@ import useDebouncedValue from '../../hooks/useDebouncedValue.js';
 import { formatFilterPromptValue } from '../../lib/filterDefaults.js';
 import { findLoadedKeys } from '../../lib/selection.js';
 import {
-  allPickerDbIdsSelected,
   describePickerEntry,
   listedPickerEntries,
   openButtonLabel,
+  pickerToggleAllLabel,
   reducePickerSelection,
   selectedPickerEntries,
   startPickerSelection,
@@ -43,7 +43,8 @@ function countDatabases(count) {
 // Chooses databases to open, from the catalog or a database list. Each selected database has its
 // own db_id: choosing one whose db_id is taken asks whether it should replace the selected one.
 // `presets` are extra buttons that replace the selection with their `keys`, and `preferredKeys`
-// decide which database of a db_id "Select all" picks. The list fills the dialog and is what
+// decide which database of a db_id "Select all" picks; while searching, it selects the databases
+// shown ("Select shown"), adding them to the selection. The list fills the dialog and is what
 // scrolls; the summary names the first few selected databases, and reviewing the selection lists
 // only the selected ones.
 /**
@@ -127,7 +128,10 @@ const DatabasePickerModal = memo(/** @param {DatabasePickerModalProps} props */ 
   );
   const selectedEntries = useMemo(() => selectedPickerEntries(entries, selection), [entries, selection]);
   const summary = useMemo(() => summarizePickerSelection(selectedEntries), [selectedEntries]);
-  const allSelected = useMemo(() => allPickerDbIdsSelected(entries, selection), [entries, selection]);
+  const toggleAllLabel = useMemo(
+    () => pickerToggleAllLabel(entries, listedEntries, selection),
+    [entries, listedEntries, selection],
+  );
   const loadedKeys = useMemo(() => findLoadedKeys(entries, loadedDatabases), [entries, loadedDatabases]);
   const hasApproximateDbIds = useMemo(() => entries.some((entry) => entry.dbIdApproximate), [entries]);
 
@@ -187,10 +191,10 @@ const DatabasePickerModal = memo(/** @param {DatabasePickerModalProps} props */ 
             <button
               type="button"
               className="secondary-button"
-              onClick={() => dispatch({ type: 'toggleAll' })}
-              disabled={!ready || !entries.length}
+              onClick={() => dispatch({ type: 'toggleAll', shown: listedEntries })}
+              disabled={!ready || !listedEntries.length}
             >
-              {allSelected ? 'Select none' : 'Select all'}
+              {toggleAllLabel}
             </button>
             {presets.map((preset) => (
               <button

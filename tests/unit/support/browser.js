@@ -1,8 +1,8 @@
 import { STATUS_CODES } from 'node:http';
 
 // A browser for the app model under Node: an address bar with history (back and forward fire
-// popstate, and so does a new # typed in the address bar), timers on a clock the test moves, and
-// fetch answered from routes. Routes map a URL to
+// popstate, and so does a new # typed in the address bar; pages loaded are recorded), timers on a
+// clock the test moves, and fetch answered from routes. Routes map a URL to
 // { status, body, contentType } (or are a function from URL to that); a body that is not a string or
 // bytes is sent as JSON. Unknown URLs fail as a blocked request would. Requests ({ url, init }) are
 // recorded in order.
@@ -58,6 +58,7 @@ function createWindow(href, clock) {
   const entries = [new URL(href)];
   let index = 0;
   const listeners = new Map();
+  const pageLoads = [];
   const current = () => entries[index];
 
   function firePopState() {
@@ -93,7 +94,21 @@ function createWindow(href, clock) {
       get origin() {
         return current().origin;
       },
+      // Loads a page, recorded in `pageLoads`: in a new history entry, unless it is the address
+      // shown. The model stays, where a browser would start the page afresh.
+      assign(url) {
+        const next = new URL(String(url), current());
+        pageLoads.push(next.href);
+        if (next.href === current().href) {
+          return;
+        }
+
+        entries.splice(index + 1, entries.length, next);
+        index += 1;
+      },
     },
+    // The pages loaded with location.assign.
+    pageLoads,
     history: {
       get length() {
         return entries.length;

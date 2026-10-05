@@ -177,6 +177,34 @@ test('select all picks one database per db_id: the one chosen, else the Update A
   assert.deepEqual(catalog.selected, withEdge);
 });
 
+test('while searching, select all selects and unselects only the databases shown', async () => {
+  app = await openApp('/', { routes: ROUTES });
+  const catalog = openCatalog();
+  catalog.check(UPDATE_ALL_DEFAULTS[2]);
+
+  assert.deepEqual(catalog.search('distribution'), [EDGE, UPDATE_ALL_DEFAULTS[1], UPDATE_ALL_DEFAULTS[3]]);
+  assert.equal(catalog.toggleAllLabel, 'Select shown');
+  catalog.toggleAll();
+  // Added to the selection, one per db_id: the Update All default of distribution_mister.
+  assert.deepEqual(catalog.selected, [UPDATE_ALL_DEFAULTS[1], UPDATE_ALL_DEFAULTS[2], UPDATE_ALL_DEFAULTS[3]]);
+  assert.equal(catalog.toggleAllLabel, 'Unselect shown');
+  catalog.toggleAll();
+  assert.deepEqual(catalog.selected, [UPDATE_ALL_DEFAULTS[2]]);
+
+  // A db_id chosen through a database the search hides takes the one shown.
+  catalog.search('');
+  catalog.check(UPDATE_ALL_DEFAULTS[1]);
+  assert.deepEqual(catalog.search('edge linux'), [EDGE]);
+  assert.equal(catalog.toggleAllLabel, 'Select shown');
+  catalog.toggleAll();
+  assert.deepEqual(catalog.selected, [EDGE, UPDATE_ALL_DEFAULTS[2]]);
+  assert.equal(catalog.toggleAllLabel, 'Unselect shown');
+
+  // A search that shows every database is Select all again.
+  assert.equal(catalog.search('').length, 7);
+  assert.equal(catalog.toggleAllLabel, 'Select all');
+});
+
 test('opening a selection asks first only when it would close a loaded database', async () => {
   app = await openApp('/', { routes: ROUTES });
   await app.fetch(ARCADE_URL);

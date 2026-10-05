@@ -138,6 +138,29 @@ describe('the catalog picker', () => {
     expect(within(dialog).getByRole('checkbox', { name: 'JTCORES for MiSTer (jtcores)' })).toBeTruthy();
   });
 
+  test('while searching, select all selects and unselects only the databases shown', async () => {
+    const { dialog, user } = renderCatalog();
+    const search = within(dialog).getByLabelText('Search catalog');
+    const chips = () => [...dialog.querySelectorAll('.selection-chips .db-chip')].map(text);
+    await user.click(within(dialog).getByRole('checkbox', { name: UPDATE_ALL_DEFAULTS[2] }));
+
+    await user.type(search, 'distribution');
+    await waitFor(() => expect(text(dialog)).toContain('3 of 7 entries'), { timeout: 2000 });
+    await user.click(within(dialog).getByRole('button', { name: 'Select shown' }));
+    expect(selectedNames(dialog)).toEqual([UPDATE_ALL_DEFAULTS[1], UPDATE_ALL_DEFAULTS[3]]);
+    expect(chips()).toEqual(['distribution_mister', 'jtcores', 'Coin-OpCollection/Distribution-MiSTerFPGA']);
+    await user.click(within(dialog).getByRole('button', { name: 'Unselect shown' }));
+    expect(chips()).toEqual(['jtcores']);
+
+    await user.type(search, ' nothing');
+    await waitFor(() => expect(text(dialog)).toContain('0 of 7 entries'), { timeout: 2000 });
+    expect(within(dialog).getByRole('button', { name: 'Select shown' }).disabled).toBe(true);
+
+    await user.clear(search);
+    await waitFor(() => expect(text(dialog)).toContain('7 of 7 entries'), { timeout: 2000 });
+    expect(within(dialog).getByRole('button', { name: 'Select all' }).disabled).toBe(false);
+  });
+
   test('with many selected, names ten and counts the rest, and reviewing lists only them', async () => {
     const many = Array.from({ length: 12 }, (_, index) => catalogEntry(`db_${index}`, `Database ${index}`, `https://example.com/db_${index}.json`));
     const twin = catalogEntry('db_0', 'Database 0 fork', 'https://example.com/fork.json');

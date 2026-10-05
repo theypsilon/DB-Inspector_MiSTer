@@ -246,6 +246,12 @@ export function writeLinkAnchor(at) {
   writeLink({ at });
 }
 
+// Loads the page again at its address without a link: the start page, with nothing loaded. Leaving
+// a link, it is a new history entry, so Back opens the link again.
+export function openStartPage() {
+  window.location.assign(window.location.pathname + window.location.search);
+}
+
 // Links from before the # named their database in ?database-url=<url>. They open as #db=<url>;
 // nothing else of them is read.
 export function rewriteOldLink() {

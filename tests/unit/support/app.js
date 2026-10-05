@@ -23,12 +23,12 @@ import {
 import { describeAppliedFilter } from '../../../src/lib/combinedFilters.js';
 import { findLoadedKeys, findUpdateAllDefaultKeys, selectOnePerDbId } from '../../../src/lib/selection.js';
 import {
-  allPickerDbIdsSelected,
   chosenMisterFilter,
   describePickerEntry,
   filterPickerEntries,
   firstMisterKey,
   openButtonLabel,
+  pickerToggleAllLabel,
   reducePickerSelection,
   selectedPickerEntries,
   startPickerSelection,
@@ -176,6 +176,8 @@ function startApp(browser) {
     const preferredKeys = kind === 'catalog' ? findUpdateAllDefaultKeys(entries) : [];
     let selection = startPickerSelection(kind === 'catalog' ? [] : selectOnePerDbId(entries));
     let misterKey = choice ? firstMisterKey(choice) : null;
+    // The entries the search shows.
+    let shown = entries;
     const dispatch = (action) => {
       selection = reducePickerSelection(selection, action, { entries, preferredKeys });
     };
@@ -208,7 +210,7 @@ function startApp(browser) {
         return selection.conflict;
       },
       get toggleAllLabel() {
-        return allPickerDbIdsSelected(entries, selection) ? 'Select none' : 'Select all';
+        return pickerToggleAllLabel(entries, shown, selection);
       },
       get openLabel() {
         return openButtonLabel(selectedPickerEntries(entries, selection).length);
@@ -219,8 +221,10 @@ function startApp(browser) {
       get misterKey() {
         return misterKey;
       },
+      // Types the search, and returns the entries it shows.
       search(query) {
-        return filterPickerEntries(entries, query.trim().toLowerCase()).map(describePickerEntry);
+        shown = filterPickerEntries(entries, query.trim().toLowerCase());
+        return shown.map(describePickerEntry);
       },
       click(name) {
         dispatch({ type: 'toggle', entry: entryNamed(name) });
@@ -238,7 +242,7 @@ function startApp(browser) {
         }
       },
       toggleAll() {
-        dispatch({ type: 'toggleAll' });
+        dispatch({ type: 'toggleAll', shown });
       },
       selectUpdateAllDefaults() {
         dispatch({ type: 'preset', keys: preferredKeys });
