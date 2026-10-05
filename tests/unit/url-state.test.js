@@ -7,6 +7,7 @@ import {
   LINK_READABLE_MAX,
   buildExplorerAnchor,
   buildLinkUrl,
+  buildTermsAnchor,
   buildNodeAnchor,
   formatLink,
   isCombinedLink,
@@ -14,6 +15,7 @@ import {
   parseExplorerAnchor,
   parseLink,
   parseNodeAnchor,
+  parseTermsAnchor,
   readLink,
   rewriteOldLink,
   writeLinkAnchor,
@@ -214,8 +216,37 @@ test('anchors lead back to their row, in the right section, through the link', (
 });
 
 test('anchors that name no row are left to the sections, the install dialog and the explorer', () => {
-  for (const at of ['', 'install', 'filter', 'issues', 'files', 'archives', 'archives:', 'unknown:thing', 'explorer', 'explorer:_Arcade/cores']) {
+  for (const at of ['', 'install', 'filter', 'issues', 'files', 'archives', 'archives:', 'unknown:thing', 'explorer', 'explorer:_Arcade/cores', 'terms', 'terms:beta', 'terms?arcade', 'tags']) {
     assert.equal(parseNodeAnchor(at), null, at);
+  }
+});
+
+test('the filter terms’ anchor names FILTER’s terms or a database’s own filter’s, with the search, and reads back through the link', () => {
+  for (const [dbId, search, anchor] of [
+    [null, '', 'terms'],
+    ['jtcores', '', 'terms:jtcores'],
+    // db_ids can hold a slash or a colon: the rest of the anchor, up to a ?, is the db_id.
+    ['Coin-OpCollection/Distribution-MiSTerFPGA', '', 'terms:Coin-OpCollection/Distribution-MiSTerFPGA'],
+    ['odd:id', '', 'terms:odd:id'],
+    [null, 'arcade', 'terms?arcade'],
+    ['Coin-OpCollection/Distribution-MiSTerFPGA', 'cheats', 'terms:Coin-OpCollection/Distribution-MiSTerFPGA?cheats'],
+    // Everything after the first ? is the search, whatever it holds.
+    ['odd:id', 'a?b&c=d+e #f:ü', 'terms:odd:id?a?b&c=d+e #f:ü'],
+  ]) {
+    assert.equal(buildTermsAnchor(dbId, search), anchor);
+    const { at } = parseLink(formatLink(link({ databases: ['https://example.com/db.json'], at: anchor })));
+    assert.deepEqual(parseTermsAnchor(at), { dbId, search }, anchor);
+  }
+  assert.equal(formatLink(link({ at: buildTermsAnchor() })), 'at=terms');
+  assert.equal(formatLink(link({ at: buildTermsAnchor(null, 'arcade games') })), 'at=terms?arcade+games');
+  // The search as it is compared: an empty or blank one is no search, and a search's ends are not kept.
+  assert.equal(buildTermsAnchor(null, '   '), 'terms');
+  assert.equal(buildTermsAnchor('beta', ' arcade '), 'terms:beta?arcade');
+  assert.deepEqual(parseTermsAnchor('terms?'), { dbId: null, search: '' });
+  // The section that listed the terms before named them `tags`.
+  assert.deepEqual(parseTermsAnchor('tags'), { dbId: null, search: '' });
+  for (const at of ['', 'terms:', 'terms:?arcade', 'tags:beta', 'termsx', 'termsx?arcade', 'filter', 'explorer']) {
+    assert.equal(parseTermsAnchor(at), null, at);
   }
 });
 

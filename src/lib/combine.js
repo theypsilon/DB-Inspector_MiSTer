@@ -118,6 +118,60 @@ export function combineDatabaseViews(entries) {
   };
 }
 
+/**
+ * How many files combined databases' views hold, as combineDatabaseViews counts them
+ * (`resultCounts.files`): each file once, and each collided path once, without building the
+ * combined view. A path is collided when more than one database has a file there, or another
+ * database needs a folder there; which databases need a folder at a path is looked up once, rather
+ * than in every database for every file.
+ * @param {{ dbId: string, view: any }[]} entries
+ */
+export function countCombinedFiles(entries) {
+  const files = new Map();
+  const folderDbIds = new Map();
+  const addFolder = (key, dbId) => {
+    const owners = folderDbIds.get(key);
+    if (owners) {
+      owners.add(dbId);
+    } else {
+      folderDbIds.set(key, new Set([dbId]));
+    }
+  };
+
+  for (const { dbId, view } of entries) {
+    const addRecord = (record) => {
+      const key = pathKey(record.path);
+      if (record.kind !== 'file') {
+        addFolder(key, dbId);
+        return;
+      }
+
+      const file = files.get(key);
+      if (file) {
+        file.versions += 1;
+        file.dbIds.add(dbId);
+      } else {
+        files.set(key, { versions: 1, dbIds: new Set([dbId]) });
+      }
+      for (const parentKey of parentKeys(key)) {
+        addFolder(parentKey, dbId);
+      }
+    };
+
+    view.filesystemRecords.forEach(addRecord);
+    for (const archive of view.archiveViews) {
+      (archive.summaryRecords ?? []).forEach(addRecord);
+    }
+  }
+
+  let count = 0;
+  for (const [key, { versions, dbIds }] of files) {
+    const needsFolder = [...(folderDbIds.get(key) ?? [])].some((dbId) => !dbIds.has(dbId));
+    count += dbIds.size > 1 || needsFolder ? 1 : versions;
+  }
+  return count;
+}
+
 function pathKey(path) {
   return trimTrailingSlash(String(path)).toLowerCase();
 }

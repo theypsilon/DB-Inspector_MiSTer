@@ -899,6 +899,9 @@ fieldset.mister-option legend { float: left; width: 100%; padding: 0; }
 .filter-terms-panel .filter-terms-search:focus-visible { outline-offset: -2px; }
 .filter-terms-list { display: grid; align-content: start; gap: 0.35rem; margin: 0; padding: 0 0.25rem 0 0; list-style: none; }
 .filter-term { display: flex; align-items: center; justify-content: space-between; gap: 0.4rem 1rem; padding: 0.4rem 0.45rem 0.4rem 0.9rem; border: 1px solid var(--card-line); border-radius: var(--radius-sm); background: var(--card); }
+/* Of a long list, the browser lays out only the terms on screen; the others hold their place at a
+   row's height (the height they last had, once they have been on screen). */
+.filter-term { content-visibility: auto; contain-intrinsic-size: auto 51px; }
 .filter-term-text { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.15rem 0.9rem; min-width: 0; }
 .filter-term-names { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.2rem 0.6rem; min-width: 0; }
 .filter-term-names strong { font-family: var(--mono); font-size: 0.92rem; overflow-wrap: anywhere; }

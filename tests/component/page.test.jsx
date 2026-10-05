@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import App from '../../src/App.jsx';
@@ -456,7 +456,7 @@ describe('the page and the app model', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(screen.getByRole('search', { name: 'Find in tree' })).toBeTruthy();
   });
-  test('the terms open from beside FILTER, and keeping one writes FILTER and the link; the page no longer lists them', async () => {
+  test('the terms open from beside FILTER, in the link too, and keeping one writes FILTER and the link; the page no longer lists them', async () => {
     const url = 'https://example.com/terms.json';
     const user = openPage(`/#db=${url}`, { [url]: { body: database('terms_db') } });
     expect(await screen.findByRole('heading', { name: 'terms_db' })).toBeTruthy();
@@ -465,23 +465,34 @@ describe('the page and the app model', () => {
 
     await user.click(within(document.getElementById('section-filter')).getByRole('button', { name: 'Terms' }));
     const dialog = screen.getByRole('dialog', { name: 'Filter terms' });
+    expect(window.location.hash).toBe(`#db=${url}&at=terms`);
     expect(text(dialog.querySelector('.helper-copy'))).toBe("Keep or exclude terms_db's terms in FILTER. Choosing a term again takes it out.");
     expect([...dialog.querySelectorAll('.filter-term strong')].map(text)).toEqual(['arcade', 'essential']);
     await user.click(within(dialog).getByRole('button', { name: 'Keep arcade' }));
     expect(screen.getByLabelText('FILTER').value).toBe('arcade');
-    await waitFor(() => expect(window.location.hash).toBe(`#db=${url}&filter=arcade`), { timeout: 3000 });
+    await waitFor(() => expect(window.location.hash).toBe(`#db=${url}&filter=arcade&at=terms`), { timeout: 3000 });
     // Find-in-page stands aside while the terms cover the page.
     await user.keyboard('{Control>}f{/Control}');
     expect(screen.queryByRole('search')).toBeNull();
 
     await user.click(within(dialog).getByRole('button', { name: 'Done' }));
     expect(screen.queryByRole('dialog')).toBeNull();
+    expect(window.location.hash).toBe(`#db=${url}&filter=arcade`);
   });
 
-  test('a link to the section the terms were in opens them, and closing them takes them out of the link', async () => {
+  test('a link to the terms opens them', async () => {
+    const url = 'https://example.com/terms-anchor.json';
+    openPage(`/#db=${url}&at=terms`, { [url]: { body: database('terms_anchor_db') } });
+    const dialog = await screen.findByRole('dialog', { name: 'Filter terms' });
+    expect(text(dialog.querySelector('.helper-copy'))).toBe("Keep or exclude terms_anchor_db's terms in FILTER. Choosing a term again takes it out.");
+    expect(window.location.hash).toBe(`#db=${url}&at=terms`);
+  });
+
+  test('a link to the section the terms were in opens them, as their own link, and closing them takes them out of the link', async () => {
     const url = 'https://example.com/terms-link.json';
     const user = openPage(`/#db=${url}&at=tags`, { [url]: { body: database('terms_link_db') } });
     expect(await screen.findByRole('dialog', { name: 'Filter terms' })).toBeTruthy();
+    expect(window.location.hash).toBe(`#db=${url}&at=terms`);
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(window.location.hash).toBe(`#db=${url}`);
@@ -497,12 +508,15 @@ describe('the page and the app model', () => {
     expect(await screen.findByRole('heading', { name: '2 combined databases' })).toBeTruthy();
     const filters = document.getElementById('section-filter');
 
-    await user.click(within(filters).getByRole('button', { name: 'Terms' }));
+    // The dialog opens with its terms; it counts the loaded files once it is on screen.
+    fireEvent.click(within(filters).getByRole('button', { name: 'Terms' }));
     let dialog = screen.getByRole('dialog', { name: 'Filter terms' });
+    expect(new URLSearchParams(window.location.hash.slice(1)).get('at')).toBe('terms');
     const lines = (term) => [...term.querySelectorAll('p')].map(text).join(' ');
     expect([...dialog.querySelectorAll('.filter-term-text')].map(lines)).toEqual(['arcade 2 entries alpha beta', 'console 1 entry beta']);
+    expect(text(dialog.querySelector('.filter-terms-matches'))).toBe('Counting matches…');
     // Beta's own filter keeps only its console file.
-    expect(text(dialog.querySelector('.filter-terms-matches'))).toBe('Matches 2 of 3 files');
+    await waitFor(() => expect(text(dialog.querySelector('.filter-terms-matches'))).toBe('Matches 2 of 3 files'));
     await user.click(within(dialog).getByRole('button', { name: 'Exclude arcade' }));
     expect(screen.getByLabelText('FILTER').value).toBe('!arcade');
     // The count waits for FILTER to settle, then counts every database's files.
@@ -512,6 +526,7 @@ describe('the page and the app model', () => {
 
     await user.click(within(filters).getByRole('button', { name: 'Terms for beta' }));
     dialog = screen.getByRole('dialog', { name: 'Filter terms' });
+    expect(new URLSearchParams(window.location.hash.slice(1)).get('at')).toBe('terms:beta');
     expect(text(dialog.querySelector('.helper-copy'))).toBe("Keep or exclude beta's terms in its own filter. Choosing a term again takes it out.");
     // Only beta's: its own entries, its own name.
     expect([...dialog.querySelectorAll('.filter-term-text')].map(lines)).toEqual(['arcade 1 entry beta', 'console 1 entry beta']);
@@ -519,5 +534,30 @@ describe('the page and the app model', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Keep arcade' }));
     expect(screen.getByLabelText('FILTER for beta').value).toBe('console arcade');
     expect(screen.getByLabelText('FILTER').value).toBe('!arcade');
+  });
+  test('a link to a database’s own filter’s terms opens them, while it has one; else the shared filter’s', async () => {
+    const alpha = 'https://example.com/terms-own-alpha.json';
+    const beta = 'https://example.com/terms-own-beta.json';
+    const routes = {
+      [alpha]: { body: database('alpha', { tag_dictionary: { arcade: 0 }, files: { 'a.rbf': { size: 1, hash: 'a', tags: [0] } } }) },
+      [beta]: { body: database('beta', { tag_dictionary: { console: 0 }, files: { 'b.rom': { size: 1, hash: 'b', tags: [0] } } }) },
+    };
+    const anchor = () => new URLSearchParams(window.location.hash.slice(1)).get('at');
+    openPage(`/#db=${alpha}&db=${beta}&filter.beta=console&at=terms:beta`, routes);
+    const dialog = await screen.findByRole('dialog', { name: 'Filter terms' });
+    expect(text(dialog.querySelector('.helper-copy'))).toBe("Keep or exclude beta's terms in its own filter. Choosing a term again takes it out.");
+    expect(anchor()).toBe('terms:beta');
+  });
+
+  test('a link to the terms of a database’s own filter it does not have opens the shared filter’s, and says so', async () => {
+    const alpha = 'https://example.com/terms-none-alpha.json';
+    const beta = 'https://example.com/terms-none-beta.json';
+    openPage(`/#db=${alpha}&db=${beta}&at=terms:alpha`, {
+      [alpha]: { body: database('alpha') },
+      [beta]: { body: database('beta') },
+    });
+    const dialog = await screen.findByRole('dialog', { name: 'Filter terms' });
+    expect(text(dialog.querySelector('.helper-copy'))).toBe('Keep or exclude the terms of all databases in the filter they share ([mister]). Choosing a term again takes it out.');
+    expect(new URLSearchParams(window.location.hash.slice(1)).get('at')).toBe('terms');
   });
 });

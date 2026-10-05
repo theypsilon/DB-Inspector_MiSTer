@@ -1,5 +1,5 @@
 import { applyInspectionFilter, summarizeInspectionStorage } from '../lib/database.js';
-import { buildCollisionTree, combineDatabaseViews } from '../lib/combine.js';
+import { buildCollisionTree, combineDatabaseViews, countCombinedFiles } from '../lib/combine.js';
 import { downloaderFilterInputs } from '../lib/combinedFilters.js';
 import { normalizeFilterPromptValue, resolveDownloaderFilter, resolveDownloaderFilterSource } from '../lib/filterDefaults.js';
 import { buildFlatArchiveIndex, buildFlatNodeIndex } from '../lib/treeIndex.js';
@@ -37,11 +37,11 @@ export function buildCombinedView(databases, filters) {
 // How many files the loaded databases list before any filter, counted as their views count them:
 // archive entries included, and a path several combined databases install once.
 export function countLoadedFiles(databases) {
-  const unfiltered = databases.map(({ inspection }) => ({ dbId: inspection.overview.dbId, view: applyInspectionFilter(inspection, '') }));
-  if (unfiltered.length > 1) {
-    return combineDatabaseViews(unfiltered).resultCounts.files;
+  if (databases.length > 1) {
+    // An inspection before its filter holds every record its filtered views start from.
+    return countCombinedFiles(databases.map(({ inspection }) => ({ dbId: inspection.overview.dbId, view: inspection })));
   }
-  return unfiltered.length ? unfiltered[0].view.activeFilter.resultCounts.files : 0;
+  return databases.length ? applyInspectionFilter(databases[0].inspection, '').activeFilter.resultCounts.files : 0;
 }
 
 export function buildFilesystemIndex(activeView) {

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { applyInspectionFilter, loadDatabaseSourceFile } from '../../src/lib/database.js';
-import { combineDatabaseViews } from '../../src/lib/combine.js';
+import { combineDatabaseViews, countCombinedFiles } from '../../src/lib/combine.js';
 
 async function view(db, filter = '') {
   const source = await loadDatabaseSourceFile(
@@ -200,3 +200,57 @@ test('issues name their database, and each collided path counts once for the siz
     [['y.rbf', 1], ['x.rbf', 30]],
   );
 });
+
+test('counting the files of combined databases gives what combining them counts, without combining them', async () => {
+  const archive = (id, files) => ({
+    [id]: {
+      description: id,
+      format: 'zip',
+      extract: 'all',
+      target_folder: 'games/',
+      archive_file: { url: `https://example.com/${id}.zip`, size: 1, hash: id },
+      summary_inline: { files: Object.fromEntries(Object.entries(files).map(([path, file]) => [path, { arc_id: id, ...file }])), folders: {} },
+    },
+  });
+  const scenarios = {
+    'no shared paths': [
+      database('alpha', { files: { 'cores/a.rbf': { size: 1, hash: 'a' } }, folders: { 'cores/': {} } }),
+      database('beta', { files: { 'games/b.rom': { size: 2, hash: 'b' } } }),
+    ],
+    'a file two databases install, and a case variant of it': [
+      database('alpha', { files: { 'cores/shared.rbf': { size: 1, hash: 'a' }, 'cores/Only.rbf': { size: 1, hash: 'o' } } }),
+      database('beta', { files: { 'CORES/Shared.rbf': { size: 1, hash: 'a' }, 'cores/other.rbf': { size: 1, hash: 'x' } } }),
+    ],
+    'an archive file another database installs': [
+      database('alpha', { files: { 'games/one.rom': { size: 1, hash: 'o' } } }),
+      database('beta', { archives: archive('roms', { 'games/one.rom': { size: 1, hash: 'o' }, 'games/two.rom': { size: 1, hash: 't' } }) }),
+    ],
+    // Alpha installs games/nes twice (from its files and an archive): one collided path still counts once.
+    'a file where another database needs a folder, declared or implied': [
+      database('alpha', { files: { 'games/nes': { size: 1, hash: 'n' }, 'docs': { size: 1, hash: 'd' } }, archives: archive('more', { 'games/nes': { size: 1, hash: 'n' } }) }),
+      database('beta', { files: { 'games/nes/a.nes': { size: 1, hash: 'a' } }, folders: { 'docs/': {} } }),
+    ],
+    'a path one database installs twice, from its files and an archive': [
+      database('alpha', { files: { 'games/one.rom': { size: 1, hash: 'o' } }, archives: archive('roms', { 'games/one.rom': { size: 1, hash: 'o' } }) }),
+      database('beta', { files: { 'games/b.rom': { size: 1, hash: 'b' } } }),
+    ],
+    'three databases': [
+      database('alpha', { files: { 'a/x.bin': { size: 1, hash: 'x' }, 'a/y.bin': { size: 1, hash: 'y' } } }),
+      database('beta', { files: { 'a/x.bin': { size: 2, hash: 'x2' }, 'b/z.bin': { size: 1, hash: 'z' } } }),
+      database('gamma', { files: { 'a/x.bin': { size: 1, hash: 'x' }, 'a/y.bin/inside.bin': { size: 1, hash: 'i' } } }),
+    ],
+  };
+
+  for (const [name, databases] of Object.entries(scenarios)) {
+    const entries = await Promise.all(databases.map((db) => view(db)));
+    assert.equal(countCombinedFiles(entries), combineDatabaseViews(entries).resultCounts.files, name);
+  }
+  // With filters, as combined views are.
+  const filtered = [
+    await view(database('alpha', { tag_dictionary: { keep: 0 }, files: { 'a.bin': { size: 1, hash: 'a', tags: [0] }, 'b.bin': { size: 1, hash: 'b' } } }), '!keep'),
+    await view(database('beta', { files: { 'b.bin': { size: 1, hash: 'b' } } })),
+  ];
+  assert.equal(countCombinedFiles(filtered), combineDatabaseViews(filtered).resultCounts.files);
+  assert.equal(countCombinedFiles(filtered), 1);
+});
+

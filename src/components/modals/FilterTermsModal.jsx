@@ -1,8 +1,9 @@
 import { useEffect, useEffectEvent, useState } from 'react';
 import ModalFrame from './ModalFrame.jsx';
 import EmptyState from '../ui/EmptyState.jsx';
+import useDebouncedValue from '../../hooks/useDebouncedValue.js';
 import { searchFilterTerms, termUse, toggleTerm } from '../../lib/filterTerms.js';
-import { COMBINED_DATABASES_IN_FULL_MAX } from '../../lib/utils.js';
+import { COMBINED_DATABASES_IN_FULL_MAX, FILTER_INPUT_DEBOUNCE_MS } from '../../lib/utils.js';
 
 // The databases that have a term, as the terms list names them: each, or how many past a few.
 function TermDatabases({ dbIds }) {
@@ -57,14 +58,35 @@ function describeNumbers(term, combined) {
  *   combined: boolean,
  *   filter: string,
  *   matches: { kept: number, total: number, pending: boolean, invalid: boolean },
+ *   search?: string,
  *   onFilterChange: (filter: string) => void,
+ *   onSearchChange?: (search: string) => void,
  *   onClose: () => void,
  * }} props `intro` says which FILTER box the terms go in; `matches`, how many files of all the
- * loaded databases the FILTERs leave (`kept`, of `total`), or that they are settling.
+ * loaded databases the FILTERs leave (`kept`, of `total`), or that they are settling. `search` is
+ * what the search box opens with, and `onSearchChange` hears what it holds once typing pauses.
  */
-export default function FilterTermsModal({ intro, terms, withoutTerms, combined, filter, matches, onFilterChange, onClose }) {
-  const [query, setQuery] = useState('');
+export default function FilterTermsModal({
+  intro,
+  terms,
+  withoutTerms,
+  combined,
+  filter,
+  matches,
+  search = '',
+  onFilterChange,
+  onSearchChange,
+  onClose,
+}) {
+  const [query, setQuery] = useState(search);
   const shown = searchFilterTerms(terms, query);
+
+  // Once typing pauses, as FILTER reaches the link: the search's ends do not change what it finds.
+  const settledQuery = useDebouncedValue(query.trim(), FILTER_INPUT_DEBOUNCE_MS);
+  const reportSearch = useEffectEvent((value) => onSearchChange?.(value));
+  useEffect(() => {
+    reportSearch(settledQuery);
+  }, [settledQuery]);
 
   const handleKeyDown = useEffectEvent((event) => {
     if (event.key === 'Escape' && !event.defaultPrevented) {

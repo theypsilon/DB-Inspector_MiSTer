@@ -1,5 +1,14 @@
 import { startTransition, useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { buildExplorerAnchor, parseExplorerAnchor, parseNodeAnchor, readLink, writeLinkAnchor, writeLinkDetailed } from './lib/urlState.js';
+import {
+  buildExplorerAnchor,
+  buildTermsAnchor,
+  parseExplorerAnchor,
+  parseNodeAnchor,
+  parseTermsAnchor,
+  readLink,
+  writeLinkAnchor,
+  writeLinkDetailed,
+} from './lib/urlState.js';
 import { buildExplorerTree } from './lib/explorer.js';
 import { DEFAULT_CLUSTER_SIZE_BYTES, buildCombinedFilterSummaryCopy, collectTextMatchRanges, runAfterNextPaint } from './lib/utils.js';
 import { createAppModel } from './model/appModel.js';
@@ -111,9 +120,19 @@ export default function App() {
   const explorerPathRef = useRef(null);
   const explorerOpenerRef = useRef(null);
   const explorerKeyRef = useRef(0);
-  // The FILTER box whose terms are shown: 'main' (FILTER, or the shared filter of combined
-  // databases), or the db_id of a combined database's own filter; null while they are not.
-  const [termsTarget, setTermsTarget] = useState(null);
+  // The FILTER box whose terms are shown (`target`): 'main' (FILTER, or the shared filter of
+  // combined databases), or the db_id of a combined database's own filter; with the search they
+  // open with, and a key that opens them afresh when a link names them again. null while closed.
+  const [termsDialog, setTermsDialog] = useState(null);
+  const termsKeyRef = useRef(0);
+  const termsTarget = termsDialog?.target ?? null;
+  // The terms open in the page's link too: `terms`, or terms:<db_id> for a database's own filter,
+  // then ?<search> while their search holds something.
+  const openTerms = useCallback((target, search = '') => {
+    termsKeyRef.current += 1;
+    setTermsDialog({ target, search, key: termsKeyRef.current });
+    writeLinkAnchor(buildTermsAnchor(target === 'main' ? null : target, search));
+  }, []);
   const dropzone = useFileDropzone(model.openDrop);
   const handleDatabaseDetailedChange = useCallback((next) => {
     startTransition(() => {
@@ -146,8 +165,10 @@ export default function App() {
       : [{ dbId: inspection.overview.dbId, inspection }];
     return buildFilterTerms(isCombined && termsTarget !== 'main' ? loaded.filter(({ dbId }) => dbId === termsTarget) : loaded);
   }, [termsOpen, termsTarget, isCombined, databases, inspection]);
-  // What the FILTERs leave of the files the loaded databases list, for the terms' dialog.
-  const loadedFileCount = useMemo(() => (termsOpen ? countLoadedFiles(databases) : 0), [termsOpen, databases]);
+  // How many files the loaded databases list, for the terms' dialog to count matches against:
+  // counted once the dialog is on screen (see the effect below), for the databases it was counted for.
+  const [loadedFiles, setLoadedFiles] = useState({ databases: null, count: 0 });
+  const loadedFileCount = loadedFiles.databases === databases ? loadedFiles.count : null;
   // The explorer and the terms cover the page.
   const pageCovered = explorerOpen || termsOpen;
   const isFiltering = combinedView ? combinedView.isFiltering : Boolean(displayedInspection?.activeFilter.isFiltering);
@@ -227,7 +248,7 @@ export default function App() {
   }, []);
 
   // Goes where the link's anchor points: a row, a section, the install dialog, the explorer, or
-  // the filter terms (`tags`, the link of the section that listed them before).
+  // the filter terms.
   const openLinkAnchor = useEffectEvent(() => {
     if (!inspection && !isCombined) {
       return;
@@ -248,11 +269,14 @@ export default function App() {
       return;
     }
     setExplorer(null);
-    if (at === 'tags') {
-      setTermsTarget('main');
+    // A database's own filter's terms, while it has one; else FILTER's (and the link says so).
+    const terms = parseTermsAnchor(at);
+    if (terms) {
+      const ownFilter = isCombined && terms.dbId !== null && Object.hasOwn(combinedFilters.overrides, terms.dbId);
+      openTerms(ownFilter ? terms.dbId : 'main', terms.search);
       return;
     }
-    setTermsTarget(null);
+    setTermsDialog(null);
 
     const anchor = parseNodeAnchor(at, isCombined ? databases.map(({ inspection: database }) => database.overview.dbId) : null);
     if (anchor) {
@@ -322,6 +346,23 @@ export default function App() {
     };
   }, [model, modalOpen, catalogModalOpen, choicePickerOpen, prompt]);
 
+  // The terms' dialog shows first, counting, and its count of the loaded files follows a frame
+  // later: counting every file of many databases would hold the dialog back.
+  useEffect(() => {
+    if (!termsOpen || loadedFiles.databases === databases) {
+      return undefined;
+    }
+
+    let timer = 0;
+    const frame = requestAnimationFrame(() => {
+      timer = window.setTimeout(() => setLoadedFiles({ databases, count: countLoadedFiles(databases) }));
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+    };
+  }, [termsOpen, databases, loadedFiles.databases]);
+
   function loadUrl(event) {
     event.preventDefault();
     /** @type {HTMLElement | null} */ (document.activeElement)?.blur?.();
@@ -338,8 +379,8 @@ export default function App() {
   }
 
   const closeTerms = useCallback(() => {
-    setTermsTarget(null);
-    if (readLink().at === 'tags') {
+    setTermsDialog(null);
+    if (parseTermsAnchor(readLink().at)) {
       writeLinkAnchor('');
     }
   }, []);
@@ -429,7 +470,7 @@ export default function App() {
               onOverrideChange={model.setOwnFilter}
               onOverrideAdd={model.addOwnFilter}
               onOverrideRemove={model.removeOwnFilter}
-              onBrowseTerms={(target) => setTermsTarget(target === 'shared' ? 'main' : target)}
+              onBrowseTerms={(target) => openTerms(target === 'shared' ? 'main' : target)}
               hasEssentialHint={hasEssentialHint}
               hasUntaggedItems={hasUntaggedItems}
               onSearchEssential={searchForEssential}
@@ -456,7 +497,7 @@ export default function App() {
               onFilterInputChange={model.setFilterInput}
               canReset={canResetFilter(filterInput, effectiveDefaultFilter)}
               onReset={model.resetFilter}
-              onBrowseTerms={() => setTermsTarget('main')}
+              onBrowseTerms={() => openTerms('main')}
               hasEssentialHint={hasEssentialHint}
               hasUntaggedItems={hasUntaggedItems}
               onSearchEssential={searchForEssential}
@@ -617,6 +658,7 @@ export default function App() {
 
       {filterTerms ? (
         <FilterTermsModal
+          key={termsDialog.key}
           intro={
             !isCombined
               ? `Keep or exclude ${inspection.overview.dbId}'s terms in FILTER.`
@@ -630,13 +672,15 @@ export default function App() {
           filter={!isCombined ? filterInput : termsTarget === 'main' ? combinedFilters.shared.value : combinedFilters.overrides[termsTarget] ?? ''}
           matches={{
             kept: isCombined ? combinedView.resultCounts.files : displayedInspection.activeFilter.resultCounts.files,
-            total: loadedFileCount,
-            pending: isCombined ? combinedFilters !== debouncedCombinedFilters : filterInput !== debouncedFilterInput,
+            total: loadedFileCount ?? 0,
+            pending: loadedFileCount === null || (isCombined ? combinedFilters !== debouncedCombinedFilters : filterInput !== debouncedFilterInput),
             invalid: !isCombined && displayedInspection.activeFilter.hasError,
           }}
+          search={termsDialog.search}
           onFilterChange={
             !isCombined ? model.setFilterInput : termsTarget === 'main' ? model.setSharedFilter : (value) => model.setOwnFilter(termsTarget, value)
           }
+          onSearchChange={(search) => writeLinkAnchor(buildTermsAnchor(termsTarget === 'main' ? null : termsTarget, search))}
           onClose={closeTerms}
         />
       ) : null}

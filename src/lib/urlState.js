@@ -11,7 +11,8 @@ import { Inflate, deflateSync } from 'fflate';
 // - filter.<db_id>=<terms>: a combined database's own filter.
 // - detailed: details are shown.
 // - at=<anchor>: a row (see buildNodeAnchor), a section (filter, files, issues...), `install`, the
-//   install dialog of a database shown alone, or the explorer (see buildExplorerAnchor).
+//   install dialog of a database shown alone, the explorer (see buildExplorerAnchor), or the filter
+//   terms (see buildTermsAnchor).
 //
 // When the whole address would be longer than LINK_READABLE_MAX characters, the keys before `at`
 // are packed into z=<data>: their text, deflated, in base64url. Unknown keys are ignored. Only %,
@@ -324,6 +325,46 @@ export function parseExplorerAnchor(at) {
   }
 
   return at.startsWith(`${EXPLORER_ANCHOR}:`) ? at.slice(EXPLORER_ANCHOR.length + 1).replace(/\/+$/, '') : null;
+}
+
+// The filter terms' anchor: `terms` opens the terms of FILTER (or of the shared filter of combined
+// databases), and terms:<db_id> those of a combined database's own filter; either can end with
+// ?<search>, the dialog's search. Everything after the first ? is the search, so a search can hold
+// one, and a db_id cannot. `tags`, the anchor of the section that listed the terms before, opens
+// them as `terms` does.
+const TERMS_ANCHOR = 'terms';
+const OLD_TERMS_ANCHOR = 'tags';
+
+/**
+ * @param {string | null} [dbId] A combined database whose own filter's terms are open.
+ * @param {string} [search] What the dialog's search box holds.
+ */
+export function buildTermsAnchor(dbId = null, search = '') {
+  const query = search.trim();
+  return `${TERMS_ANCHOR}${dbId === null ? '' : `:${dbId}`}${query ? `?${query}` : ''}`;
+}
+
+/**
+ * What a terms anchor names: the database whose own filter's terms are open (null for FILTER's) and
+ * the search, as { dbId, search }; or null when `at` names something else.
+ * @param {string} at
+ */
+export function parseTermsAnchor(at) {
+  if (at === OLD_TERMS_ANCHOR) {
+    return { dbId: null, search: '' };
+  }
+  if (!at.startsWith(TERMS_ANCHOR)) {
+    return null;
+  }
+
+  const rest = at.slice(TERMS_ANCHOR.length);
+  const searchStart = rest.indexOf('?');
+  const target = searchStart < 0 ? rest : rest.slice(0, searchStart);
+  const search = searchStart < 0 ? '' : rest.slice(searchStart + 1);
+  if (target === '') {
+    return { dbId: null, search };
+  }
+  return target.startsWith(':') && target.length > 1 ? { dbId: target.slice(1), search } : null;
 }
 
 /**

@@ -262,6 +262,25 @@ test('large trees render near the viewport, keep their spacing, and reach far ro
     await page.emulateMedia({ reducedMotion: null });
     expect(await durations()).not.toEqual(['0s', '0s']);
   });
+
+  await test.step('of a long list of filter terms, only those on screen are laid out', async () => {
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog', { name: 'Explorer' })).toHaveCount(0);
+    await page.locator('#section-filter').getByRole('button', { name: 'Terms', exact: true }).click();
+    const terms = page.getByRole('dialog', { name: 'Filter terms' });
+    const names = terms.locator('.filter-term strong');
+    await expect(names).toHaveCount(71);
+    // Runs in the page: whether a term's name is laid out (not skipped as off screen).
+    const laidOut = (name) => name.evaluate((element) => element.checkVisibility({ contentVisibilityAuto: true }));
+    expect(await laidOut(names.first())).toBe(true);
+    expect(await laidOut(names.last())).toBe(false);
+    await names.last().scrollIntoViewIfNeeded();
+    await expect.poll(() => laidOut(names.last())).toBe(true);
+    // The count follows, once the dialog is on screen.
+    await expect(terms.locator('.filter-terms-matches')).toHaveText(`Matches all ${(FILE_COUNT + ARCHIVE_COUNT).toLocaleString('en-US')} files`);
+    await terms.getByRole('button', { name: 'Done' }).click();
+  });
 });
 
 function rowNamed(page, name) {
@@ -288,7 +307,11 @@ function buildLargeDatabase() {
     v: 1,
     timestamp: 1710000000,
     base_files_url: 'https://example.com/',
-    tag_dictionary: Object.fromEntries(Array.from({ length: 11 }, (_, index) => [`tag_${index}`, index])),
+    // Eleven tags the first file uses, and more that nothing uses, for a long list of filter terms.
+    tag_dictionary: Object.fromEntries([
+      ...Array.from({ length: 11 }, (_, index) => [`tag_${index}`, index]),
+      ...Array.from({ length: 60 }, (_, index) => [`unused_${String(index).padStart(2, '0')}`, 100 + index]),
+    ]),
     files,
     folders: { 'games/': {}, ...folders },
     archives: {
