@@ -203,11 +203,24 @@ test('a shared link opens its database, and the page around it works', async ({ 
     await open.click();
     await expect(explorer).toBeVisible();
     expect(link()).toBe(`#db=${SHARED_URL}&at=explorer`);
+
+    // With the page's time in the test's hands: a double click goes in, and the details never come
+    // up; a click selects at once, and shows the details once the time of a double click has passed.
+    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1_000));
+    const details = explorer.getByRole('complementary');
     await entry('games').dblclick();
+    await expect(shown).toHaveText('games');
     await entry('flows').dblclick();
     await expect(shown).toHaveText('flows');
+    await page.clock.runFor(1_000);
+    await expect(details).toHaveCount(0);
     await entry('untagged.bin').click();
+    await expect(entry('untagged.bin')).toHaveAttribute('aria-selected', 'true');
+    await page.clock.runFor(250);
+    await expect(details).toHaveCount(0);
+    await page.clock.runFor(50);
     await expect(explorer.getByRole('complementary', { name: 'Details of untagged.bin' })).toContainText('Archive flows_archive');
+    await page.clock.resume();
     await expect.poll(link).toBe(`#db=${SHARED_URL}&at=explorer:games/flows/untagged.bin`);
 
     // Alt+← goes back a folder, not back a page; the details show the folder that leads back.

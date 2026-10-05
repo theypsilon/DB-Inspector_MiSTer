@@ -4,6 +4,7 @@ import ExplorerItems from './ExplorerItems.jsx';
 import ExplorerDetails from './ExplorerDetails.jsx';
 import { BackIcon, CloseIcon, ForwardIcon, IconsViewIcon, ListViewIcon, UpIcon } from './ExplorerIcons.jsx';
 import {
+  EXPLORER_DETAILS_DELAY_MS,
   readExplorerView,
   resolveExplorerLocation,
   startExplorerHistory,
@@ -16,7 +17,9 @@ import {
  * The explorer: the SD card the databases shown would install (see src/lib/explorer.js), one folder
  * at a time, as Windows' File Explorer shows a drive. A click selects an entry and shows its
  * details; a double click goes into a folder (a tap, on a touch screen). Back, Forward and Up move
- * through the folders, and the path goes to any folder above.
+ * through the folders, and the path goes to any folder above. The details wait out the time of a
+ * double click before they come up, so a double click goes in without the list changing width (and
+ * its icons moving) under it; once up, they show what is clicked at once.
  *
  * It keeps its own history of folders, so the browser's Back and Forward still move between what
  * the page has open. `onLocationChange` gets the path the page's link names: the folder shown, or
@@ -39,12 +42,15 @@ export default function ExplorerModal({ tree, initialPath, filtering, suspended 
   const [view, setView] = useState(readExplorerView);
   const listboxRef = useRef(null);
   const panelRef = useRef(null);
+  // The details waiting for the double click time to pass, and whether they came up that way.
+  const detailsTimerRef = useRef(0);
+  const detailsFromClickRef = useRef(false);
 
   const { folder } = resolveExplorerLocation(tree, history.paths[history.index]);
   const entries = folder.children;
   const selectedIndex = selectedPath === null ? -1 : entries.findIndex((entry) => entry.path === selectedPath);
   const selected = selectedIndex >= 0 ? entries[selectedIndex] : null;
-  const detailsEntry = detailsOpen ? selected ?? folder : null;
+  const detailsEntry = selected ?? folder;
   const linkPath = detailsOpen && selected?.kind === 'file' ? selected.path : folder.path;
 
   useEffect(() => {
@@ -56,9 +62,27 @@ export default function ExplorerModal({ tree, initialPath, filtering, suspended 
     (listboxRef.current ?? panelRef.current)?.focus({ preventScroll: true });
   }, [folder.path]);
 
+  useEffect(() => {
+    const timers = detailsTimerRef;
+    return () => window.clearTimeout(timers.current);
+  }, []);
+
+  const cancelWaitingDetails = () => {
+    window.clearTimeout(detailsTimerRef.current);
+    detailsTimerRef.current = 0;
+  };
+
+  const showDetails = (entry) => {
+    cancelWaitingDetails();
+    detailsFromClickRef.current = false;
+    setSelectedPath(entry.path);
+    setDetailsOpen(true);
+  };
+
   // Shows a folder. Going to a folder above the one shown selects the folder that leads back, as
   // Windows does.
   const show = (target) => {
+    cancelWaitingDetails();
     let child = folder;
     while (child && child.parent !== target) {
       child = child.parent;
@@ -92,20 +116,55 @@ export default function ExplorerModal({ tree, initialPath, filtering, suspended 
   };
 
   const closeDetails = () => {
+    cancelWaitingDetails();
     setDetailsOpen(false);
     (listboxRef.current ?? panelRef.current)?.focus({ preventScroll: true });
   };
 
-  // On a touch screen a tap goes into a folder, as there is no double tap.
+  // On a touch screen, which has no double tap, a tap goes into a folder or shows a file's details.
   const handleClick = (entry, event) => {
     const pointerType = /** @type {PointerEvent} */ (event.nativeEvent).pointerType;
-    if (entry.kind === 'folder' && (pointerType === 'touch' || pointerType === 'pen')) {
-      openFolder(entry);
+    if (pointerType === 'touch' || pointerType === 'pen') {
+      if (entry.kind === 'folder') {
+        openFolder(entry);
+      } else {
+        showDetails(entry);
+      }
+      return;
+    }
+
+    // The second click of a double click: the double click decides.
+    if (event.detail > 1) {
       return;
     }
 
     setSelectedPath(entry.path);
-    setDetailsOpen(true);
+    detailsFromClickRef.current = false;
+    if (!detailsOpen) {
+      cancelWaitingDetails();
+      detailsTimerRef.current = window.setTimeout(() => {
+        detailsTimerRef.current = 0;
+        detailsFromClickRef.current = true;
+        setDetailsOpen(true);
+      }, EXPLORER_DETAILS_DELAY_MS);
+    }
+  };
+
+  // Going in, or showing a file's details, ends the wait of the first click's details.
+  const handleDoubleClick = (entry) => {
+    const detailsFromFirstClick = detailsFromClickRef.current;
+    detailsFromClickRef.current = false;
+    if (entry.kind === 'file') {
+      showDetails(entry);
+      return;
+    }
+
+    // A double click slower than the details' wait let its first click's details come up: going
+    // in takes them away again.
+    if (detailsFromFirstClick) {
+      setDetailsOpen(false);
+    }
+    openFolder(entry);
   };
 
   const handleKeyDown = useEffectEvent((event) => {
@@ -115,6 +174,7 @@ export default function ExplorerModal({ tree, initialPath, filtering, suspended 
 
     if (event.key === 'Escape') {
       event.preventDefault();
+      cancelWaitingDetails();
       if (detailsOpen) {
         closeDetails();
       } else {
@@ -197,28 +257,23 @@ export default function ExplorerModal({ tree, initialPath, filtering, suspended 
               entries={entries}
               folderPath={folder.path}
               view={view}
+              detailsOpen={detailsOpen}
               label={`${folder.name} contents`}
               selectedIndex={selectedIndex}
               listboxRef={listboxRef}
               onSelect={(index) => setSelectedPath(entries[index].path)}
-              onActivate={(entry) => (entry.kind === 'folder' ? openFolder(entry) : setDetailsOpen(true))}
+              onActivate={(entry) => (entry.kind === 'folder' ? openFolder(entry) : showDetails(entry))}
               onClickEntry={handleClick}
-              onDoubleClickEntry={(entry) => {
-                if (entry.kind === 'folder') {
-                  openFolder(entry);
-                }
-              }}
-              onInfo={(entry) => {
-                setSelectedPath(entry.path);
-                setDetailsOpen(true);
-              }}
+              onDoubleClickEntry={handleDoubleClick}
+              onInfo={showDetails}
             />
           ) : (
             <p className="explorer-empty">
               {filtering ? 'Nothing in this folder is installed with the current filter.' : 'This folder is empty.'}
             </p>
           )}
-          {detailsEntry ? (
+          {/* The details stay in the page while closed, hidden, so they can slide in and out. */}
+          <div className={detailsOpen ? 'explorer-details-slot is-open' : 'explorer-details-slot'} aria-hidden={detailsOpen ? undefined : true} inert={!detailsOpen}>
             <ExplorerDetails
               entry={detailsEntry}
               folder={folder}
@@ -226,7 +281,7 @@ export default function ExplorerModal({ tree, initialPath, filtering, suspended 
               onOpenFolder={openFolder}
               onDownloadError={onDownloadError}
             />
-          ) : null}
+          </div>
         </div>
       </section>
     </div>

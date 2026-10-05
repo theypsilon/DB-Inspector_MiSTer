@@ -114,6 +114,8 @@ test('large trees render near the viewport, keep their spacing, and reach far ro
   });
 
   await test.step('the explorer renders only the entries near view of a large folder, as a list and as icons, and reaches the last', async () => {
+    // The page's time runs as usual until a step stops it.
+    await page.clock.install();
     await page.goto('about:blank');
     await page.goto('/#at=explorer:games/archive');
     await upload(page, 'large.json', buildLargeDatabase());
@@ -159,6 +161,107 @@ test('large trees render near the viewport, keep their spacing, and reach far ro
     await expect(explorer.locator('.explorer-crumb-current')).toHaveText('SD card');
     await expect(more).toHaveCount(0);
     await page.setViewportSize({ width: 1440, height: 960 });
+  });
+
+  await test.step('the icons: drawn in place on opening, a double click going into a folder before the details move anything, and making way for the details at once', async () => {
+    const explorer = page.getByRole('dialog', { name: 'Explorer' });
+    const entry = (name) => explorer.getByRole('option', { name: new RegExp(`^${name.replace('.', '\\.')},`) });
+    const details = explorer.getByRole('complementary');
+    // Runs in the page: the number of columns of the icons drawn.
+    const countColumns = () => new Set([...document.querySelectorAll('.explorer-tile')].map((tile) => tile.style.transform.split(',')[0])).size;
+
+    // Opening in the icons view (remembered in the browser), the icons are drawn in their places,
+    // rather than glide there from where they were first put: one is where it was first drawn ten
+    // frames later.
+    await page.evaluate(() => localStorage.setItem('inspector-explorer-view', 'icons'));
+    await page.goto('about:blank');
+    await page.goto('/#at=explorer:games');
+    await page.evaluate(() => {
+      window.firstPlaces = new Promise((resolve) => {
+        const observer = new MutationObserver(() => {
+          const tile = document.querySelector('[role="option"][aria-label^="folder_14,"]');
+          if (!tile) return;
+          observer.disconnect();
+          const first = tile.getBoundingClientRect();
+          let frames = 0;
+          const later = () => {
+            frames += 1;
+            if (frames < 10) {
+              requestAnimationFrame(later);
+            } else {
+              const last = tile.getBoundingClientRect();
+              resolve([[first.x, first.y], [last.x, last.y]]);
+            }
+          };
+          requestAnimationFrame(later);
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+      });
+    });
+    await upload(page, 'large.json', buildLargeDatabase());
+    const [first, last] = await page.evaluate(() => window.firstPlaces);
+    expect(last).toEqual(first);
+
+    // The last of the folders, at the end of the second row of icons, which fewer columns move.
+    const folder = entry('folder_14');
+    await expect(folder).toBeVisible();
+
+    // The page's time moves only when the test moves it, from here.
+    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1_000));
+    const box = await folder.boundingBox();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.up();
+    await expect(folder).toHaveAttribute('aria-selected', 'true');
+    // Up to the double click time later, nothing has moved under the pointer.
+    await page.clock.runFor(250);
+    expect(await folder.boundingBox()).toEqual(box);
+    await expect(details).toHaveCount(0);
+    // The second click of the double click goes in, and the details never come up.
+    await page.mouse.down({ clickCount: 2 });
+    await page.mouse.up({ clickCount: 2 });
+    await expect(explorer.locator('.explorer-crumb-current')).toHaveText('folder_14');
+    await page.clock.runFor(1_000);
+    await expect(details).toHaveCount(0);
+
+    // A click shows the details after the wait. The icons are laid out at once for the width the
+    // list will have, in fewer columns, while the details are only starting to slide in.
+    const before = await page.evaluate(countColumns);
+    // Runs in the page: the details' width, and the icons' columns, as the details start to open.
+    await page.evaluate(() => {
+      const slot = document.querySelector('.explorer-details-slot');
+      window.detailsOpening = new Promise((resolve) => {
+        const observer = new MutationObserver(() => {
+          if (!slot.classList.contains('is-open')) return;
+          observer.disconnect();
+          const columns = new Set([...document.querySelectorAll('.explorer-tile')].map((tile) => tile.style.transform.split(',')[0])).size;
+          resolve({ slotWidth: slot.getBoundingClientRect().width, columns });
+        });
+        observer.observe(slot, { attributes: true, attributeFilter: ['class'] });
+      });
+    });
+    await entry('file_00560.rbf').click();
+    await page.clock.runFor(300);
+    await expect(explorer.getByRole('complementary', { name: 'Details of file_00560.rbf' })).toBeVisible();
+    const opening = await page.evaluate(() => window.detailsOpening);
+    expect(opening.slotWidth).toBeLessThan(100);
+    expect(opening.columns).toBeLessThan(before);
+    await page.clock.resume();
+    // Once the details are in, the last icon is inside the list, beside them.
+    await expect
+      .poll(async () => {
+        const [tile, list] = await Promise.all([entry('file_00599.rbf').boundingBox(), explorer.locator('.explorer-items').boundingBox()]);
+        return list.width < 1100 && tile.x + tile.width <= list.x + list.width;
+      })
+      .toBe(true);
+
+    // Visitors who ask for less motion get the same places without the movement.
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    const durations = () =>
+      page.evaluate(() => [document.querySelector('.explorer-details-slot'), document.querySelector('.explorer-tile')].map((element) => getComputedStyle(element).transitionDuration));
+    expect(await durations()).toEqual(['0s', '0s']);
+    await page.emulateMedia({ reducedMotion: null });
+    expect(await durations()).not.toEqual(['0s', '0s']);
   });
 });
 

@@ -228,8 +228,13 @@ test('the catalog lists known databases and opens them alone or together', async
     await expect(explorer.getByRole('complementary').locator('.explorer-origins .db-chip', { hasText: dbId })).toBeVisible();
     await expect.poll(() => page.evaluate(findWiderInExplorer)).toEqual([]);
     // The details come up from the bottom, as wide as the screen.
-    const [panelBox, detailsBox] = await Promise.all([explorer.boundingBox(), explorer.getByRole('complementary').boundingBox()]);
-    expect([detailsBox.x, detailsBox.width, Math.round(detailsBox.y + detailsBox.height)]).toEqual([0, 360, Math.round(panelBox.height)]);
+    const panelBox = await explorer.boundingBox();
+    await expect
+      .poll(async () => {
+        const detailsBox = await explorer.getByRole('complementary').boundingBox();
+        return [detailsBox.x, detailsBox.width, Math.round(detailsBox.y + detailsBox.height)];
+      })
+      .toEqual([0, 360, Math.round(panelBox.height)]);
     await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
     await expect(explorer).toHaveCount(0);

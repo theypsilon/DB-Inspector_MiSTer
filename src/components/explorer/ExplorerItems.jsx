@@ -10,11 +10,16 @@ const DEFAULT_SIZES = { rowHeight: 40, tileWidth: 124, tileHeight: 128 };
 /**
  * A folder's contents, as a list or as icons, in a box of its own that scrolls. Every row (or row
  * of icons) has one height, set in app.css, so only those in view are rendered, placed by their
- * index; the selected one is scrolled into view when it changes.
+ * index; the selected one is scrolled into view when it changes. Each icon is placed on its own,
+ * so when the number of columns changes, the icons glide to their new places (app.css) rather than
+ * jump. As the details come and go, the icons are laid out at once for the width the list will
+ * have, so they glide there while the details slide, rather than follow the list's width frame by
+ * frame.
  * @param {{
  *   entries: import('../../lib/explorer.js').ExplorerEntry[],
  *   folderPath: string,
  *   view: 'list' | 'icons',
+ *   detailsOpen: boolean,
  *   label: string,
  *   selectedIndex: number,
  *   listboxRef: import('react').RefObject<HTMLDivElement>,
@@ -29,6 +34,7 @@ export default function ExplorerItems({
   entries,
   folderPath,
   view,
+  detailsOpen,
   label,
   selectedIndex,
   listboxRef,
@@ -41,14 +47,21 @@ export default function ExplorerItems({
   const scrollRef = useRef(null);
   const [box, setBox] = useState({ width: 0, height: 0, ...DEFAULT_SIZES });
   const [scrollTop, setScrollTop] = useState(0);
+  // Whether the list has been laid out at its width: the icons glide only from then on, not from
+  // where they are first drawn.
+  const [settled, setSettled] = useState(false);
   const tileName = useTileNameLines(listboxRef, view, box.width);
 
   useLayoutEffect(() => {
     const element = scrollRef.current;
+    const main = element.parentElement;
     const measure = () => {
       const style = getComputedStyle(element);
+      // The width the list will have: the dialog's, less the details beside it while they are up,
+      // and less a scroll bar.
+      const details = detailsOpen ? readPixels(style, '--explorer-details-width', 0) : 0;
       const next = {
-        width: element.clientWidth,
+        width: Math.max(0, main.clientWidth - details - (element.offsetWidth - element.clientWidth)),
         height: element.clientHeight,
         rowHeight: readPixels(style, '--explorer-row-height', DEFAULT_SIZES.rowHeight),
         tileWidth: readPixels(style, '--explorer-tile-width', DEFAULT_SIZES.tileWidth),
@@ -58,9 +71,19 @@ export default function ExplorerItems({
     };
     measure();
     const observer = new ResizeObserver(measure);
+    observer.observe(main);
     observer.observe(element);
     return () => observer.disconnect();
-  }, []);
+  }, [detailsOpen]);
+
+  useEffect(() => {
+    if (settled || box.width <= 0) {
+      return undefined;
+    }
+
+    const frame = requestAnimationFrame(() => setSettled(true));
+    return () => cancelAnimationFrame(frame);
+  }, [settled, box.width]);
 
   const columns = view === 'icons' ? Math.max(1, Math.floor(box.width / box.tileWidth)) : 1;
   const lineHeight = view === 'icons' ? box.tileHeight : box.rowHeight;
@@ -113,7 +136,7 @@ export default function ExplorerItems({
     }
   };
 
-  const renderEntry = (entry, index) => (
+  const renderEntry = (entry, index, style) => (
     <ExplorerEntry
       key={entry.path}
       entry={entry}
@@ -122,28 +145,24 @@ export default function ExplorerItems({
       view={view}
       selected={index === selectedIndex}
       lines={view === 'icons' ? tileName(entry.name) : null}
-      style={view === 'icons' ? undefined : { top: `${index * lineHeight}px` }}
+      style={style}
       onClick={onClickEntry}
       onDoubleClick={onDoubleClickEntry}
       onInfo={onInfo}
     />
   );
 
+  // Icons are centered in columns that share the box's width.
+  const columnWidth = box.width > 0 ? box.width / columns : box.tileWidth;
   const lines = [];
   for (let line = start; line < end; line += 1) {
     if (view === 'icons') {
-      lines.push(
-        <div
-          key={line}
-          role="none"
-          className="explorer-tile-row"
-          style={{ top: `${line * lineHeight}px`, gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
-        >
-          {entries.slice(line * columns, (line + 1) * columns).map((entry, column) => renderEntry(entry, line * columns + column))}
-        </div>,
-      );
+      for (let index = line * columns; index < Math.min((line + 1) * columns, entries.length); index += 1) {
+        const left = Math.round((index % columns) * columnWidth + (columnWidth - box.tileWidth) / 2);
+        lines.push(renderEntry(entries[index], index, { transform: `translate(${left}px, ${line * lineHeight}px)` }));
+      }
     } else {
-      lines.push(renderEntry(entries[line], line));
+      lines.push(renderEntry(entries[line], line, { top: `${line * lineHeight}px` }));
     }
   }
 
@@ -156,7 +175,7 @@ export default function ExplorerItems({
         aria-label={label}
         aria-orientation={view === 'icons' ? 'horizontal' : 'vertical'}
         aria-activedescendant={selectedLine >= start && selectedLine < end ? entryId(selectedIndex) : undefined}
-        className={view === 'icons' ? 'explorer-listbox explorer-icons' : 'explorer-listbox explorer-list'}
+        className={`explorer-listbox ${view === 'icons' ? 'explorer-icons' : 'explorer-list'}${settled ? ' is-settled' : ''}`}
         style={{ height: `${lineCount * lineHeight}px` }}
         onKeyDown={handleKeyDown}
       >

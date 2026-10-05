@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import ExplorerModal from '../../src/components/explorer/ExplorerModal.jsx';
 import { applyInspectionFilter } from '../../src/lib/database.js';
 import { combineDatabaseViews } from '../../src/lib/combine.js';
-import { buildExplorerTree } from '../../src/lib/explorer.js';
+import { EXPLORER_DETAILS_DELAY_MS, buildExplorerTree } from '../../src/lib/explorer.js';
 import { inspect, text } from './support.js';
 
 // The explorer dialog: what it lists and shows, and what each click and key does. jsdom has no
@@ -89,6 +89,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -118,7 +119,8 @@ describe('the explorer', () => {
 
     await user.click(option('720 Degrees (rev 4).mra'));
     expect(option('720 Degrees (rev 4).mra').getAttribute('aria-selected')).toBe('true');
-    const details = screen.getByRole('complementary', { name: 'Details of 720 Degrees (rev 4).mra' });
+    // The details come up once the time of a double click has passed.
+    const details = await screen.findByRole('complementary', { name: 'Details of 720 Degrees (rev 4).mra' });
     expect(text(details.querySelector('.explorer-details-summary'))).toBe('File · 8.1 KB');
     expect(facts(details)).toEqual([
       ['Path', '_Arcade/720 Degrees (rev 4).mra'],
@@ -132,6 +134,7 @@ describe('the explorer', () => {
     expect(within(details).queryByRole('link', { name: 'OPEN' })).toBeNull();
     expect(lastLocation(onLocationChange)).toBe('_Arcade/720 Degrees (rev 4).mra');
 
+    // Once up, they show what is clicked at once.
     await user.click(option('notes.txt'));
     expect(within(screen.getByRole('complementary')).getByRole('link', { name: 'OPEN' }).getAttribute('href')).toBe('https://example.com/files/_Arcade/notes.txt');
 
@@ -151,9 +154,8 @@ describe('the explorer', () => {
     expect(lastLocation(onLocationChange)).toBe('_Arcade/_alternatives/_720_Degrees');
     expect([...document.querySelectorAll('.explorer-crumb-button')].map(text)).toEqual(['SD card', '_Arcade', '_alternatives']);
     expect(screen.getByRole('button', { name: 'Up to _alternatives' }).title).toBe('Up to _alternatives (Alt+↑)');
-    // The first click of a double click shows the folder's details; they stay, showing the folder
-    // gone into.
-    expect(screen.getByRole('complementary', { name: 'Details of _720_Degrees' })).toBeTruthy();
+    // A double click goes in without the details coming up.
+    expect(screen.queryByRole('complementary')).toBeNull();
 
     await user.click(screen.getByRole('button', { name: 'Back' }));
     expect(shown()).toBe('_alternatives');
@@ -173,6 +175,66 @@ describe('the explorer', () => {
     expect(shown()).toBe('SD card');
     expect(option('_Arcade').getAttribute('aria-selected')).toBe('true');
     expect(screen.getByRole('button', { name: 'Up' }).disabled).toBe(true);
+  });
+
+  test('the details wait out a double click: a double click goes in without them, and a slow one takes them away again', async () => {
+    const tree = await sdCard();
+    // The clock moves only when the test moves it. Clicks are dispatched as the browser does, the
+    // first with detail 1 and the second of a double click with detail 2, then the double click
+    // (user-event waits on timers between them, which a stopped clock never runs).
+    vi.useFakeTimers();
+    openExplorer(tree);
+    const wait = (ms) => act(() => vi.advanceTimersByTime(ms));
+    const click = (element) => fireEvent.click(element, { detail: 1 });
+    const doubleClick = (element) => {
+      fireEvent.click(element, { detail: 1 });
+      fireEvent.click(element, { detail: 2 });
+      fireEvent.doubleClick(element, { detail: 2 });
+    };
+    const closeDetails = () => click(screen.getByRole('button', { name: 'Close details' }));
+
+    click(option('menu.rbf'));
+    expect(option('menu.rbf').getAttribute('aria-selected')).toBe('true');
+    wait(EXPLORER_DETAILS_DELAY_MS - 1);
+    expect(screen.queryByRole('complementary')).toBeNull();
+    wait(1);
+    expect(screen.getByRole('complementary', { name: 'Details of menu.rbf' })).toBeTruthy();
+    closeDetails();
+
+    doubleClick(option('_Arcade'));
+    wait(1000);
+    expect(shown()).toBe('_Arcade');
+    expect(screen.queryByRole('complementary')).toBeNull();
+
+    // A double click slower than the wait: the first click's details came up, and going in takes
+    // them away.
+    click(option('cores'));
+    wait(EXPLORER_DETAILS_DELAY_MS);
+    expect(screen.getByRole('complementary', { name: 'Details of cores' })).toBeTruthy();
+    fireEvent.click(option('cores'), { detail: 2 });
+    fireEvent.doubleClick(option('cores'), { detail: 2 });
+    expect(shown()).toBe('cores');
+    expect(screen.queryByRole('complementary')).toBeNull();
+
+    // Details up before a double click stay, showing the folder gone into; once up, they show what
+    // is clicked at once.
+    click(screen.getByRole('button', { name: 'Up to _Arcade' }));
+    click(option('_alternatives'));
+    wait(EXPLORER_DETAILS_DELAY_MS);
+    click(option('cores'));
+    expect(screen.getByRole('complementary', { name: 'Details of cores' })).toBeTruthy();
+    doubleClick(option('cores'));
+    expect(shown()).toBe('cores');
+    expect(screen.getByRole('complementary', { name: 'Details of cores' })).toBeTruthy();
+    // A double click on a file shows its details at once.
+    closeDetails();
+    doubleClick(option('Arkanoid_20240525.rbf'));
+    expect(screen.getByRole('complementary', { name: 'Details of Arkanoid_20240525.rbf' })).toBeTruthy();
+
+    // Closed details are hidden from everyone, and out of the keyboard's way.
+    closeDetails();
+    const slot = document.querySelector('.explorer-details-slot');
+    expect([slot.getAttribute('aria-hidden'), slot.hasAttribute('inert'), slot.className]).toEqual(['true', true, 'explorer-details-slot']);
   });
 
   test('the keyboard: arrows select, Enter goes in or shows details, Backspace and Alt+arrows move, Escape closes the details, then the explorer', async () => {
@@ -236,7 +298,7 @@ describe('the explorer', () => {
     const { user } = openExplorer(await sdCard(), { initialPath: '_Arcade' });
 
     await user.click(option('_alternatives'));
-    const details = screen.getByRole('complementary', { name: 'Details of _alternatives' });
+    const details = await screen.findByRole('complementary', { name: 'Details of _alternatives' });
     expect(text(details.querySelector('.explorer-details-summary'))).toBe('Folder · 2 files · 81 B');
     expect(facts(details)).toEqual([
       ['Path', '_Arcade/_alternatives'],
@@ -252,10 +314,9 @@ describe('the explorer', () => {
     await user.click(screen.getByRole('button', { name: 'SD card' }));
     await user.click(screen.getByRole('button', { name: 'Close details' }));
     await user.click(option('menu.rbf'));
-    await user.click(screen.getByRole('button', { name: 'Close details' }));
-    // The SD card's own details, with nothing selected.
+    await user.click(await screen.findByRole('button', { name: 'Close details' }));
     await user.click(option('empty'));
-    expect(text(screen.getByRole('complementary').querySelector('.explorer-details-summary'))).toBe('Folder · no files');
+    expect(text((await screen.findByRole('complementary')).querySelector('.explorer-details-summary'))).toBe('Folder · no files');
     await user.dblClick(option('empty'));
     expect(screen.getByText('This folder is empty.')).toBeTruthy();
   });
@@ -283,25 +344,28 @@ describe('the explorer', () => {
     expect(document.activeElement).toBe(screen.getByRole('dialog'));
   });
 
-  test('the view button switches to icons and back, and this browser remembers icons', async () => {
+  test('the explorer opens in the icons; the view button switches to the list and back, and this browser remembers the list', async () => {
     const tree = await sdCard();
     const { user, unmount } = openExplorer(tree);
-    expect(screen.getByRole('listbox').className).toContain('explorer-list');
-
-    await user.click(screen.getByRole('button', { name: 'Show as icons' }));
     expect(screen.getByRole('listbox').className).toContain('explorer-icons');
+    expect(document.querySelectorAll('.explorer-tile')).toHaveLength(3);
+
+    await user.click(screen.getByRole('button', { name: 'Show as list' }));
+    expect(screen.getByRole('listbox').className).toContain('explorer-list');
+    expect(document.querySelectorAll('.explorer-row')).toHaveLength(3);
     expect(listed()).toEqual(['_Arcade', 'empty', 'menu.rbf']);
-    expect(window.localStorage.getItem('inspector-explorer-view')).toBe('icons');
+    expect(window.localStorage.getItem('inspector-explorer-view')).toBe('list');
     unmount();
 
     openExplorer(tree);
-    expect(screen.getByRole('listbox').className).toContain('explorer-icons');
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Show as list' }));
     expect(screen.getByRole('listbox').className).toContain('explorer-list');
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Show as icons' }));
+    expect(screen.getByRole('listbox').className).toContain('explorer-icons');
     expect(window.localStorage.getItem('inspector-explorer-view')).toBeNull();
   });
 
-  test('a long name keeps its end in view as it gives way', async () => {
+  test('a long name in the list keeps its end in view as it gives way', async () => {
+    window.localStorage.setItem('inspector-explorer-view', 'list');
     openExplorer(await sdCard(), { initialPath: '_Arcade/cores' });
     const name = option('Arkanoid_20240525.rbf').querySelector('.explorer-name');
     expect(name.title).toBe('Arkanoid_20240525.rbf');
@@ -321,9 +385,12 @@ describe('the explorer', () => {
     const { user } = openExplorer(buildExplorerTree(combined), { initialPath: 'cores' });
 
     expect(option('shared.rbf').getAttribute('aria-label')).toBe('shared.rbf, file, 2 versions, 10 B');
+    // The icon is marked with how many versions there are; the list says it.
+    expect(text(option('shared.rbf').querySelector('.explorer-versions'))).toBe('2');
+    await user.click(screen.getByRole('button', { name: 'Show as list' }));
     expect(text(option('shared.rbf').querySelector('.explorer-versions'))).toBe('2 versions');
     await user.click(option('shared.rbf'));
-    const details = screen.getByRole('complementary');
+    const details = await screen.findByRole('complementary');
     expect(text(details.querySelector('.explorer-details-summary'))).toBe('File · 2 identical copies');
     const versions = within(details).getAllByRole('region');
     expect(versions.map((version) => text(version.querySelector('.explorer-origins')))).toEqual([

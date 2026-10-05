@@ -292,24 +292,28 @@ test('the arrows, Home and End move the selection through the list, and through 
   assert.equal(moveExplorerSelection(-1, 'ArrowDown', 0), null);
 });
 
-test('the icons view is remembered in this browser, and the list is the view otherwise', () => {
+test('the explorer opens in the icons, and the list is remembered in this browser once chosen', () => {
   const values = new Map();
   const storage = {
     getItem: (key) => values.get(key) ?? null,
     setItem: (key, value) => values.set(key, value),
     removeItem: (key) => values.delete(key),
   };
-  assert.equal(readExplorerView(storage), 'list');
-  storeExplorerView('icons', storage);
-  assert.equal(values.get(EXPLORER_VIEW_STORAGE_KEY), 'icons');
   assert.equal(readExplorerView(storage), 'icons');
   storeExplorerView('list', storage);
-  assert.equal(values.has(EXPLORER_VIEW_STORAGE_KEY), false);
-  values.set(EXPLORER_VIEW_STORAGE_KEY, 'tiles');
+  assert.equal(values.get(EXPLORER_VIEW_STORAGE_KEY), 'list');
   assert.equal(readExplorerView(storage), 'list');
+  storeExplorerView('icons', storage);
+  assert.equal(values.has(EXPLORER_VIEW_STORAGE_KEY), false);
+  assert.equal(readExplorerView(storage), 'icons');
+  // Anything else stored, such as the icons an earlier version remembered, is the icons.
+  values.set(EXPLORER_VIEW_STORAGE_KEY, 'icons');
+  assert.equal(readExplorerView(storage), 'icons');
+  values.set(EXPLORER_VIEW_STORAGE_KEY, 'tiles');
+  assert.equal(readExplorerView(storage), 'icons');
 
   // Where the browser blocks storage, nothing is remembered and nothing fails.
   const blocked = { getItem: () => { throw new Error('blocked'); }, setItem: () => { throw new Error('blocked'); }, removeItem: () => { throw new Error('blocked'); } };
-  assert.equal(readExplorerView(blocked), 'list');
-  assert.doesNotThrow(() => storeExplorerView('icons', blocked));
+  assert.equal(readExplorerView(blocked), 'icons');
+  assert.doesNotThrow(() => storeExplorerView('list', blocked));
 });

@@ -42,6 +42,11 @@
 
 export const EXPLORER_ROOT_NAME = 'SD card';
 
+// How long the details wait after a click before they come up beside the list (when they are not
+// up already): the time a double click takes, so that a double click goes into a folder without the
+// list changing width, and its icons moving, under the second click.
+export const EXPLORER_DETAILS_DELAY_MS = 300;
+
 /**
  * The SD card a view installs: a database's filtered inspection, or combined databases' view.
  * @param {any} view
@@ -397,22 +402,22 @@ export function moveExplorerSelection(index, key, count, columns = 1) {
 
 export const EXPLORER_VIEW_STORAGE_KEY = 'inspector-explorer-view';
 
-// The view the explorer opens in, remembered in this browser: 'icons', or else the list. Reaching
-// localStorage throws where a browser blocks it, as some private windows do.
+// The view the explorer opens in: the icons, unless the list was chosen in this browser, which is
+// remembered. Reaching localStorage throws where a browser blocks it, as some private windows do.
 /** @returns {'list' | 'icons'} */
 export function readExplorerView(storage = globalThis.localStorage) {
   try {
-    return storage?.getItem(EXPLORER_VIEW_STORAGE_KEY) === 'icons' ? 'icons' : 'list';
+    return storage?.getItem(EXPLORER_VIEW_STORAGE_KEY) === 'list' ? 'list' : 'icons';
   } catch {
-    return 'list';
+    return 'icons';
   }
 }
 
 /** @param {'list' | 'icons'} view */
 export function storeExplorerView(view, storage = globalThis.localStorage) {
   try {
-    if (view === 'icons') {
-      storage?.setItem(EXPLORER_VIEW_STORAGE_KEY, 'icons');
+    if (view === 'list') {
+      storage?.setItem(EXPLORER_VIEW_STORAGE_KEY, 'list');
     } else {
       storage?.removeItem(EXPLORER_VIEW_STORAGE_KEY);
     }

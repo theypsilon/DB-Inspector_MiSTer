@@ -892,10 +892,11 @@ fieldset.mister-option legend { float: left; width: 100%; padding: 0; }
 
 /* Explorer: the SD card, one folder at a time, in a dialog nearly the window's size (the whole
    screen on phones). Rows, and rows of icons, have one height each, which the list reads from
-   these variables to render only those in view. */
+   these variables to render only those in view. The details slide in and out, and the icons glide
+   to their places when the columns change, in --explorer-motion. */
 .explorer-open-button { display: inline-flex; align-items: center; gap: 0.5rem; }
 .explorer-open-button .explorer-entry-icon { flex-shrink: 0; }
-.explorer-panel { --explorer-row-height: 40px; --explorer-tile-width: 124px; --explorer-tile-height: 128px; display: flex; flex-direction: column; width: min(1400px, 100%); height: calc(100vh - 1.5rem); height: calc(100dvh - 1.5rem); overflow: hidden; border: 1px solid var(--panel-line); border-radius: var(--radius-lg); background: var(--dialog); box-shadow: var(--dialog-shadow); }
+.explorer-panel { --explorer-row-height: 40px; --explorer-tile-width: 124px; --explorer-tile-height: 128px; --explorer-details-width: 352px; --explorer-motion: 200ms; --explorer-ease: cubic-bezier(0.3, 0, 0.2, 1); display: flex; flex-direction: column; width: min(1400px, 100%); height: calc(100vh - 1.5rem); height: calc(100dvh - 1.5rem); overflow: hidden; border: 1px solid var(--panel-line); border-radius: var(--radius-lg); background: var(--dialog); box-shadow: var(--dialog-shadow); }
 .explorer-panel:focus { outline: none; }
 .explorer-bar { display: flex; align-items: center; gap: 0.5rem; min-height: 3.25rem; padding: 0 0.6rem; border-bottom: 1px solid var(--panel-line); background: var(--panel); }
 .explorer-bar-buttons { display: flex; align-items: center; align-self: stretch; gap: 0.15rem; padding-right: 0.6rem; border-right: 1px solid var(--panel-line); }
@@ -935,15 +936,20 @@ fieldset.mister-option legend { float: left; width: 100%; padding: 0; }
 .explorer-folder-icon { fill: var(--dir); stroke: var(--on-dir); }
 .explorer-file-icon { fill: var(--file); stroke: var(--on-file); }
 .explorer-info-button { display: none; align-items: center; justify-content: center; width: 2.5rem; height: 2.5rem; padding: 0; border-radius: var(--radius-sm); color: var(--muted); background: transparent; box-shadow: none; }
-.explorer-tile-row { position: absolute; left: 0; right: 0; display: grid; height: var(--explorer-tile-height); padding: 0 0.25rem; }
-.explorer-tile { position: relative; display: flex; flex-direction: column; align-items: center; gap: 0.45rem; min-width: 0; margin: 0.25rem; padding: 0.6rem 0.4rem 0.4rem; border-radius: var(--radius-sm); cursor: default; user-select: none; }
+.explorer-tile { position: absolute; top: 0; left: 0; display: flex; flex-direction: column; align-items: center; gap: 0.45rem; width: calc(var(--explorer-tile-width) - 0.5rem); height: calc(var(--explorer-tile-height) - 0.5rem); margin: 0.25rem; padding: 0.6rem 0.4rem 0.4rem; border-radius: var(--radius-sm); cursor: default; user-select: none; }
+.explorer-icons.is-settled .explorer-tile { transition: transform var(--explorer-motion) var(--explorer-ease); }
 .explorer-tile-name { display: block; width: 100%; color: var(--ink); font-size: 0.86rem; line-height: 1.3; text-align: center; }
 .explorer-tile-name > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .explorer-tile-name.is-clamped { display: -webkit-box; overflow: hidden; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .explorer-tile-versions { position: absolute; top: 0.35rem; right: calc(50% - 2.4rem); }
 .explorer-tile .explorer-info-button { position: absolute; top: 0; right: 0; }
 .explorer-empty { margin: 0; padding: 1.5rem; flex: 1 1 auto; color: var(--muted); background: var(--card); }
-.explorer-details { display: flex; flex: 0 0 22rem; flex-direction: column; gap: 0.9rem; min-width: 0; padding: 1rem 1.1rem 1.25rem; overflow: auto; overscroll-behavior: contain; border-left: 1px solid var(--panel-line); background: var(--dialog); }
+/* The details' place widens from nothing as the list gives way, while they keep their own width,
+   so they slide in from the right rather than reflow. Closed, they stay in the page, hidden. */
+.explorer-details-slot { display: flex; flex: 0 0 auto; width: 0; overflow: hidden; visibility: hidden; transition: width var(--explorer-motion) var(--explorer-ease), visibility 0s var(--explorer-motion); }
+.explorer-details-slot.is-open { width: var(--explorer-details-width); visibility: visible; transition: width var(--explorer-motion) var(--explorer-ease); }
+.explorer-details { display: flex; flex: 0 0 var(--explorer-details-width); flex-direction: column; gap: 0.9rem; width: var(--explorer-details-width); padding: 1rem 1.1rem 1.25rem; overflow: auto; overscroll-behavior: contain; border-left: 1px solid var(--panel-line); background: var(--dialog); opacity: 0; transition: opacity var(--explorer-motion) linear; }
+.explorer-details-slot.is-open > .explorer-details { opacity: 1; }
 .explorer-details-head { display: flex; align-items: start; gap: 0.5rem; }
 .explorer-details-head h3 { flex: 1 1 auto; min-width: 0; padding-top: 0.35rem; color: var(--ink); font-size: 1.1rem; font-weight: 700; line-height: 1.3; overflow-wrap: anywhere; }
 .explorer-details-summary { color: var(--muted); font-size: 0.9rem; }
@@ -961,7 +967,8 @@ fieldset.mister-option legend { float: left; width: 100%; padding: 0; }
 }
 @media (max-width: 720px) {
   .explorer-overlay { padding: 0; }
-  .explorer-panel { --explorer-row-height: 56px; --explorer-tile-width: 104px; --explorer-tile-height: 124px; width: 100%; height: 100vh; height: 100dvh; border: 0; border-radius: 0; }
+  /* The details cover the list's lower part rather than take its width. */
+  .explorer-panel { --explorer-row-height: 56px; --explorer-tile-width: 104px; --explorer-tile-height: 124px; --explorer-details-width: 0px; width: 100%; height: 100vh; height: 100dvh; border: 0; border-radius: 0; }
   .explorer-bar { gap: 0.3rem; padding: 0 0.35rem; }
   .explorer-bar-buttons { gap: 0; padding-right: 0.3rem; }
   .explorer-icon-button { width: 2.5rem; height: 2.75rem; }
@@ -972,8 +979,13 @@ fieldset.mister-option legend { float: left; width: 100%; padding: 0; }
   .explorer-row > .explorer-name { grid-area: name; }
   .explorer-row > .explorer-meta { grid-area: meta; justify-content: start; }
   .explorer-row > .explorer-info-button { grid-area: info; }
-  /* The details come up over the lower part of the list. */
-  .explorer-details { position: absolute; left: 0; right: 0; bottom: 0; z-index: 1; max-height: 70%; border-top: 1px solid var(--panel-line); border-left: 0; border-radius: min(var(--radius-lg), 22px) min(var(--radius-lg), 22px) 0 0; box-shadow: var(--dialog-shadow); }
+  /* The details come up from the bottom, over the lower part of the list. */
+  .explorer-details-slot { position: absolute; left: 0; right: 0; bottom: 0; z-index: 1; width: auto; max-height: 70%; overflow: visible; transform: translateY(100%); transition: transform var(--explorer-motion) var(--explorer-ease), visibility 0s var(--explorer-motion); }
+  .explorer-details-slot.is-open { width: auto; transform: none; transition: transform var(--explorer-motion) var(--explorer-ease); }
+  .explorer-details { flex: 1 1 auto; width: auto; border-top: 1px solid var(--panel-line); border-left: 0; border-radius: min(var(--radius-lg), 22px) min(var(--radius-lg), 22px) 0 0; box-shadow: var(--dialog-shadow); opacity: 1; transition: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .explorer-icons.is-settled .explorer-tile, .explorer-details-slot, .explorer-details-slot.is-open, .explorer-details { transition: none; }
 }
 
 /* Copy link button */
