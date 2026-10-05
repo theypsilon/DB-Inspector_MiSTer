@@ -485,7 +485,50 @@ describe('the page and the app model', () => {
     openPage(`/#db=${url}&at=terms`, { [url]: { body: database('terms_anchor_db') } });
     const dialog = await screen.findByRole('dialog', { name: 'Filter terms' });
     expect(text(dialog.querySelector('.helper-copy'))).toBe("Keep or exclude terms_anchor_db's terms in FILTER. Choosing a term again takes it out.");
+    expect(screen.getByLabelText('Search terms').value).toBe('');
     expect(window.location.hash).toBe(`#db=${url}&at=terms`);
+  });
+
+  test('the terms’ search is in the link: a link opens them with it, and what is typed reaches the link once typing pauses', async () => {
+    const url = 'https://example.com/terms-search.json';
+    const user = openPage(`/#db=${url}&at=terms?ess`, { [url]: { body: database('terms_search_db') } });
+    const dialog = await screen.findByRole('dialog', { name: 'Filter terms' });
+    const search = screen.getByLabelText('Search terms');
+    expect(search.value).toBe('ess');
+    expect([...dialog.querySelectorAll('.filter-term strong')].map(text)).toEqual(['essential']);
+    expect(window.location.hash).toBe(`#db=${url}&at=terms?ess`);
+
+    await user.clear(search);
+    await user.type(search, 'arcade games');
+    await waitFor(() => expect(window.location.hash).toBe(`#db=${url}&at=terms?arcade+games`), { timeout: 3000 });
+    // Keeping a term keeps the search where it is.
+    await user.clear(search);
+    await user.type(search, 'arc');
+    await waitFor(() => expect(window.location.hash).toBe(`#db=${url}&at=terms?arc`), { timeout: 3000 });
+    await user.click(within(dialog).getByRole('button', { name: 'Keep arcade' }));
+    await waitFor(() => expect(window.location.hash).toBe(`#db=${url}&filter=arcade&at=terms?arc`), { timeout: 3000 });
+    // An emptied search leaves just the terms in the link, and closing them takes them out.
+    await user.clear(search);
+    await waitFor(() => expect(window.location.hash).toBe(`#db=${url}&filter=arcade&at=terms`), { timeout: 3000 });
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(window.location.hash).toBe(`#db=${url}&filter=arcade`);
+  });
+
+  test('going back to another database’s terms opens them with the search its link has', async () => {
+    const first = 'https://example.com/terms-first.json';
+    const second = 'https://example.com/terms-second.json';
+    openPage(`/#db=${first}&at=terms?ess`, { [first]: { body: database('terms_first_db') }, [second]: { body: database('terms_second_db') } });
+    await screen.findByRole('dialog', { name: 'Filter terms' });
+    expect(screen.getByLabelText('Search terms').value).toBe('ess');
+
+    window.history.pushState(null, '', `/#db=${second}&at=terms?arc`);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+    // The second database's terms, opened afresh as the link says.
+    await waitFor(() => expect(screen.getByLabelText('Search terms').value).toBe('arc'));
+    expect(text(document.querySelector('.filter-terms-panel .helper-copy'))).toContain('terms_second_db');
+    expect([...document.querySelectorAll('.filter-term strong')].map(text)).toEqual(['arcade']);
+    expect(window.location.hash).toBe(`#db=${second}&at=terms?arc`);
   });
 
   test('a link to the section the terms were in opens them, as their own link, and closing them takes them out of the link', async () => {
@@ -543,21 +586,27 @@ describe('the page and the app model', () => {
       [beta]: { body: database('beta', { tag_dictionary: { console: 0 }, files: { 'b.rom': { size: 1, hash: 'b', tags: [0] } } }) },
     };
     const anchor = () => new URLSearchParams(window.location.hash.slice(1)).get('at');
-    openPage(`/#db=${alpha}&db=${beta}&filter.beta=console&at=terms:beta`, routes);
+    const user = openPage(`/#db=${alpha}&db=${beta}&filter.beta=console&at=terms:beta?cons`, routes);
     const dialog = await screen.findByRole('dialog', { name: 'Filter terms' });
     expect(text(dialog.querySelector('.helper-copy'))).toBe("Keep or exclude beta's terms in its own filter. Choosing a term again takes it out.");
-    expect(anchor()).toBe('terms:beta');
+    expect(screen.getByLabelText('Search terms').value).toBe('cons');
+    expect(anchor()).toBe('terms:beta?cons');
+    // What is typed stays with beta's terms.
+    await user.type(screen.getByLabelText('Search terms'), 'ole');
+    await waitFor(() => expect(anchor()).toBe('terms:beta?console'), { timeout: 3000 });
   });
 
   test('a link to the terms of a database’s own filter it does not have opens the shared filter’s, and says so', async () => {
     const alpha = 'https://example.com/terms-none-alpha.json';
     const beta = 'https://example.com/terms-none-beta.json';
-    openPage(`/#db=${alpha}&db=${beta}&at=terms:alpha`, {
+    openPage(`/#db=${alpha}&db=${beta}&at=terms:alpha?arc`, {
       [alpha]: { body: database('alpha') },
       [beta]: { body: database('beta') },
     });
     const dialog = await screen.findByRole('dialog', { name: 'Filter terms' });
     expect(text(dialog.querySelector('.helper-copy'))).toBe('Keep or exclude the terms of all databases in the filter they share ([mister]). Choosing a term again takes it out.');
-    expect(new URLSearchParams(window.location.hash.slice(1)).get('at')).toBe('terms');
+    // The search comes along.
+    expect(screen.getByLabelText('Search terms').value).toBe('arc');
+    expect(new URLSearchParams(window.location.hash.slice(1)).get('at')).toBe('terms?arc');
   });
 });

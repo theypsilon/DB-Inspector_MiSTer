@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import ModalFrame from './ModalFrame.jsx';
 import EmptyState from '../ui/EmptyState.jsx';
 import useDebouncedValue from '../../hooks/useDebouncedValue.js';
@@ -82,10 +82,16 @@ export default function FilterTermsModal({
   const shown = searchFilterTerms(terms, query);
 
   // Once typing pauses, as FILTER reaches the link: the search's ends do not change what it finds.
+  // Only a change is told: the search it opens with came from whoever opened it, who may since
+  // have moved on (a link naming other terms while the dialog was away for a database to load).
   const settledQuery = useDebouncedValue(query.trim(), FILTER_INPUT_DEBOUNCE_MS);
+  const toldQueryRef = useRef(search.trim());
   const reportSearch = useEffectEvent((value) => onSearchChange?.(value));
   useEffect(() => {
-    reportSearch(settledQuery);
+    if (settledQuery !== toldQueryRef.current) {
+      toldQueryRef.current = settledQuery;
+      reportSearch(settledQuery);
+    }
   }, [settledQuery]);
 
   const handleKeyDown = useEffectEvent((event) => {

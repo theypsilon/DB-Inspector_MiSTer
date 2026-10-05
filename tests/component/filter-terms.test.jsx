@@ -1,10 +1,11 @@
 import { describe, expect, test, vi } from 'vitest';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 
 import FilterTermsModal from '../../src/components/modals/FilterTermsModal.jsx';
 import { buildFilterTerms } from '../../src/lib/filterTerms.js';
+import { FILTER_INPUT_DEBOUNCE_MS } from '../../src/lib/utils.js';
 import { inspect, text } from './support.js';
 
 // The filter terms dialog: the terms it lists, its search, and what Keep and Exclude write.
@@ -34,7 +35,7 @@ async function termsOf(...databases) {
 const SETTLED = { kept: 3, total: 3, pending: false, invalid: false };
 
 // The dialog as the page holds it: FILTER in state, changed by the dialog.
-function Harness({ terms, withoutTerms, combined, initialFilter, matches = SETTLED, onChange, onClose }) {
+function Harness({ terms, withoutTerms, combined, initialFilter, matches = SETTLED, search, onChange, onSearchChange, onClose }) {
   const [filter, setFilter] = useState(initialFilter);
   return (
     <FilterTermsModal
@@ -44,18 +45,22 @@ function Harness({ terms, withoutTerms, combined, initialFilter, matches = SETTL
       combined={combined}
       filter={filter}
       matches={matches}
+      search={search}
       onFilterChange={(next) => {
         onChange(next);
         setFilter(next);
       }}
+      onSearchChange={onSearchChange}
       onClose={onClose}
     />
   );
 }
 
-function open({ terms, withoutTerms }, { combined = false, filter = '', matches } = {}) {
-  const handlers = { onChange: vi.fn(), onClose: vi.fn() };
-  const result = render(<Harness terms={terms} withoutTerms={withoutTerms} combined={combined} initialFilter={filter} matches={matches} {...handlers} />);
+function open({ terms, withoutTerms }, { combined = false, filter = '', matches, search } = {}) {
+  const handlers = { onChange: vi.fn(), onSearchChange: vi.fn(), onClose: vi.fn() };
+  const result = render(
+    <Harness terms={terms} withoutTerms={withoutTerms} combined={combined} initialFilter={filter} matches={matches} search={search} {...handlers} />,
+  );
   return { ...handlers, ...result, user: userEvent.setup(), dialog: screen.getByRole('dialog', { name: 'Filter terms' }) };
 }
 
@@ -131,6 +136,44 @@ describe('the filter terms', () => {
     await user.type(screen.getByLabelText('Search terms'), 'zzz');
     expect(rows()).toEqual([]);
     expect(screen.getByText('No term has that name.')).toBeTruthy();
+  });
+
+  test('the search opens with what it is given, and tells what it holds once typing pauses, its ends aside', async () => {
+    const terms = await termsOf(ALPHA);
+    vi.useFakeTimers();
+    try {
+      const { onSearchChange } = open(terms, { search: 'cheat' });
+      const search = screen.getByLabelText('Search terms');
+      expect(search.value).toBe('cheat');
+      expect(rows()).toEqual(['cheats 1 entry']);
+      // What it opens with is not news to whoever gave it.
+      act(() => vi.advanceTimersByTime(FILTER_INPUT_DEBOUNCE_MS));
+      expect(onSearchChange).not.toHaveBeenCalled();
+
+      fireEvent.change(search, { target: { value: 'n' } });
+      fireEvent.change(search, { target: { value: 'ni' } });
+      act(() => vi.advanceTimersByTime(FILTER_INPUT_DEBOUNCE_MS - 1));
+      expect(onSearchChange).not.toHaveBeenCalledWith('n');
+      expect(onSearchChange).not.toHaveBeenCalledWith('ni');
+      act(() => vi.advanceTimersByTime(1));
+      expect(onSearchChange).toHaveBeenLastCalledWith('ni');
+      expect(onSearchChange).not.toHaveBeenCalledWith('n');
+
+      // Spaces around it find the same terms, so they tell nothing new.
+      const told = onSearchChange.mock.calls.length;
+      fireEvent.change(search, { target: { value: ' ni ' } });
+      act(() => vi.advanceTimersByTime(FILTER_INPUT_DEBOUNCE_MS));
+      expect(onSearchChange).toHaveBeenCalledTimes(told);
+      fireEvent.change(search, { target: { value: '' } });
+      act(() => vi.advanceTimersByTime(FILTER_INPUT_DEBOUNCE_MS));
+      expect(onSearchChange).toHaveBeenLastCalledWith('');
+      // Back to what it opened with is a change too.
+      fireEvent.change(search, { target: { value: 'cheat' } });
+      act(() => vi.advanceTimersByTime(FILTER_INPUT_DEBOUNCE_MS));
+      expect(onSearchChange).toHaveBeenLastCalledWith('cheat');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test('combined databases: each term names its databases, a few in full and more as a count, and those without terms are named once', async () => {
