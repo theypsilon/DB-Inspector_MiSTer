@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
 
 import { openApp } from '../support/app.js';
+import { getImagePreviewUrl } from '../../../src/lib/downloads.js';
 import { buildExplorerTree, resolveExplorerLocation } from '../../../src/lib/explorer.js';
 import { parseExplorerAnchor, readLink } from '../../../src/lib/urlState.js';
 
@@ -89,6 +90,39 @@ test('the explorer shows what FILTER leaves', async () => {
   assert.deepEqual([filtered.fileCount, filtered.sizeBytes], [2, 12]);
   // A link to what the filter hides opens the deepest folder still there.
   assert.equal(resolveExplorerLocation(filtered, '_Arcade/x.mra').folder.path, '_Arcade');
+});
+
+test('an image file’s details preview it from its URL, whatever the letter case of its extension; other files, and files without a URL, have none', async () => {
+  const imagesUrl = 'https://example.com/images/db.json';
+  const images = {
+    db_id: 'images_db',
+    v: 1,
+    timestamp: 1710000000,
+    base_files_url: 'https://example.com/images/files/',
+    files: {
+      'docs/NEOGEO/Titles/fswords.png': { size: 15900, hash: 'a' },
+      'docs/photo.JPEG': { size: 1, hash: 'b', url: 'https://cdn.example.com/photo.JPEG' },
+      'docs/logo.svg': { size: 1, hash: 'c' },
+      'docs/gameinfo.tsv': { size: 1, hash: 'd' },
+      'docs/png': { size: 1, hash: 'e' },
+    },
+    folders: {},
+  };
+  // Without base_files_url, a file without its own url has no URL.
+  const bare = { db_id: 'bare_db', v: 1, timestamp: 1710000000, files: { 'docs/cover.png': { size: 1, hash: 'f' } }, folders: {} };
+  const bareUrl = 'https://example.com/bare/db.json';
+  app = await openApp(`/#db=${imagesUrl}`, { routes: { [imagesUrl]: { body: images } } });
+  const preview = (path) => getImagePreviewUrl(resolveExplorerLocation(sdCard(), path).file.versions[0].record);
+
+  assert.equal(preview('docs/NEOGEO/Titles/fswords.png'), 'https://example.com/images/files/docs/NEOGEO/Titles/fswords.png');
+  assert.equal(preview('docs/photo.JPEG'), 'https://cdn.example.com/photo.JPEG');
+  assert.equal(preview('docs/logo.svg'), 'https://example.com/images/files/docs/logo.svg');
+  assert.equal(preview('docs/gameinfo.tsv'), null);
+  assert.equal(preview('docs/png'), null);
+
+  await app.close();
+  app = await openApp(`/#db=${bareUrl}`, { routes: { [bareUrl]: { body: bare } } });
+  assert.equal(preview('docs/cover.png'), null);
 });
 
 test('combined databases fill the same folders, and a path both install shows once with each version', async () => {

@@ -1,7 +1,8 @@
+import { useState } from 'react';
 import { CloseIcon } from './ExplorerIcons.jsx';
 import TagList from '../ui/TagList.jsx';
 import { formatBytes } from '../../lib/database.js';
-import { getFileLinks, triggerFileDownload } from '../../lib/downloads.js';
+import { getFileLinks, getImagePreviewUrl, triggerFileDownload } from '../../lib/downloads.js';
 
 /**
  * What the explorer knows of the file or folder selected, or of the folder shown when nothing is:
@@ -70,6 +71,7 @@ function FileDetails({ file, onDownloadError }) {
           <VersionFacts version={version} />
         </dl>
         <FileActions name={file.name} record={version.record} onDownloadError={onDownloadError} />
+        <ImagePreview name={file.name} record={version.record} />
       </>
     );
   }
@@ -89,6 +91,7 @@ function FileDetails({ file, onDownloadError }) {
             <VersionFacts version={version} />
           </dl>
           <FileActions name={file.name} record={version.record} onDownloadError={onDownloadError} />
+          <ImagePreview name={file.name} record={version.record} />
         </section>
       ))}
     </>
@@ -134,6 +137,35 @@ function FileActions({ name, record, onDownloadError }) {
         Download
       </button>
     </div>
+  );
+}
+
+// An image, under its details: as wide as they are at most, and no larger than itself. Each URL
+// loads afresh.
+function ImagePreview({ name, record }) {
+  const url = getImagePreviewUrl(record);
+  return url ? <LoadedImage key={url} name={name} url={url} /> : null;
+}
+
+function LoadedImage({ name, url }) {
+  // 'loading', then 'loaded' or 'failed'.
+  const [status, setStatus] = useState('loading');
+  return (
+    <figure className="explorer-preview">
+      {status === 'failed' ? (
+        <figcaption>The preview could not be loaded.</figcaption>
+      ) : (
+        <img
+          className={status === 'loading' ? 'hidden' : undefined}
+          src={url}
+          alt={`Preview of ${name}`}
+          referrerPolicy="no-referrer"
+          onLoad={() => setStatus('loaded')}
+          onError={() => setStatus('failed')}
+        />
+      )}
+      {status === 'loading' ? <figcaption>Loading preview…</figcaption> : null}
+    </figure>
   );
 }
 

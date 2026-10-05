@@ -12,10 +12,16 @@ export const OPENABLE_IMAGE_FILE_EXTENSIONS = new Set([
   'webp',
 ]);
 
-export function isBrowserOpenableFile(path) {
+// A path's extension, in lower case, or null without one.
+function fileExtension(path) {
   const normalizedPath = String(path).trim().toLowerCase();
   const extension = normalizedPath.split('.').pop();
-  if (!extension || extension === normalizedPath) {
+  return !extension || extension === normalizedPath ? null : extension;
+}
+
+export function isBrowserOpenableFile(path) {
+  const extension = fileExtension(path);
+  if (!extension) {
     return false;
   }
 
@@ -24,6 +30,12 @@ export function isBrowserOpenableFile(path) {
     extension === 'pdf' ||
     OPENABLE_IMAGE_FILE_EXTENSIONS.has(extension)
   );
+}
+
+// The image the explorer's details show of a file record: its URL, when browsers show the file
+// as an image.
+export function getImagePreviewUrl({ path, downloadUrl }) {
+  return downloadUrl && OPENABLE_IMAGE_FILE_EXTENSIONS.has(fileExtension(path)) ? downloadUrl : null;
 }
 
 // The links a tree row offers: Download for a file with a URL, and OPEN as well when the browser

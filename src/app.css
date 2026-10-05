@@ -999,6 +999,10 @@ fieldset.mister-option legend { float: left; width: 100%; padding: 0; }
 .explorer-origins .db-chip { flex-shrink: 1; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
 .explorer-details-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .explorer-version { display: grid; gap: 0.7rem; padding-top: 0.9rem; border-top: 1px solid var(--card-line); }
+/* An image's preview, on a quiet background for transparent images. */
+.explorer-preview { display: grid; place-items: center; min-height: 3rem; margin: 0; padding: 0.5rem; border: 1px solid var(--card-line); border-radius: var(--radius-sm); background: var(--quiet); }
+.explorer-preview img { display: block; max-width: 100%; max-height: 22rem; }
+.explorer-preview figcaption { color: var(--muted); font-size: 0.85rem; }
 @media (pointer: coarse) {
   .explorer-info-button { display: inline-flex; }
 }

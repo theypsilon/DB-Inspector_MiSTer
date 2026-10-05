@@ -3,10 +3,14 @@ import { expect, test } from '@playwright/test';
 // A database opened from a shared link, in a real browser: an old link becoming its #db= link, its
 // default FILTER and the link, the detailed toggle, size hints and downloads, find-in-page with its
 // highlights and row flash, section and row anchors across a reload, the explorer and its link,
-// back/forward between databases, and a link typed in the address bar of the open page.
+// back/forward between databases, a link typed in the address bar of the open page, the theme
+// menu, and an image's preview in the explorer.
 
 const SHARED_URL = 'https://raw.githubusercontent.com/example-owner/example-repo/main/db.json';
 const SECOND_URL = 'https://example.com/second.json';
+const IMAGES_URL = 'https://example.com/images.json';
+// A 640×160 PNG, wider than the explorer's details.
+const WIDE_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAoAAAACgCAIAAAATnEprAAAC3UlEQVR42u3VAQ0AAAjDMCQhCemXgg5Ik2rYKtPAUT0BjioJAwMGDBgwYDBgwIABAwYMGAwYMGDAgMGAAQMGDBgwYDBgwIABAwYMGAwYMGDAgMGAAQMGDBgwYDBgwIABAwYDBgwYMGDAgMGAAQMGDBgwYDBgwIABAwYDBgwYMGDAgMGAAQMGDBgMGDBgwIABAwYDBgwYMGDAgMGAAQMGDBgMGDBgwIABAwYDBgwYMGAwYMCAAQMGDBgMGDBgwIABAwYDBgwYMGAwYMCAAQMGDBgMGDBgwIDBgFUMDBgwYMCAwYABAwYMGDBgMGDAgAEDBgMGDBgwYMCAwYABAwYMGDBgMGDAgAEDBgMGDBgwYMCAwYABAwYMGAwYMGDAgAEDBgMGDBgwYMCAwYABAwYMGAwYMGDAgAEDBgMGDBgwYDBgwIABAwYMGAwYMGDAgAEDBgMGDBgwYDBgwIABAwYMGAwYMGDAgMGAAQMGDBgwYDBgwIABAwYMGAwYMGDAgMGAAQMGDBgwYDBgwIABAwYDVjEwYMCAAQMGAwYMGDBgwIDBgAEDBgwYDBgwYMCAAQMGAwYMGDBgwIDBgAEDBgwYDBgwYMCAAQMGAwYMGDBgMGDAgAEDBgwYDBgwYMCAAQMGAwYMGDBgMGDAgAEDBgwYDBgwYMCAwYABAwYMGDBgMGDAgAEDBgwYDBgwYMCAwYABAwYMGDBgMGDAgAEDBgMGDBgwYMCAwYABAwYMGDBgMGDAgAEDBgMGDBgwYMCAwYABAwYMGAxYxcCAAQMGDBgMGDBgwIABAwYDBgwYMGAwYMCAAQMGDBgMGDBgwIABAwYDBgwYMGAwYMCAAQMGDBgMGDBgwIDBgAEDBgwYMGAwYMCAAQMGDBgMGDBgwIDBgAEDBgwYMGAwYMCAAQMGAwYMGDBgwIDBgAEDBgwYMGAwYMCAAQMGAwYMGDBgwIDBgAEDBgwYDBgwYMCAAQOG7xaxhiGyLNe5vwAAAABJRU5ErkJggg==';
 
 function database(dbId, extra = {}) {
   return {
@@ -344,6 +348,42 @@ test('a shared link opens its database, and the page around it works', async ({ 
     }
     await chooseTheme('Phosphor', 'Match system');
     await expect.poll(theme).toBe('light');
+  });
+
+  await test.step('an image’s details in the explorer show it, no wider than they are, on a wide screen and on a phone', async () => {
+    const images = {
+      db_id: 'images_db',
+      v: 1,
+      timestamp: 1710000000,
+      base_files_url: 'https://example.com/images/',
+      files: { 'docs/wide.png': { size: 790, hash: 'w' }, 'docs/broken.png': { size: 1, hash: 'b' } },
+      folders: {},
+    };
+    await page.route(IMAGES_URL, (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(images) }));
+    await page.route('https://example.com/images/docs/wide.png', (route) => route.fulfill({ status: 200, contentType: 'image/png', body: Buffer.from(WIDE_PNG, 'base64') }));
+    await page.route('https://example.com/images/docs/broken.png', (route) => route.fulfill({ status: 404, body: '' }));
+    await page.goto('about:blank');
+    await page.goto(`/#db=${IMAGES_URL}&at=explorer:docs/wide.png`);
+
+    const explorer = page.getByRole('dialog', { name: 'Explorer' });
+    const image = explorer.getByRole('complementary', { name: 'Details of wide.png' }).getByRole('img', { name: 'Preview of wide.png' });
+    // Loaded, inside the details and the screen, in its own proportions.
+    const fit = () =>
+      image.evaluate((img) => {
+        const box = img.getBoundingClientRect();
+        const details = img.closest('.explorer-details').getBoundingClientRect();
+        return [img.naturalWidth, box.left >= details.left && box.right <= details.right && box.right <= window.innerWidth, Math.round(box.width / box.height)];
+      });
+    await expect(image).toBeVisible();
+    expect(await fit()).toEqual([640, true, 4]);
+    const viewport = page.viewportSize();
+    await page.setViewportSize({ width: 360, height: 800 });
+    await expect.poll(fit).toEqual([640, true, 4]);
+    await page.setViewportSize(viewport);
+
+    // An image that cannot be loaded says so.
+    await explorer.getByRole('option', { name: /^broken\.png,/ }).click();
+    await expect(explorer.getByRole('complementary', { name: 'Details of broken.png' })).toContainText('The preview could not be loaded.');
   });
 });
 

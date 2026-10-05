@@ -400,6 +400,57 @@ describe('the explorer', () => {
     expect(versions.map((version) => within(version).getAllByRole('button', { name: 'Download' }).length)).toEqual([1, 1]);
   });
 
+  test('an image’s details show it under its links, loading until it has, or say it could not be loaded; other files show none', async () => {
+    const images = {
+      ...DATABASE,
+      archives: {},
+      files: {
+        'docs/cover.png': { size: 10, hash: 'c' },
+        'docs/PHOTO.JPG': { size: 10, hash: 'p', url: 'https://example.com/photo.jpg' },
+        'docs/notes.txt': { size: 1, hash: 'n' },
+      },
+      folders: {},
+    };
+    const { user } = openExplorer(await sdCard(images), { initialPath: 'docs/cover.png' });
+    let details = screen.getByRole('complementary', { name: 'Details of cover.png' });
+    let preview = details.querySelector('.explorer-preview');
+    expect(details.querySelector('.explorer-details-actions').nextElementSibling).toBe(preview);
+    const cover = within(details).getByRole('img', { name: 'Preview of cover.png' });
+    expect(cover.getAttribute('src')).toBe('https://example.com/files/docs/cover.png');
+    expect([cover.className, text(preview)]).toEqual(['hidden', 'Loading preview…']);
+    fireEvent.load(cover);
+    expect([cover.className, text(preview)]).toEqual(['', '']);
+
+    // Another image loads afresh.
+    await user.click(option('PHOTO.JPG'));
+    details = await screen.findByRole('complementary', { name: 'Details of PHOTO.JPG' });
+    preview = details.querySelector('.explorer-preview');
+    const photo = within(details).getByRole('img', { name: 'Preview of PHOTO.JPG' });
+    expect([photo.getAttribute('src'), text(preview)]).toEqual(['https://example.com/photo.jpg', 'Loading preview…']);
+    fireEvent.error(photo);
+    expect(text(preview)).toBe('The preview could not be loaded.');
+    expect(within(details).queryByRole('img')).toBeNull();
+
+    await user.click(option('notes.txt'));
+    details = await screen.findByRole('complementary', { name: 'Details of notes.txt' });
+    expect(details.querySelector('.explorer-preview')).toBeNull();
+  });
+
+  test('each version of an image several databases install shows its own', async () => {
+    const version = (dbId, base) => ({ ...DATABASE, db_id: dbId, base_files_url: base, archives: {}, files: { 'art/title.png': { size: 10, hash: dbId } }, folders: {} });
+    const [alpha, beta] = [version('alpha', 'https://alpha.example.com/'), version('beta', 'https://beta.example.com/')];
+    const combined = combineDatabaseViews([
+      { dbId: 'alpha', view: applyInspectionFilter(await inspect(alpha), '') },
+      { dbId: 'beta', view: applyInspectionFilter(await inspect(beta), '') },
+    ]);
+    openExplorer(buildExplorerTree(combined), { initialPath: 'art/title.png' });
+    const versions = within(screen.getByRole('complementary')).getAllByRole('region');
+    expect(versions.map((region) => within(region).getByRole('img', { name: 'Preview of title.png' }).getAttribute('src'))).toEqual([
+      'https://alpha.example.com/art/title.png',
+      'https://beta.example.com/art/title.png',
+    ]);
+  });
+
   test('a download that fails is reported, and while another dialog is on top the keys are its own', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
     const { onClose, onDownloadError, user, rerender } = openExplorer(await sdCard(), { initialPath: 'menu.rbf' });
