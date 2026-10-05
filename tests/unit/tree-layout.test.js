@@ -10,8 +10,11 @@ import {
   estimateRowHeight,
   getMeasurementScrollDelta,
   getRowMeasurementKey,
+  getViewportAnchorOffsetDelta,
+  mergeMeasuredHeights,
   rowOutline,
   rowTagsHidden,
+  updateVirtualRowLayout,
 } from '../../src/lib/treeLayout.js';
 
 async function filesystemIndex(files, folders) {
@@ -208,6 +211,141 @@ test('the list places a row with the height measured on the screen it is on, and
     });
   assert.equal(delta('narrow'), 10);
   assert.equal(delta('wide'), 0);
+});
+
+// What the page reads of a layout.
+function layoutParts(layout) {
+  const { rowIds, rowIndexById, offsets, bottoms, totalHeight } = layout;
+  return { rowIds, rowIndexById: [...rowIndexById], offsets, bottoms, totalHeight };
+}
+
+// The same numbers on every run, so that a failing batch can be replayed.
+function seededRandom(seed) {
+  let state = seed;
+  return () => {
+    state = (state * 1103515245 + 12345) % 2147483648;
+    return state / 2147483648;
+  };
+}
+
+test('a batch of measured heights updates the layout as building it again would, and anchors the scroll as before', async () => {
+  const folders = ['games', 'games/arcade', 'docs'];
+  const files = Object.fromEntries(Array.from({ length: 40 }, (_, at) => [`${folders[at % 3]}/file:${at}.rbf`, { tags: ['arcade'] }]));
+  const index = await filesystemIndex(files, Object.fromEntries(folders.map((folder) => [folder, {}])));
+  const allRowIds = [...index.rowsById.keys()];
+  const docsId = allRowIds.find((rowId) => index.rowsById.get(rowId).node.name === 'docs');
+  // docs is collapsed: heights measured for its files change nothing.
+  const collapsedIds = new Set([docsId]);
+  const rowIds = collectVisibleRowIds(index.rootIds, index.rowsById, collapsedIds);
+  const state = {
+    rowIds,
+    rowsById: index.rowsById,
+    collapsedIds,
+    detailOverrides: new Map([[rowIds[3], true], [rowIds[5], false]]),
+    defaultDetailed: false,
+    expandedTagIds: new Set([rowIds[4]]),
+    screen: 'narrow',
+  };
+  const random = seededRandom(7);
+  const pick = (values) => values[Math.floor(random() * values.length)];
+  // A key for a row in the state it shows, or in another one, as rows measured before a toggle.
+  const keyFor = (rowId) =>
+    getRowMeasurementKey(
+      rowId,
+      random() < 0.7
+        ? {
+            collapsed: collapsedIds.has(rowId),
+            detailsVisible: state.detailOverrides.get(rowId) ?? state.defaultDetailed,
+            tagsExpanded: state.expandedTagIds.has(rowId),
+            screen: state.screen,
+          }
+        : { collapsed: random() < 0.5, detailsVisible: random() < 0.5, tagsExpanded: random() < 0.5, screen: pick(['wide', 'narrow', 'phone']) },
+    );
+
+  let measuredHeights = new Map();
+  let layout = buildVirtualRowLayout({ ...state, measuredHeights });
+  const estimated = layoutParts(layout);
+  for (let batch = 0; batch < 80; batch += 1) {
+    const entries = Array.from({ length: 1 + Math.floor(random() * 6) }, () => {
+      const key = keyFor(pick(allRowIds));
+      // Now and then the height a row already has, which changes nothing; tenths add up exactly as
+      // the build adds them.
+      return [key, measuredHeights.has(key) && random() < 0.2 ? measuredHeights.get(key) : 40 + Math.floor(random() * 4000) / 10];
+    });
+    const nextMeasuredHeights = mergeMeasuredHeights(measuredHeights, entries);
+    const updated = updateVirtualRowLayout(layout, { ...state, measuredHeights: nextMeasuredHeights });
+    const built = buildVirtualRowLayout({ ...state, measuredHeights: nextMeasuredHeights });
+    assert.deepEqual(layoutParts(updated), layoutParts(built), `batch ${batch}`);
+
+    const viewportTop = random() * built.totalHeight;
+    assert.equal(
+      getMeasurementScrollDelta({ ...state, currentMeasuredHeights: measuredHeights, nextMeasuredHeights, viewportTop, currentLayout: layout }),
+      getViewportAnchorOffsetDelta({ currentLayout: buildVirtualRowLayout({ ...state, measuredHeights }), nextLayout: built, viewportTop }),
+      `batch ${batch}`,
+    );
+    layout = updated;
+    measuredHeights = nextMeasuredHeights;
+  }
+  assert.notDeepEqual(layoutParts(layout).bottoms, estimated.bottoms, 'the batches changed the layout');
+});
+
+test('a batch of measured heights reads only the rows it measured, however long the list', async () => {
+  const files = Object.fromEntries(Array.from({ length: 500 }, (_, at) => [`games/file_${at}.rbf`, {}]));
+  const index = await filesystemIndex(files, { games: {} });
+  const rowIds = collectVisibleRowIds(index.rootIds, index.rowsById, new Set());
+  // Counts the rows the layout reads.
+  class CountedSet extends Set {
+    reads = 0;
+
+    has(value) {
+      this.reads += 1;
+      return super.has(value);
+    }
+  }
+  const collapsedIds = new CountedSet();
+  const state = { rowIds, rowsById: index.rowsById, collapsedIds, detailOverrides: new Map(), defaultDetailed: false, expandedTagIds: new Set(), screen: 'wide' };
+  const key = (rowId) => getRowMeasurementKey(rowId, { collapsed: false, detailsVisible: false });
+  const measuredHeights = new Map();
+  const layout = buildVirtualRowLayout({ ...state, measuredHeights });
+  assert.equal(collapsedIds.reads, rowIds.length);
+
+  // Two files measured while scrolling, 33px and 13px shorter than their estimates.
+  const nextMeasuredHeights = mergeMeasuredHeights(measuredHeights, [[key(rowIds[250]), 90], [key(rowIds[300]), 110]]);
+  collapsedIds.reads = 0;
+  const updated = updateVirtualRowLayout(layout, { ...state, measuredHeights: nextMeasuredHeights });
+  assert.equal(collapsedIds.reads, 2);
+  assert.deepEqual(layoutParts(updated), layoutParts(buildVirtualRowLayout({ ...state, measuredHeights: nextMeasuredHeights })));
+
+  // Anchoring the scroll reads them only too, from the layout the page shows.
+  collapsedIds.reads = 0;
+  const delta = getMeasurementScrollDelta({ ...state, currentMeasuredHeights: measuredHeights, nextMeasuredHeights, viewportTop: 50_000, currentLayout: layout });
+  assert.equal(delta, -46);
+  assert.equal(collapsedIds.reads, 2);
+});
+
+test('a layout is built again when it cannot be updated from the one before', async () => {
+  const index = await filesystemIndex({ 'games/a.rbf': {}, 'games/b.rbf': {}, 'games/c.rbf': {} }, { games: {} });
+  const rowIds = collectVisibleRowIds(index.rootIds, index.rowsById, new Set());
+  const state = { rowIds, rowsById: index.rowsById, collapsedIds: new Set(), detailOverrides: new Map(), defaultDetailed: false };
+  const key = (rowId) => getRowMeasurementKey(rowId, { collapsed: false, detailsVisible: false });
+  const measuredHeights = mergeMeasuredHeights(new Map(), [[key(rowIds[0]), 100]]);
+  const layout = buildVirtualRowLayout({ ...state, measuredHeights });
+  const assertAsBuilt = (source) =>
+    assert.deepEqual(layoutParts(updateVirtualRowLayout(layout, source)), layoutParts(buildVirtualRowLayout(source)));
+
+  // Other rows, or rows shown otherwise, with heights merged into the layout's.
+  const once = mergeMeasuredHeights(measuredHeights, [[key(rowIds[1]), 90]]);
+  assertAsBuilt({ ...state, rowIds: rowIds.slice(1), measuredHeights: once });
+  assertAsBuilt({ ...state, detailOverrides: new Map([[rowIds[1], true]]), measuredHeights: once });
+  assertAsBuilt({ ...state, defaultDetailed: true, measuredHeights: once });
+  assertAsBuilt({ ...state, screen: 'phone', measuredHeights: once });
+  // Heights merged twice since the layout was built: both batches apply.
+  const twice = mergeMeasuredHeights(once, [[key(rowIds[2]), 80]]);
+  assertAsBuilt({ ...state, measuredHeights: twice });
+  // Heights that were not merged into the layout's.
+  assertAsBuilt({ ...state, measuredHeights: new Map([...measuredHeights, [key(rowIds[3]), 70]]) });
+  // The same arguments: the same layout.
+  assert.equal(updateVirtualRowLayout(layout, { ...state, measuredHeights }), layout);
 });
 
 test('on a phone, a file or folder without its details is estimated as its name and a folder’s line of tags, in the proportions of a wide screen', async () => {

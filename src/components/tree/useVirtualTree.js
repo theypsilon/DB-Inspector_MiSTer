@@ -2,7 +2,6 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { flushSync } from 'react-dom';
 import useWindowViewport from '../../hooks/useWindowViewport.js';
 import {
-  buildVirtualRowLayout,
   buildVirtualRows,
   getMeasurementScrollDelta,
   getRemainingScrollAnchorDelta,
@@ -10,6 +9,7 @@ import {
   mergeMeasuredHeights,
   shouldApplyScrollAnchor,
   shouldDeferRowMeasurement,
+  updateVirtualRowLayout,
 } from '../../lib/treeLayout.js';
 import { isTouchDevice } from '../../lib/utils.js';
 
@@ -29,9 +29,12 @@ export function useMeasuredRowLayout({ index, visibleRowIds, collapsedIds, detai
   const scrollingRef = useRef(false);
   const [measuredHeights, setMeasuredHeights] = useState(() => new Map());
   const [containerTop, setContainerTop] = useState(0);
+  // The last render's layout: when only measured heights changed, the next layout updates it rather
+  // than building the whole list again (see updateVirtualRowLayout).
+  const virtualLayoutRef = useRef(null);
   const virtualLayout = useMemo(
     () =>
-      buildVirtualRowLayout({
+      updateVirtualRowLayout(virtualLayoutRef.current, {
         rowIds: visibleRowIds,
         rowsById: index.rowsById,
         collapsedIds,
@@ -43,7 +46,6 @@ export function useMeasuredRowLayout({ index, visibleRowIds, collapsedIds, detai
       }),
     [visibleRowIds, index.rowsById, collapsedIds, detailOverrides, detailed, measuredHeights, expandedTagIds, screen],
   );
-  const virtualLayoutRef = useRef(virtualLayout);
   virtualLayoutRef.current = virtualLayout;
 
   return {
@@ -83,6 +85,7 @@ export function useVirtualRowWindow({
     containerTop,
     setContainerTop,
     virtualLayout,
+    virtualLayoutRef,
   } = layout;
   const viewport = useWindowViewport();
   const virtualRows = useMemo(
@@ -134,6 +137,7 @@ export function useVirtualRowWindow({
         currentMeasuredHeights,
         nextMeasuredHeights,
         viewportTop: Math.max(0, viewport.scrollY - containerTop),
+        currentLayout: virtualLayoutRef.current,
       });
     }
 
@@ -163,6 +167,7 @@ export function useVirtualRowWindow({
     setMeasuredHeights,
     suppressAnchoringRef,
     viewport.scrollY,
+    virtualLayoutRef,
     visibleRowIds,
   ]);
 

@@ -78,6 +78,16 @@ export function getRowMeasurementKey(rowId, { collapsed, detailsVisible, tagsExp
   return `${rowId}:${collapsed ? '1' : '0'}:${detailsVisible ? '1' : '0'}:${tagsExpanded ? '1' : '0'}:${screen}`;
 }
 
+// The row a measurement key was made for: the key without the four parts getRowMeasurementKey adds
+// after the row's ID (which may hold colons itself).
+function getMeasurementKeyRowId(key) {
+  let end = key.length;
+  for (let part = 0; part < 4; part += 1) {
+    end = key.lastIndexOf(':', end - 1);
+  }
+  return key.slice(0, end);
+}
+
 // Whether a row leaves its tags off its line: a file on a narrow screen (NARROW_SCREEN_QUERY in
 // utils.js), unless its details show, or all its tags were asked for or hold the find-in-page match.
 // Folders and archives keep theirs.
@@ -87,26 +97,44 @@ export function rowTagsHidden(row, { narrow, detailsVisible, tagsExpanded }) {
 
 const NO_ROW_IDS = new Set();
 
-export function buildVirtualRowLayout({
-  rowIds,
-  rowsById,
-  collapsedIds,
-  detailOverrides,
-  defaultDetailed,
-  measuredHeights,
-  expandedTagIds = NO_ROW_IDS,
-  screen = 'wide',
-}) {
+// What each layout was built from (buildVirtualRowLayout's arguments) and its rows' heights, for
+// updateVirtualRowLayout.
+const layoutSources = new WeakMap();
+// For measured heights from mergeMeasuredHeights: the heights they were merged into, and the keys
+// whose height changed.
+const measuredHeightChanges = new WeakMap();
+
+function withSource(layout, source, heights) {
+  layoutSources.set(layout, { source: { ...source }, heights });
+  return layout;
+}
+
+export function buildVirtualRowLayout(source) {
+  const {
+    rowIds,
+    rowsById,
+    collapsedIds,
+    detailOverrides,
+    defaultDetailed,
+    measuredHeights,
+    expandedTagIds = NO_ROW_IDS,
+    screen = 'wide',
+  } = source;
   if (!rowIds.length) {
-    return {
-      rowIds: [],
-      rowIndexById: new Map(),
-      offsets: [],
-      bottoms: [],
-      totalHeight: 0,
-    };
+    return withSource(
+      {
+        rowIds: [],
+        rowIndexById: new Map(),
+        offsets: [],
+        bottoms: [],
+        totalHeight: 0,
+      },
+      source,
+      [],
+    );
   }
 
+  const heights = new Array(rowIds.length);
   const offsets = new Array(rowIds.length);
   const bottoms = new Array(rowIds.length);
   const rowIndexById = new Map();
@@ -124,18 +152,103 @@ export function buildVirtualRowLayout({
       measuredHeight ?? estimateRowHeight(row, { collapsed, detailsVisible, screen });
 
     // Rows touch: each one starts where the one above ends.
+    heights[index] = rowHeight;
     offsets[index] = totalHeight;
     bottoms[index] = totalHeight + rowHeight;
     totalHeight += rowHeight;
   }
 
-  return {
-    rowIds,
-    rowIndexById,
-    offsets,
-    bottoms,
-    totalHeight,
-  };
+  return withSource(
+    {
+      rowIds,
+      rowIndexById,
+      offsets,
+      bottoms,
+      totalHeight,
+    },
+    source,
+    heights,
+  );
+}
+
+// The layout buildVirtualRowLayout would build from `source`, updated from `previous` when nothing
+// but measured heights changed since it was built, and those heights were merged into its own
+// (mergeMeasuredHeights): only the rows whose height changed are read, and only the offsets from
+// the first of them on are added up again, as the build adds them. Otherwise it is built again.
+// Building the whole layout for each batch of rows measured while scrolling took most of each frame
+// on a large tree (226 combined databases, about 100,000 rows).
+export function updateVirtualRowLayout(previous, source) {
+  const built = previous ? layoutSources.get(previous) : null;
+  if (!built || !sameLayoutSourceApartFromHeights(built.source, source)) {
+    return buildVirtualRowLayout(source);
+  }
+
+  const { measuredHeights } = source;
+  if (built.source.measuredHeights === measuredHeights) {
+    return previous;
+  }
+
+  const change = measuredHeightChanges.get(measuredHeights);
+  if (!change || change.from !== built.source.measuredHeights) {
+    return buildVirtualRowLayout(source);
+  }
+
+  const { collapsedIds, detailOverrides, defaultDetailed, expandedTagIds = NO_ROW_IDS, screen = 'wide' } = source;
+  const { rowIds, rowIndexById } = previous;
+  let heights = built.heights;
+  let first = rowIds.length;
+  for (const key of change.keys) {
+    // A key counts only for a row in the list, in the state it was measured in, as in the build.
+    const rowId = getMeasurementKeyRowId(key);
+    const index = rowIndexById.get(rowId);
+    if (index == null) {
+      continue;
+    }
+
+    const rowKey = getRowMeasurementKey(rowId, {
+      collapsed: collapsedIds.has(rowId),
+      detailsVisible: detailOverrides.get(rowId) ?? defaultDetailed,
+      tagsExpanded: expandedTagIds.has(rowId),
+      screen,
+    });
+    if (rowKey !== key) {
+      continue;
+    }
+
+    if (heights === built.heights) {
+      heights = heights.slice();
+    }
+    heights[index] = measuredHeights.get(key);
+    first = Math.min(first, index);
+  }
+
+  if (first === rowIds.length) {
+    return withSource({ ...previous }, source, heights);
+  }
+
+  const offsets = previous.offsets.slice();
+  const bottoms = previous.bottoms.slice();
+  let totalHeight = offsets[first];
+  for (let index = first; index < rowIds.length; index += 1) {
+    const rowHeight = heights[index];
+    offsets[index] = totalHeight;
+    bottoms[index] = totalHeight + rowHeight;
+    totalHeight += rowHeight;
+  }
+
+  return withSource({ rowIds, rowIndexById, offsets, bottoms, totalHeight }, source, heights);
+}
+
+// Whether two layouts' arguments are the same but for their measured heights.
+function sameLayoutSourceApartFromHeights(left, right) {
+  const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
+  keys.delete('measuredHeights');
+  for (const key of keys) {
+    if (left[key] !== right[key]) {
+      return false;
+    }
+  }
+  return true;
 }
 
 export function buildVirtualRows({
@@ -232,6 +345,7 @@ export function getViewportAnchorOffsetDelta({ currentLayout, nextLayout, viewpo
 // of them changes a height.
 export function mergeMeasuredHeights(measuredHeights, pendingEntries) {
   let next = measuredHeights;
+  const changedKeys = [];
   for (const [key, height] of pendingEntries) {
     if (next.get(key) === height) {
       continue;
@@ -241,13 +355,22 @@ export function mergeMeasuredHeights(measuredHeights, pendingEntries) {
       next = new Map(measuredHeights);
     }
     next.set(key, height);
+    changedKeys.push(key);
   }
 
+  if (next !== measuredHeights) {
+    // For updateVirtualRowLayout. Only the last merge is kept, so that each map of heights does not
+    // keep every map before it.
+    measuredHeightChanges.delete(measuredHeights);
+    measuredHeightChanges.set(next, { from: measuredHeights, keys: changedKeys });
+  }
   return next;
 }
 
 // How far the page must scroll so that the row at the top of the viewport stays put when rows are
-// re-measured: measured heights replace estimates above it, which moves it.
+// re-measured: measured heights replace estimates above it, which moves it. `currentLayout`, the
+// layout the page shows, if any, is used rather than built again when it was built from the same
+// arguments (see updateVirtualRowLayout).
 export function getMeasurementScrollDelta({
   rowIds,
   rowsById,
@@ -259,16 +382,18 @@ export function getMeasurementScrollDelta({
   currentMeasuredHeights,
   nextMeasuredHeights,
   viewportTop,
+  currentLayout = null,
 }) {
   if (!rowIds.length) {
     return 0;
   }
 
-  const layoutFor = (measuredHeights) =>
-    buildVirtualRowLayout({ rowIds, rowsById, collapsedIds, detailOverrides, defaultDetailed, measuredHeights, expandedTagIds, screen });
+  const layoutFor = (previous, measuredHeights) =>
+    updateVirtualRowLayout(previous, { rowIds, rowsById, collapsedIds, detailOverrides, defaultDetailed, measuredHeights, expandedTagIds, screen });
+  const current = layoutFor(currentLayout, currentMeasuredHeights);
   return getViewportAnchorOffsetDelta({
-    currentLayout: layoutFor(currentMeasuredHeights),
-    nextLayout: layoutFor(nextMeasuredHeights),
+    currentLayout: current,
+    nextLayout: layoutFor(current, nextMeasuredHeights),
     viewportTop,
   });
 }
