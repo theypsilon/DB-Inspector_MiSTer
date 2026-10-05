@@ -19,15 +19,21 @@ test('browser-native file types expose OPEN while binary files stay download-onl
     return getRowFileLinks(row);
   };
 
-  for (const fileName of ['notes.txt', 'settings.ini', 'readme.md', 'manual.pdf', 'cover.png']) {
-    const { downloadUrl, openUrl } = links(fileName);
+  for (const fileName of ['notes.txt', 'settings.ini', 'readme.md', 'manual.pdf']) {
+    const { downloadUrl, openUrl, viewUrl } = links(fileName);
     assert.ok(downloadUrl, `${fileName} can be downloaded`);
     assert.equal(openUrl, downloadUrl, `${fileName} can be opened`);
+    assert.equal(viewUrl, null, `${fileName} is not an image to view`);
   }
+
+  // An image is viewed in a dialog over the page (VIEW) rather than opened in a new tab.
+  const image = links('cover.png');
+  assert.deepEqual(image, { downloadUrl: 'https://example.com/files/cover.png', openUrl: null, viewUrl: 'https://example.com/files/cover.png' });
 
   const binary = links('core.rbf');
   assert.equal(binary.downloadUrl, 'https://example.com/files/core.rbf');
   assert.equal(binary.openUrl, null);
+  assert.equal(binary.viewUrl, null);
 });
 
 function buildDownloadActionDatabase() {

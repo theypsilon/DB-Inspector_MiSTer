@@ -576,6 +576,33 @@ describe('the page and the app model', () => {
     expect(await screen.findByRole('dialog', { name: 'Install \u201Cinstall_db\u201D on MiSTer' })).toBeTruthy();
     expect(window.location.hash).toBe(`#db=${url}&filter=arcade&at=install`);
   });
+  test('a tree row’s VIEW shows its image over the page, and closing it gives the focus back; a find bar left open steps aside for it, and Escape closes the image', async () => {
+    const url = 'https://example.com/view.json';
+    const user = openPage(`/#db=${url}`, { [url]: { body: database('view_db', { files: { 'docs/cover.png': { size: 1, hash: 'c' } }, folders: {} }) } });
+    expect(await screen.findByRole('heading', { name: 'view_db' })).toBeTruthy();
+
+    const row = within(document.getElementById('section-files')).getByRole('heading', { name: 'cover.png' }).closest('.tree-entry');
+    const view = within(row).getByRole('button', { name: 'VIEW' });
+    expect(row.querySelector('img')).toBeNull();
+    await user.click(view);
+    const dialog = screen.getByRole('dialog', { name: 'cover.png' });
+    expect(within(dialog).getByRole('img', { name: 'Preview of cover.png' }).getAttribute('src')).toBe('https://example.com/view_db/docs/cover.png');
+    expect(window.location.hash).toBe(`#db=${url}`);
+    await user.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.activeElement).toBe(view);
+
+    // A find bar left open steps aside for it, and Escape closes the image, not the find bar.
+    await user.keyboard('{Control>}f{/Control}');
+    expect(await screen.findByRole('search', { name: 'Find in tree' })).toBeTruthy();
+    await user.click(view);
+    expect(screen.getByRole('dialog', { name: 'cover.png' })).toBeTruthy();
+    expect(screen.queryByRole('search')).toBeNull();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByRole('search', { name: 'Find in tree' })).toBeTruthy();
+  });
+
   test('install_all() in the console opens the install dialog of every loaded database over the explorer, puts it in the link, and closing takes it out', async () => {
     const [alpha, beta] = ['https://example.com/install-alpha.json', 'https://example.com/install-beta.json'];
     const user = openPage(`/#db=${alpha}&db=${beta}&filter=arcade`, { [alpha]: { body: database('alpha') }, [beta]: { body: database('beta') } });

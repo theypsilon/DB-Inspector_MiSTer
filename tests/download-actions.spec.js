@@ -24,7 +24,8 @@ test('browser-native file types expose OPEN while binary files stay download-onl
       })
       .first();
     await expect(row.getByRole('button', { name: 'Download' })).toBeVisible();
-    await expect(row.getByRole('link', { name: 'OPEN' })).toBeVisible();
+    // An image is viewed in a dialog over the page rather than opened in a new tab.
+    await expect(fileName === 'cover.png' ? row.getByRole('button', { name: 'VIEW' }) : row.getByRole('link', { name: 'OPEN' })).toBeVisible();
   }
 
   const binaryRow = page

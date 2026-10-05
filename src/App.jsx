@@ -62,6 +62,7 @@ import CombinedFilterPanel from './components/CombinedFilterPanel.jsx';
 import CollisionsSection from './components/tree/CollisionsSection.jsx';
 import LoadModeModal from './components/modals/LoadModeModal.jsx';
 import ClearDatabasesModal from './components/modals/ClearDatabasesModal.jsx';
+import ImageViewerModal from './components/modals/ImageViewerModal.jsx';
 import ExplorerModal from './components/explorer/ExplorerModal.jsx';
 import FilterTermsModal from './components/modals/FilterTermsModal.jsx';
 import { buildFilterTerms } from './lib/filterTerms.js';
@@ -123,6 +124,9 @@ export default function App() {
   // Where the explorer was last, to open there again, until another database is shown.
   const explorerPathRef = useRef(null);
   const explorerOpenerRef = useRef(null);
+  // The image a tree row's VIEW shows ({ name, url }), and what had the focus before it; null while closed.
+  const [imageViewer, setImageViewer] = useState(null);
+  const imageViewerOpenerRef = useRef(null);
   const explorerKeyRef = useRef(0);
   // The FILTER box whose terms are shown (`target`): 'main' (FILTER, or the shared filter of
   // combined databases), or the db_id of a combined database's own filter; with the search they
@@ -173,8 +177,9 @@ export default function App() {
   // counted once the dialog is on screen (see the effect below), for the databases it was counted for.
   const [loadedFiles, setLoadedFiles] = useState({ databases: null, count: 0 });
   const loadedFileCount = loadedFiles.databases === databases ? loadedFiles.count : null;
-  // The explorer and the terms cover the page.
-  const pageCovered = explorerOpen || termsOpen;
+  // The explorer, the terms and a tree row's image cover the page.
+  const imageViewerOpen = imageViewer !== null && Boolean(activeView);
+  const pageCovered = explorerOpen || termsOpen || imageViewerOpen;
   const isFiltering = combinedView ? combinedView.isFiltering : Boolean(displayedInspection?.activeFilter.isFiltering);
   const filesystemIndex = useMemo(() => buildFilesystemIndex(activeView), [activeView]);
   const archivesIndex = useMemo(() => buildArchivesIndex(activeView), [activeView]);
@@ -439,6 +444,20 @@ export default function App() {
     }
   }, []);
 
+  const viewImage = useCallback((image) => {
+    imageViewerOpenerRef.current = document.activeElement;
+    setImageViewer(image);
+  }, []);
+
+  const closeImageViewer = useCallback(() => {
+    setImageViewer(null);
+    const opener = imageViewerOpenerRef.current;
+    imageViewerOpenerRef.current = null;
+    if (opener instanceof HTMLElement && opener.isConnected) {
+      opener.focus({ preventScroll: true });
+    }
+  }, []);
+
   function searchForEssential() {
     globalSearch.setQuery('essential');
     globalSearch.openSearch();
@@ -560,6 +579,7 @@ export default function App() {
               searchMatch={globalSearch.currentMatch?.section === 'filesystem' ? globalSearch.currentMatch : null}
               searchQuery={globalSearch.activeQuery}
               onDownloadError={handleDownloadError}
+              onViewImage={viewImage}
               onOpenExplorer={openExplorer}
             />
 
@@ -579,6 +599,7 @@ export default function App() {
                 searchMatch={globalSearch.currentMatch?.section === 'archives' ? globalSearch.currentMatch : null}
                 searchQuery={globalSearch.activeQuery}
                 onDownloadError={handleDownloadError}
+                onViewImage={viewImage}
                 onOpenExplorer={openExplorer}
               />
             ) : null}
@@ -595,6 +616,7 @@ export default function App() {
                 searchMatch={globalSearch.currentMatch?.section === 'collisions' ? globalSearch.currentMatch : null}
                 searchQuery={globalSearch.activeQuery}
                 onDownloadError={handleDownloadError}
+                onViewImage={viewImage}
               />
             ) : null}
 
@@ -699,6 +721,8 @@ export default function App() {
           }}
         />
       ) : null}
+
+      {imageViewerOpen ? <ImageViewerModal name={imageViewer.name} url={imageViewer.url} onClose={closeImageViewer} /> : null}
 
       {installDatabase ? (
         <InstallModal

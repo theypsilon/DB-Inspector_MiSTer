@@ -4,7 +4,7 @@ import { expect, test } from '@playwright/test';
 // default FILTER and the link, the detailed toggle, size hints and downloads, find-in-page with its
 // highlights and row flash, section and row anchors across a reload, the explorer and its link,
 // back/forward between databases, a link typed in the address bar of the open page, the theme
-// menu, and an image's preview in the explorer.
+// menu, and an image's preview in the explorer and in the dialog a tree row's VIEW opens.
 
 const SHARED_URL = 'https://raw.githubusercontent.com/example-owner/example-repo/main/db.json';
 const SECOND_URL = 'https://example.com/second.json';
@@ -350,7 +350,7 @@ test('a shared link opens its database, and the page around it works', async ({ 
     await expect.poll(theme).toBe('light');
   });
 
-  await test.step('an image’s details in the explorer show it, no wider than they are, on a wide screen and on a phone', async () => {
+  await test.step('an image shows in the explorer’s details and in the dialog a tree row’s VIEW opens, no wider than they are, on a wide screen and on a phone', async () => {
     const images = {
       db_id: 'images_db',
       v: 1,
@@ -384,6 +384,45 @@ test('a shared link opens its database, and the page around it works', async ({ 
     // An image that cannot be loaded says so.
     await explorer.getByRole('option', { name: /^broken\.png,/ }).click();
     await expect(explorer.getByRole('complementary', { name: 'Details of broken.png' })).toContainText('The preview could not be loaded.');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await expect(explorer).toHaveCount(0);
+
+    // A tree row's VIEW shows it in a dialog over the page, loaded only then, and closing the
+    // dialog leaves the page where it was and gives the focus back.
+    const row = page.locator('#section-files .tree-entry', { has: page.getByRole('heading', { name: 'wide.png', exact: true }) });
+    const view = row.getByRole('button', { name: 'VIEW' });
+    await expect(row.locator('img')).toHaveCount(0);
+    await view.scrollIntoViewIfNeeded();
+    await untilScrollStops(page);
+    const scrollY = await page.evaluate(() => window.scrollY);
+    const viewer = page.getByRole('dialog', { name: 'wide.png' });
+    const shown = viewer.getByRole('img', { name: 'Preview of wide.png' });
+    const inside = () =>
+      shown.evaluate((img) => {
+        const box = img.getBoundingClientRect();
+        const panel = img.closest('.modal-panel').getBoundingClientRect();
+        return [img.naturalWidth, box.left >= panel.left && box.right <= panel.right && box.bottom <= panel.bottom && box.right <= window.innerWidth];
+      });
+    await view.click();
+    await expect(shown).toBeVisible();
+    expect(await inside()).toEqual([640, true]);
+    await page.keyboard.press('Escape');
+    await expect(viewer).toHaveCount(0);
+    expect(await page.evaluate(() => window.scrollY)).toBe(scrollY);
+    await expect(view).toBeFocused();
+
+    // On a phone, a row's links show with its details, which a tap on its name shows.
+    await page.setViewportSize({ width: 360, height: 800 });
+    await expect(view).toHaveCount(0);
+    await row.locator('h3').click();
+    await view.click();
+    await expect(shown).toBeVisible();
+    await expect.poll(inside).toEqual([640, true]);
+    await viewer.getByRole('button', { name: 'Close' }).click();
+    await expect(viewer).toHaveCount(0);
+    await expect(view).toBeFocused();
+    await page.setViewportSize(viewport);
   });
 });
 

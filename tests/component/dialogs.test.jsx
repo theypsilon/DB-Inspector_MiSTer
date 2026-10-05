@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import LoadModeModal from '../../src/components/modals/LoadModeModal.jsx';
@@ -8,6 +8,7 @@ import FilterOverrideModal from '../../src/components/modals/FilterOverrideModal
 import DbIdConflictModal from '../../src/components/modals/DbIdConflictModal.jsx';
 import ClearDatabasesModal from '../../src/components/modals/ClearDatabasesModal.jsx';
 import InstallAllModal from '../../src/components/modals/InstallAllModal.jsx';
+import ImageViewerModal from '../../src/components/modals/ImageViewerModal.jsx';
 import { NO_COMBINED_FILTERS } from '../../src/lib/combinedFilters.js';
 import { inspect, text } from './support.js';
 
@@ -106,6 +107,34 @@ describe('the install dialog of every loaded database', () => {
     expect(text(dialog)).toContain('None of the loaded databases can be installed.');
     expect(within(dialog).queryByRole('button', { name: 'Download downloader.ini' })).toBeNull();
     expect(within(dialog).queryByRole('figure')).toBeNull();
+  });
+});
+
+describe('the image a tree row views', () => {
+  test('loads it, offers OPEN in a new tab, and Close, Escape or a click outside close it', async () => {
+    const onClose = vi.fn();
+    render(<ImageViewerModal name="BC Racers (USA, Europe).png" url="https://example.com/BC%20Racers.png" onClose={onClose} />);
+    const dialog = screen.getByRole('dialog', { name: 'BC Racers (USA, Europe).png' });
+    const image = within(dialog).getByRole('img', { name: 'Preview of BC Racers (USA, Europe).png' });
+    const figure = dialog.querySelector('figure');
+    expect([image.getAttribute('src'), image.getAttribute('referrerpolicy'), text(figure)]).toEqual(['https://example.com/BC%20Racers.png', 'no-referrer', 'Loading preview…']);
+    fireEvent.load(image);
+    expect(text(figure)).toBe('');
+    const open = within(dialog).getByRole('link', { name: 'OPEN' });
+    expect([open.getAttribute('href'), open.getAttribute('target')]).toEqual(['https://example.com/BC%20Racers.png', '_blank']);
+
+    const user = userEvent.setup();
+    await user.click(within(dialog).getByRole('button', { name: 'Close' }));
+    await user.keyboard('{Escape}');
+    await user.click(document.querySelector('.modal-overlay'));
+    expect(onClose).toHaveBeenCalledTimes(3);
+  });
+
+  test('says when the image cannot be loaded', () => {
+    render(<ImageViewerModal name="gone.png" url="https://example.com/gone.png" onClose={() => {}} />);
+    const dialog = screen.getByRole('dialog', { name: 'gone.png' });
+    fireEvent.error(within(dialog).getByRole('img'));
+    expect(text(dialog.querySelector('figure'))).toBe('The preview could not be loaded.');
   });
 });
 

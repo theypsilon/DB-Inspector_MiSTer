@@ -31,6 +31,7 @@ import { NARROW_SCREEN_QUERY, PHONE_SCREEN_QUERY, collectTextMatchRanges } from 
  * @property {string} [searchQuery]
  * @property {string} anchor
  * @property {(error: any) => void} [onDownloadError]
+ * @property {(image: { name: string, url: string }) => void} [onViewImage]
  * @property {() => void} [onOpenExplorer] Offers the explorer among the section's controls.
  */
 const TreeSection = memo(/** @param {TreeSectionProps} props */ function TreeSection({
@@ -47,6 +48,7 @@ const TreeSection = memo(/** @param {TreeSectionProps} props */ function TreeSec
   searchQuery,
   anchor,
   onDownloadError,
+  onViewImage,
   onOpenExplorer,
 }) {
   const rows = useTreeRowState(index, detailed);
@@ -193,6 +195,7 @@ const TreeSection = memo(/** @param {TreeSectionProps} props */ function TreeSec
                 onSetRowState={rows.handleSetRowState}
                 onAnchorRow={navigation.handleAnchorRow}
                 onDownloadError={onDownloadError}
+                onViewImage={onViewImage}
                 onHeightChange={handleRowHeightChange}
                 virtualTop={top}
                 virtualHeight={height}

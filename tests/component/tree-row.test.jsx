@@ -50,16 +50,27 @@ function renderRow(row, props = {}) {
 }
 
 describe('a tree row', () => {
-  test('files the browser can show get an OPEN link next to Download, and binaries only Download', async () => {
+  test('files the browser can show get an OPEN link next to Download, images VIEW instead, and binaries only Download', async () => {
     const { row } = await filesystemRows(DOWNLOADS);
-    for (const name of ['notes.txt', 'settings.ini', 'readme.md', 'manual.pdf', 'cover.png']) {
+    for (const name of ['notes.txt', 'settings.ini', 'readme.md', 'manual.pdf']) {
       const { element, unmount } = renderRow(row(name));
       const open = within(element).getByRole('link', { name: 'OPEN' });
       expect(open.getAttribute('href')).toBe(`https://example.com/files/${name}`);
       expect(open.getAttribute('target')).toBe('_blank');
+      expect(within(element).queryByRole('button', { name: 'VIEW' })).toBeNull();
       expect(within(element).getByRole('button', { name: 'Download' })).toBeTruthy();
       unmount();
     }
+
+    // An image shows in a dialog over the page, which the row does not render.
+    const onViewImage = vi.fn();
+    const image = renderRow(row('cover.png'), { onViewImage });
+    expect(within(image.element).queryByRole('link', { name: 'OPEN' })).toBeNull();
+    expect(image.element.querySelector('img')).toBeNull();
+    await image.user.click(within(image.element).getByRole('button', { name: 'VIEW' }));
+    expect(onViewImage.mock.calls).toEqual([[{ name: 'cover.png', url: 'https://example.com/files/cover.png' }]]);
+    expect(within(image.element).getByRole('button', { name: 'Download' })).toBeTruthy();
+    image.unmount();
 
     const { element } = renderRow(row('core.rbf'));
     expect(within(element).queryByRole('link', { name: 'OPEN' })).toBeNull();

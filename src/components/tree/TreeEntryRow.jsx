@@ -28,6 +28,7 @@ import { updateTooltipPlacement } from '../../lib/utils.js';
  * @property {(rowId: string, state: { collapsed: boolean, detailsVisible: boolean }) => void} onSetRowState
  * @property {(rowId: string) => void} onAnchorRow
  * @property {(error: any) => void} [onDownloadError]
+ * @property {(image: { name: string, url: string }) => void} [onViewImage] shows an image's VIEW
  * @property {import('react').Ref<HTMLDivElement>} [containerRef]
  * @property {import('react').CSSProperties} [virtualStyle]
  */
@@ -47,6 +48,7 @@ const TreeEntryRow = memo(/** @param {TreeEntryRowProps} props */ function TreeE
   onSetRowState,
   onAnchorRow,
   onDownloadError,
+  onViewImage,
   containerRef,
   virtualStyle,
 }) {
@@ -64,7 +66,7 @@ const TreeEntryRow = memo(/** @param {TreeEntryRowProps} props */ function TreeE
   const details = isArchive ? row.archive.details : row.node.details;
   const issues = isArchive ? row.archive.issues : [];
   const isFile = !isArchive && row.node.kind === 'file';
-  const { downloadUrl, openUrl } = getRowFileLinks(row);
+  const { downloadUrl, openUrl, viewUrl } = getRowFileLinks(row);
   const bodyCollapsed = isFile && collapsed;
   // Details show every tag; otherwise a row shows those that fit on its line, unless they were
   // asked for or the find-in-page match is in one of them.
@@ -213,8 +215,17 @@ const TreeEntryRow = memo(/** @param {TreeEntryRowProps} props */ function TreeE
                   {detailsVisible ? 'Hide details' : 'Show details'}
                 </button>
                 {dbId && phone && !nameOnly ? <span className="db-chip" title={dbId}>{dbId}</span> : null}
-                {!nameOnly && (openUrl || downloadUrl) ? (
+                {!nameOnly && (openUrl || viewUrl || downloadUrl) ? (
                   <div className="node-download-actions">
+                    {viewUrl ? (
+                      <button
+                        type="button"
+                        className="inline-action-button open-button"
+                        onClick={() => onViewImage?.({ name: row.node.name, url: viewUrl })}
+                      >
+                        VIEW
+                      </button>
+                    ) : null}
                     {openUrl ? (
                       <a
                         className="inline-action-button open-button"

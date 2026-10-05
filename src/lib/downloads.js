@@ -32,17 +32,23 @@ export function isBrowserOpenableFile(path) {
   );
 }
 
-// The image the explorer's details show of a file record: its URL, when browsers show the file
-// as an image.
+// The image of a file record that the explorer's details and a tree row's VIEW show: its URL, when
+// browsers show the file as an image.
 export function getImagePreviewUrl({ path, downloadUrl }) {
   return downloadUrl && OPENABLE_IMAGE_FILE_EXTENSIONS.has(fileExtension(path)) ? downloadUrl : null;
 }
 
-// The links a tree row offers: Download for a file with a URL, and OPEN as well when the browser
-// can show that file itself.
+// The links a tree row offers: Download for a file with a URL, and when the browser can show that
+// file itself, VIEW for an image (shown in a dialog over the page, loaded only then) or else OPEN.
 export function getRowFileLinks(row) {
   const isFile = row.type !== 'archive' && row.node.kind === 'file';
-  return isFile ? getFileLinks(row.node) : { downloadUrl: null, openUrl: null };
+  if (!isFile) {
+    return { downloadUrl: null, openUrl: null, viewUrl: null };
+  }
+
+  const { downloadUrl, openUrl } = getFileLinks(row.node);
+  const viewUrl = getImagePreviewUrl(row.node);
+  return { downloadUrl, openUrl: viewUrl ? null : openUrl, viewUrl };
 }
 
 // The same links for a file record, as the explorer shows it.
