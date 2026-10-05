@@ -1345,8 +1345,6 @@ fieldset.mister-option legend { float: left; width: 100%; padding: 0; }
   .issue > span:last-child { flex-basis: 100%; }
   .issue > strong { min-width: 0; overflow-wrap: anywhere; }
   .issue .db-chip { flex-shrink: 1; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
-  /* A combined database's chip on a row leaves room for the row's name: past 40% of the line it is cut short, in full in its tooltip. */
-  .tree-title-row .db-chip { display: block; max-width: 40%; overflow: hidden; text-overflow: ellipsis; }
   /* A collision's databases go under its label, and its corners stay round on several lines (one line is still fully rounded). */
   .primary-pill { flex-wrap: wrap; border-radius: min(var(--radius-chip), 1.25rem); }
   .app-shell { width: min(100% - 1rem, 1380px); padding-top: 2.75rem; }

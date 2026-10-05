@@ -264,6 +264,18 @@ describe('a tree row', () => {
     expect(visible(wide.element)).toBe(true);
   });
 
+  test('a name cut short gets its tooltip, but not on a phone, where a tap shows the details with the full name', async () => {
+    const { row } = await filesystemRows(DOWNLOADS);
+    for (const [phone, tooltip] of [[false, true], [true, false]]) {
+      const { element, unmount } = renderRow(row('notes.txt'), { phone });
+      const name = element.querySelector('h3');
+      Object.defineProperties(name, { scrollWidth: { value: 300 }, clientWidth: { value: 100 } });
+      fireEvent.mouseEnter(name);
+      expect(element.querySelector('.tree-heading').classList.contains('tooltip-hidden')).toBe(!tooltip);
+      unmount();
+    }
+  });
+
   test('on a phone, a tap on a closed file shows it with its details', async () => {
     const { row } = await filesystemRows(DOWNLOADS);
     const { element, user, onSetRowState, onToggleDetails } = renderRow(row('notes.txt'), { phone: true, collapsed: true });

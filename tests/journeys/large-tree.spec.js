@@ -77,32 +77,48 @@ test('large trees render near the viewport, keep their spacing, and reach far ro
     await page.setViewportSize({ width: 1440, height: 960 });
   });
 
-  await test.step('at 960px and narrower a file leaves its tags to its details, from the width its heading stacks, and the rows keep touching and reach the end', async () => {
+  await test.step('a row follows the page’s breakpoints, at 960px its tags and at 720px all but its name, and keeps touching the next and reaching the end', async () => {
     const file = rowNamed(page, 'file_00000.rbf');
-    const folder = rowNamed(page, 'folder_00');
+    const last = page.getByRole('heading', { name: `file_${String(FILE_COUNT - 1).padStart(5, '0')}.rbf` });
     const heading = () => file.locator('.tree-heading').evaluate((element) => getComputedStyle(element).flexDirection);
-    await page.setViewportSize({ width: 960, height: 960 });
+    // What the row shows: the text of its parts drawn wider than a pixel (its details button is
+    // there for the keyboard on a phone, out of sight).
+    const seen = () =>
+      file.evaluate((row) =>
+        [...row.querySelectorAll('.tree-card *')]
+          .filter((element) => !element.children.length && element.getBoundingClientRect().width > 1 && element.checkVisibility({ visibilityProperty: true }))
+          .map((element) => element.textContent.trim())
+          .filter(Boolean),
+      );
+
+    // The widths are app.css's: at 960px a row's heading stacks and a file's tags go with it.
+    await page.setViewportSize({ width: 961, height: 960 });
     await scrollUntilSteady(page.locator('.tree-root'), 100);
+    expect(await heading()).toBe('row');
+    await expect(file.locator('.tag-chip').first()).toBeVisible();
+    await page.setViewportSize({ width: 960, height: 960 });
     await expect(file.locator('.primary-row')).toHaveCount(0);
     expect(await heading()).toBe('column');
-    await expect(folder.locator('.tag-chip').first()).toBeVisible();
     await expect.poll(() => meetsNextRow(file)).toBe(true);
-    for (const [button, chips] of [['Show details', 11], ['Hide details', 0]]) {
-      await file.getByRole('button', { name: button }).click();
-      await expect(file.locator('.tag-chip')).toHaveCount(chips);
+    await scrollUntilSteady(page.locator('.tree-root'), 'end');
+    await expect(last).toBeInViewport();
+
+    // At 720px, where the phone layout starts, the row is its name, and a tap opens its details.
+    await page.setViewportSize({ width: 721, height: 760 });
+    await scrollUntilSteady(page.locator('.tree-root'), 100);
+    await expect(file.getByRole('button', { name: 'Download' })).toBeVisible();
+    await page.setViewportSize({ width: 720, height: 760 });
+    await expect.poll(seen).toEqual(['file_00000.rbf']);
+    await page.setViewportSize({ width: 360, height: 760 });
+    await scrollUntilSteady(page.locator('.tree-root'), 100);
+    await expect.poll(seen).toEqual(['file_00000.rbf']);
+    for (const details of [1, 0]) {
+      await file.locator('h3').click();
+      await expect(file.getByText('MD5 HASH', { exact: true })).toHaveCount(details);
       await expect.poll(() => meetsNextRow(file)).toBe(true);
     }
-
-    // One pixel wider, its heading is on one line and its tags are back.
-    await page.setViewportSize({ width: 961, height: 960 });
-    await expect(file.locator('.tag-chip').first()).toBeVisible();
-    expect(await heading()).toBe('row');
-    await expect.poll(() => meetsNextRow(file)).toBe(true);
-
-    await page.setViewportSize({ width: 960, height: 960 });
-    await expect(file.locator('.primary-row')).toHaveCount(0);
     await scrollUntilSteady(page.locator('.tree-root'), 'end');
-    await expect(page.getByRole('heading', { name: `file_${String(FILE_COUNT - 1).padStart(5, '0')}.rbf` })).toBeInViewport();
+    await expect(last).toBeInViewport();
     await page.setViewportSize({ width: 1440, height: 960 });
   });
 

@@ -224,6 +224,15 @@ test('the catalog lists known databases and opens them alone or together', async
     await expect(page.getByLabel(`FILTER for ${dbId}`)).toBeFocused();
     await expect.poll(() => page.evaluate(findWiderThanScreen)).toEqual([]);
 
+    // A tree row of the long db_id, opened with a tap: its database wraps inside the row.
+    const row = page.locator('#section-files .tree-entry', { has: page.getByRole('heading', { name: `${dbId.replaceAll('/', '_')}.rbf`, exact: true }) });
+    await row.scrollIntoViewIfNeeded();
+    await row.locator('h3').click();
+    await expect(row.locator('.db-chip')).toHaveText(dbId);
+    expect(await row.locator('.db-chip').evaluate((chip) => chip.getBoundingClientRect().right <= chip.closest('.tree-card').getBoundingClientRect().right)).toBe(true);
+    await expect.poll(() => page.evaluate(findWiderThanScreen)).toEqual([]);
+    await row.locator('h3').click();
+
     // Under the FILTER boxes, which keep the line's width, their buttons share it.
     const box = (locator) => locator.boundingBox();
     const [shared, own, ownTerms, remove] = await Promise.all([
