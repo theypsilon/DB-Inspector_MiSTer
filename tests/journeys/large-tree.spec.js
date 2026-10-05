@@ -113,7 +113,7 @@ test('large trees render near the viewport, keep their spacing, and reach far ro
     await expect(page.locator(`[id="row-database:file:${FAR_FILE_PATH}"]`)).toBeInViewport();
   });
 
-  await test.step('the explorer renders only the entries near view of a large folder, as a list and as icons, and reaches the last', async () => {
+  await test.step('the explorer renders only the entries near view of a large folder, as icons and as a list, and reaches the last', async () => {
     // The page's time runs as usual until a step stops it.
     await page.clock.install();
     await page.goto('about:blank');
@@ -126,10 +126,11 @@ test('large trees render near the viewport, keep their spacing, and reach far ro
     await expect(entry('rom_000.bin')).toBeVisible();
     await expect(entry('rom_000.bin')).toHaveAttribute('aria-setsize', String(ARCHIVE_COUNT));
 
-    for (const [view, toggle] of [['list', null], ['icons', 'Show as icons']]) {
+    // The icons first, as the explorer opens in them, then the list.
+    for (const [view, toggle] of [['icons', null], ['list', 'Show as list']]) {
       if (toggle) {
         await explorer.getByRole('button', { name: toggle }).click();
-        await expect(explorer.locator('.explorer-tile').first()).toBeVisible();
+        await expect(explorer.locator('.explorer-row').first()).toBeVisible();
       }
       const rendered = await explorer.getByRole('option').count();
       expect(rendered, view).toBeGreaterThan(0);
@@ -147,7 +148,7 @@ test('large trees render near the viewport, keep their spacing, and reach far ro
       await expect(entry(last), view).toHaveAttribute('aria-selected', 'true');
       await expect(entry(last), view).toBeInViewport();
     }
-    await explorer.getByRole('button', { name: 'Show as list' }).click();
+    await explorer.getByRole('button', { name: 'Show as icons' }).click();
 
     // On a phone the first folders of the path fold into …, which lists them.
     await page.setViewportSize({ width: 360, height: 760 });
@@ -170,10 +171,8 @@ test('large trees render near the viewport, keep their spacing, and reach far ro
     // Runs in the page: the number of columns of the icons drawn.
     const countColumns = () => new Set([...document.querySelectorAll('.explorer-tile')].map((tile) => tile.style.transform.split(',')[0])).size;
 
-    // Opening in the icons view (remembered in the browser), the icons are drawn in their places,
-    // rather than glide there from where they were first put: one is where it was first drawn ten
-    // frames later.
-    await page.evaluate(() => localStorage.setItem('inspector-explorer-view', 'icons'));
+    // Opening in the icons, the icons are drawn in their places, rather than glide there from where
+    // they were first put: one is where it was first drawn ten frames later.
     await page.goto('about:blank');
     await page.goto('/#at=explorer:games');
     await page.evaluate(() => {

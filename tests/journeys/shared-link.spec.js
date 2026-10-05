@@ -250,13 +250,14 @@ test('a shared link opens its database, and the page around it works', async ({ 
     await expect(explorer.getByRole('complementary', { name: 'Details of untagged.bin' })).toBeVisible();
     await expect(entry('untagged.bin')).toHaveAttribute('aria-selected', 'true');
 
-    // The icons view is remembered across a reload.
-    await explorer.getByRole('button', { name: 'Show as icons' }).click();
-    await expect(explorer.locator('.explorer-tile')).toHaveCount(1);
-    await page.reload();
+    // The explorer shows icons; the list, once chosen, is remembered across a reload.
     await expect(explorer.locator('.explorer-tile')).toHaveCount(1);
     await explorer.getByRole('button', { name: 'Show as list' }).click();
     await expect(explorer.locator('.explorer-row')).toHaveCount(1);
+    await page.reload();
+    await expect(explorer.locator('.explorer-row')).toHaveCount(1);
+    await explorer.getByRole('button', { name: 'Show as icons' }).click();
+    await expect(explorer.locator('.explorer-tile')).toHaveCount(1);
 
     // Escape closes the details, then the explorer.
     await page.keyboard.press('Escape');
