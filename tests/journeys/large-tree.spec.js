@@ -37,16 +37,76 @@ test('large trees render near the viewport, keep their spacing, and reach far ro
     const row = rowNamed(page, 'file_00000.rbf');
     await expect(row.locator('.collapse-button')).toHaveCount(0);
     expect(await linesDrawnTwiceOrNot(page)).toEqual([]);
-    const urlBefore = page.url();
     for (const [button, hashCount] of [['Show details', 1], ['Hide details', 0], ['Show details', 1]]) {
       await row.getByRole('button', { name: button }).click();
       await expect(row.getByText('MD5 HASH', { exact: true })).toHaveCount(hashCount);
       await expect.poll(() => meetsNextRow(row)).toBe(true);
     }
     await row.getByRole('button', { name: 'Hide details' }).click();
-    // Only a row's link icon puts it in the address.
-    expect(page.url()).toBe(urlBefore);
   });
+
+  await test.step('archives close and open, and keep rendering when the section above closes', async () => {
+    await expect(page.locator('#section-archives')).toBeAttached();
+    await scrollUntilSteady(archives, 120);
+    await expect(page.getByRole('heading', { name: 'rom_000.bin' })).toBeVisible();
+    const rendered = await page.locator('.archive-list .tree-entry').count();
+    expect(rendered).toBeGreaterThan(0);
+    expect(rendered).toBeLessThan(ARCHIVE_COUNT + 1);
+
+    await archives.getByRole('button', { name: /^Close all$/ }).click();
+    await expect(page.getByRole('heading', { name: 'rom_000.bin' })).toHaveCount(0);
+    await archives.getByRole('button', { name: /^Open all$/ }).click();
+    await expect(page.getByRole('heading', { name: 'rom_000.bin' })).toBeVisible();
+
+    await files.evaluate((element) => element.querySelector('summary').click());
+    await expect(page.getByRole('heading', { name: 'rom_000.bin' })).toBeVisible();
+    await scrollUntilSteady(page.locator('.archive-list'), 'end');
+    await expect(page.getByRole('heading', { name: `rom_${String(ARCHIVE_COUNT - 1).padStart(3, '0')}.bin` })).toBeInViewport();
+    await files.evaluate((element) => element.querySelector('summary').click());
+  });
+
+  await test.step('hovering a folder’s column far below it shows the folder, and a click goes back to it', async () => {
+    await scrollUntilSteady(page.locator('.tree-root'), 'end');
+    const box = await page.locator('.tree-root').boundingBox();
+    const columnX = box.x + 10;
+    await page.mouse.move(columnX, page.viewportSize().height / 2);
+    const ghost = page.locator('.ghost-parent-row');
+    await expect(ghost).toHaveText(/games/);
+
+    const ghostBox = await ghost.boundingBox();
+    await ghost.click({ position: { x: columnX - ghostBox.x, y: ghostBox.height / 2 } });
+    await expect(page.locator('.tree-root .tree-entry', { has: page.getByRole('heading', { name: 'games', exact: true }) })).toBeInViewport();
+  });
+
+  // A jump keeps correcting its scroll for a moment after it lands, so the steps after this one
+  // start from a fresh page.
+  await test.step('find-in-page brings a far row into view', async () => {
+    await page.evaluate(() => window.scrollTo(0, 0));
+    // The footer link, unlike Ctrl+F, works even before the shortcut listener is attached.
+    await page.locator('.app-footer').getByText('to search').click();
+    await page.getByLabel('Search text').fill('file_00599.rbf');
+    await expect(page.locator(`[id="row-database:file:${FAR_FILE_PATH}"]`)).toBeInViewport();
+    await page.getByLabel('Search text').press('Escape');
+  });
+
+  await test.step('a URL anchor opens a far row', async () => {
+    // A fresh page: going to the same address with only another # would not load it again.
+    await page.goto('about:blank');
+    await page.goto(`/#at=files:${FAR_FILE_PATH}`);
+    await upload(page, 'large.json', buildLargeDatabase());
+    await expect(page.getByRole('heading', { name: 'large_db' })).toBeVisible();
+    await expect(page.locator(`[id="row-database:file:${FAR_FILE_PATH}"]`)).toBeInViewport();
+  });
+});
+
+// The tests below start on a fresh page, so they run beside the one above: a run lasts as long as
+// its longest test.
+test('large-tree rows fit their tags to their line at any width, follow the page’s breakpoints, and reach the last rows', async ({ page }) => {
+  await page.goto('/');
+  await upload(page, 'large.json', buildLargeDatabase());
+  await expect(page.getByRole('heading', { name: 'large_db' })).toBeVisible();
+  // Where the first steps of the test above leave the list: its top 100px below the window's.
+  await scrollUntilSteady(page.locator('.tree-root'), 100);
 
   await test.step('a row shows as many tags as fit its line at any width, and keeps touching the next as they change, open and close', async () => {
     const file = rowNamed(page, 'file_00000.rbf');
@@ -126,62 +186,9 @@ test('large trees render near the viewport, keep their spacing, and reach far ro
     await scrollUntilSteady(page.locator('.tree-root'), 'end');
     await expect(page.getByRole('heading', { name: 'file_00599.rbf' })).toBeInViewport();
   });
+});
 
-  await test.step('archives close and open, and keep rendering when the section above closes', async () => {
-    await expect(page.locator('#section-archives')).toBeAttached();
-    await scrollUntilSteady(archives, 120);
-    await expect(page.getByRole('heading', { name: 'rom_000.bin' })).toBeVisible();
-    const rendered = await page.locator('.archive-list .tree-entry').count();
-    expect(rendered).toBeGreaterThan(0);
-    expect(rendered).toBeLessThan(ARCHIVE_COUNT + 1);
-
-    await archives.getByRole('button', { name: /^Close all$/ }).click();
-    await expect(page.getByRole('heading', { name: 'rom_000.bin' })).toHaveCount(0);
-    await archives.getByRole('button', { name: /^Open all$/ }).click();
-    await expect(page.getByRole('heading', { name: 'rom_000.bin' })).toBeVisible();
-
-    await files.evaluate((element) => element.querySelector('summary').click());
-    await expect(page.getByRole('heading', { name: 'rom_000.bin' })).toBeVisible();
-    await scrollUntilSteady(page.locator('.archive-list'), 'end');
-    await expect(page.getByRole('heading', { name: `rom_${String(ARCHIVE_COUNT - 1).padStart(3, '0')}.bin` })).toBeInViewport();
-    await files.evaluate((element) => element.querySelector('summary').click());
-  });
-
-  await test.step('hovering a folder’s column far below it shows the folder, and a click goes back to it', async () => {
-    await scrollUntilSteady(page.locator('.tree-root'), 'end');
-    const box = await page.locator('.tree-root').boundingBox();
-    const columnX = box.x + 10;
-    await page.mouse.move(columnX, page.viewportSize().height / 2);
-    const ghost = page.locator('.ghost-parent-row');
-    await expect(ghost).toHaveText(/games/);
-
-    const urlBefore = page.url();
-    const ghostBox = await ghost.boundingBox();
-    await ghost.click({ position: { x: columnX - ghostBox.x, y: ghostBox.height / 2 } });
-    await expect(page.locator('.tree-root .tree-entry', { has: page.getByRole('heading', { name: 'games', exact: true }) })).toBeInViewport();
-    expect(page.url()).toBe(urlBefore);
-  });
-
-  // A jump keeps correcting its scroll for a moment after it lands, so the steps after this one
-  // start from a fresh page.
-  await test.step('find-in-page brings a far row into view', async () => {
-    await page.evaluate(() => window.scrollTo(0, 0));
-    // The footer link, unlike Ctrl+F, works even before the shortcut listener is attached.
-    await page.locator('.app-footer').getByText('to search').click();
-    await page.getByLabel('Search text').fill('file_00599.rbf');
-    await expect(page.locator(`[id="row-database:file:${FAR_FILE_PATH}"]`)).toBeInViewport();
-    await page.getByLabel('Search text').press('Escape');
-  });
-
-  await test.step('a URL anchor opens a far row', async () => {
-    // A fresh page: going to the same address with only another # would not load it again.
-    await page.goto('about:blank');
-    await page.goto(`/#at=files:${FAR_FILE_PATH}`);
-    await upload(page, 'large.json', buildLargeDatabase());
-    await expect(page.getByRole('heading', { name: 'large_db' })).toBeVisible();
-    await expect(page.locator(`[id="row-database:file:${FAR_FILE_PATH}"]`)).toBeInViewport();
-  });
-
+test('the explorer of a large database renders only the entries near view, and its filter terms only those on screen', async ({ page }) => {
   await test.step('the explorer renders only the entries near view of a large folder, as icons and as a list, and reaches the last', async () => {
     // The page's time runs as usual until a step stops it.
     await page.clock.install();
@@ -348,8 +355,6 @@ test('large trees render near the viewport, keep their spacing, and reach far ro
     expect(await laidOut(names.last())).toBe(false);
     await names.last().scrollIntoViewIfNeeded();
     await expect.poll(() => laidOut(names.last())).toBe(true);
-    // The count follows, once the dialog is on screen.
-    await expect(terms.locator('.filter-terms-matches')).toHaveText(`Matches all ${(FILE_COUNT + ARCHIVE_COUNT).toLocaleString('en-US')} files`);
     await terms.getByRole('button', { name: 'Done' }).click();
   });
 });

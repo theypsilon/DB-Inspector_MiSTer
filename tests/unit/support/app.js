@@ -38,6 +38,9 @@ import { FILTER_INPUT_DEBOUNCE_MS, buildCombinedFilterSummaryCopy, buildFilterSu
 import { installBrowser } from './browser.js';
 
 const ORIGIN = 'http://localhost';
+// How many tasks in a row the app must stay as it is, with nothing in progress, to be settled. One
+// is enough for every test today; the others are a margin for work the browser does not track.
+const QUIET_ROUNDS = 3;
 
 // A file to upload. Objects become JSON.
 export function file(name, content) {
@@ -125,15 +128,18 @@ function startApp(browser) {
   let picker = null;
   let closed = false;
 
+  // Runs what is due until the app is quiet: no timer due on the clock, no response, file read or
+  // digest in progress, and nothing changed for QUIET_ROUNDS tasks in a row.
   async function settle() {
     let quietRounds = 0;
     for (let round = 0; round < 5000; round += 1) {
       const before = model.getState();
       const ran = browser.clock.runDue();
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      if (!ran && model.getState() === before) {
+      const waited = await browser.settled();
+      await browser.nextTask();
+      if (!ran && !waited && model.getState() === before) {
         quietRounds += 1;
-        if (quietRounds >= 12) {
+        if (quietRounds >= QUIET_ROUNDS) {
           return;
         }
       } else {
@@ -419,6 +425,15 @@ function startApp(browser) {
     },
     async giveOwnFilter(dbId) {
       model.addOwnFilter(dbId);
+      await pause();
+    },
+    // The Clear of the shared FILTER box, and the Remove of a database's own filter.
+    async clearSharedFilter() {
+      model.resetSharedFilter();
+      await pause();
+    },
+    async removeOwnFilter(dbId) {
+      model.removeOwnFilter(dbId);
       await pause();
     },
     async typeOwnFilter(dbId, value) {

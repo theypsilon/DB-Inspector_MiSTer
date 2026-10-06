@@ -146,6 +146,8 @@ describe('combined databases', () => {
     render(<CombinedOverview databases={await several(4)} detailed={false} onDetailedChange={() => {}} onInstall={() => {}} onClear={onClear} />);
     await user.click(within(document.querySelector('#section-database > summary')).getByRole('button', { name: 'Clear databases' }));
     expect(onClear).toHaveBeenCalledTimes(2);
+    // A click on it does not collapse the list.
+    expect(document.querySelector('#section-database').open).toBe(true);
   });
 
   test('a long db_id in the compact list keeps its full name in its tooltip, and can break after _ and /', async () => {
@@ -199,11 +201,14 @@ describe('combined databases', () => {
     expect(document.querySelector('.combined-database-row summary a, .combined-database-row summary button')).toBeNull();
     expect(rows.every((row) => !row.open)).toBe(true);
 
-    // Open, a row shows what its card would: Install, its repository, and its details.
+    // A click on a row opens it, and it alone; open, it shows what its card would: Install, its
+    // repository, and its details.
     const gamma = rows[2];
-    gamma.open = true;
-    const body = within(gamma.querySelector('.combined-database-row-body'));
     const user = userEvent.setup();
+    await user.click(gamma.querySelector('summary h3'));
+    expect(rows.map((row) => row.open)).toEqual([false, false, true, false, false]);
+    const body = within(gamma.querySelector('.combined-database-row-body'));
+    expect(text(gamma.querySelector('.metadata-list'))).toContain('Loaded from');
     await user.click(body.getByRole('button', { name: 'Install' }));
     expect(onInstall).toHaveBeenCalledWith('gamma');
     expect(body.getByRole('link', { name: 'example-owner/gamma-repo' }).getAttribute('href')).toBe('https://github.com/example-owner/gamma-repo');
@@ -214,8 +219,20 @@ describe('combined databases', () => {
     const toggle = within(section.querySelector('summary')).getByRole('button', { name: 'Detailed toggle' });
     await user.click(toggle);
     expect(onDetailedChange).toHaveBeenCalledWith(true);
+    // A click on it does not collapse the list.
+    expect(section.open).toBe(true);
     view.rerender(<CombinedOverview databases={await several(5)} detailed onDetailedChange={onDetailedChange} onInstall={onInstall} />);
     expect(text(document.querySelectorAll('.combined-database-row')[2].querySelector('.metadata-list'))).toContain('Default filter');
+    await user.click(within(section.querySelector('summary')).getByRole('button', { name: 'Detailed toggle' }));
+    expect(onDetailedChange).toHaveBeenLastCalledWith(false);
+
+    // The summary's indicator collapses the list and opens it again; the toggle stays at hand.
+    const indicator = section.querySelector('summary .summary-indicator');
+    await user.click(indicator);
+    expect(section.open).toBe(false);
+    expect(within(section.querySelector('summary')).getByRole('button', { name: 'Detailed toggle' })).toBeTruthy();
+    await user.click(indicator);
+    expect(section.open).toBe(true);
   });
 
   test('share a FILTER, can have their own, and list the filter each one gets', async () => {

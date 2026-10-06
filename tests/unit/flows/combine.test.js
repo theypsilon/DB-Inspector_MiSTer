@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'node:test';
+import { inflateRawSync } from 'node:zlib';
 
 import { file, openApp } from '../support/app.js';
 
@@ -147,6 +148,12 @@ test('combined databases share a [mister] filter and can have their own, kept in
   await app.forward();
   assert.equal(app.view.heading, '2 combined databases');
   assert.deepEqual(app.view.appliedFilters, ['alphaarcadeshared filter', 'betaarcade consoleits own filter']);
+
+  // Clearing the shared filter and removing beta's own one gives each database its own default back.
+  await app.clearSharedFilter();
+  await app.removeOwnFilter('beta');
+  assert.deepEqual(app.view.appliedFilters, ['alphaEverythingno filter', 'beta!consoledatabase default']);
+  assert.equal(app.hash, `#db=${ALPHA_URL}&db=${BETA_URL}`);
 });
 
 test('uploads and database list entries can be combined too, and uploads stay out of the URL', async () => {
@@ -239,6 +246,40 @@ test('databases chosen together leave out those whose db_id is taken, and report
   assert.equal(app.hash, `#db=${GAMMA_URL}`);
 });
 
+test('databases chosen to open alone keep the combined databases’ shared filter as FILTER, and a selection of every loaded database opens without asking', async () => {
+  const missingUrl = 'https://example.com/combine/missing.json';
+  app = await openApp('/', {
+    routes: { ...ROUTES, [missingUrl]: { status: 404, contentType: 'text/plain', body: 'missing' } },
+  });
+  await app.fetch(ALPHA_URL);
+  await app.fetch(BETA_URL);
+  await app.combine();
+  await app.typeSharedFilter('arcade');
+
+  await app.upload(file('downloader.ini', `[missing]\ndb_url=${missingUrl}\n\n[gamma]\ndb_url=${GAMMA_URL}\n`));
+  await openAllSelected(2);
+  await app.loadAlone();
+  assert.equal(app.view.heading, 'gamma');
+  assert.ok(app.errorMessage.includes(`${missingUrl}: Request failed with 404 Not Found.`), app.errorMessage);
+  assert.equal(app.filter, 'arcade');
+  await app.pause();
+  assert.equal(app.hash, `#db=${GAMMA_URL}&filter=arcade`);
+
+  // Gamma is loaded and selected, so the selection opens afresh, and the first database with a
+  // db_id wins within it.
+  await app.upload(
+    file('downloader.ini', `[twin]\ndb_url=${ALPHA_TWIN_URL}\n\n[gamma]\ndb_url=${GAMMA_URL}\n\n[alpha]\ndb_url=${ALPHA_URL}\n`),
+  );
+  await openAllSelected(3);
+  assert.equal(app.prompt, null);
+  assert.equal(app.view.heading, '2 combined databases');
+  assert.deepEqual(app.view.cards, ['alpha', 'gamma']);
+  assert.ok(
+    app.errorMessage.includes(`Another selected database has the db_id alpha, so ${ALPHA_URL} was not opened.`),
+    app.errorMessage,
+  );
+});
+
 test('fetching the only loaded database again asks just whether to reload it', async () => {
   const routes = { ...ROUTES };
   app = await openApp('/', { routes });
@@ -319,6 +360,12 @@ test('a long session is packed into its link, and opens again from it', async ()
 
   assert.equal(app.view.heading, '40 combined databases');
   assert.match(app.hash, /^#z=[A-Za-z0-9_-]+$/);
+  // Packed as the link format says: the readable keys, raw deflate, in base64url.
+  const packed = new URLSearchParams(app.hash.slice(1)).get('z');
+  assert.equal(
+    inflateRawSync(Buffer.from(packed, 'base64url')).toString('utf8'),
+    `${urls.map((url) => `db=${url}`).join('&')}&filter=arcade&filter.many_3=[mister]+console`,
+  );
   assert.ok(app.url.length <= 2000, `${app.url.length}`);
 
   await app.reload();

@@ -29,6 +29,13 @@ describe('the question before combining', () => {
     expect(answers.onCancel).toHaveBeenCalledTimes(1);
   });
 
+  test('speaks of the loaded database as one, whatever the number replacing it', () => {
+    render(<LoadModeModal loadedDbIds={['alpha']} incomingCount={4} onLoadAlone={() => {}} onCombine={() => {}} onCancel={() => {}} />);
+    const dialog = screen.getByRole('dialog', { name: 'Combine with the loaded databases?' });
+    expect(text(dialog)).toContain('This database is already loaded: alpha.');
+    expect(text(dialog)).toContain('Load the 4 selected databases alone to replace it');
+  });
+
   test('speaks of one database for one', () => {
     render(<LoadModeModal loadedDbIds={['alpha']} onLoadAlone={() => {}} onCombine={() => {}} onCancel={() => {}} />);
     const dialog = screen.getByRole('dialog', { name: 'Combine with the loaded databases?' });

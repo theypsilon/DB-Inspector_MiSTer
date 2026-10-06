@@ -95,6 +95,17 @@ describe('the theme menu', () => {
     expect(theme()).toBe('light');
   });
 
+  test('each hidden theme written by hand is named on the menu’s button', () => {
+    systemScheme(false);
+    for (const [id, label] of [['classic', 'Classic'], ['dot-matrix', 'Dot Matrix'], ['phosphor', 'Phosphor']]) {
+      localStorage.setItem(THEME_STORAGE_KEY, id);
+      const { unmount } = render(<ThemeMenu />);
+      expect(theme()).toBe(id);
+      expect(menuButton(label)).toBeTruthy();
+      unmount();
+    }
+  });
+
   test('a hidden theme written by hand stays whatever the system says, until the menu replaces it', async () => {
     localStorage.setItem(THEME_STORAGE_KEY, 'phosphor');
     const system = systemScheme(false);

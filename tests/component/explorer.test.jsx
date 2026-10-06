@@ -253,6 +253,9 @@ describe('the explorer', () => {
 
     await user.keyboard('{Backspace}');
     expect(shown()).toBe('SD card');
+    // The details of the folder left are open, and the link names the folder shown.
+    expect(screen.getByRole('complementary', { name: 'Details of _Arcade' })).toBeTruthy();
+    expect(lastLocation(onLocationChange)).toBe('');
     await user.keyboard('{Alt>}{ArrowLeft}{/Alt}');
     expect(shown()).toBe('_Arcade');
     await user.keyboard('{Alt>}{ArrowRight}{/Alt}');

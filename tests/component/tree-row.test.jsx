@@ -212,6 +212,19 @@ describe('a tree row', () => {
     expect(within(element).getByRole('button', { name: 'Show details' })).toBeTruthy();
   });
 
+  test('on a phone, an image offers VIEW once its details show, and a tap on VIEW shows the image without closing them', async () => {
+    const { row } = await filesystemRows(DOWNLOADS);
+    const onViewImage = vi.fn();
+    const closed = renderRow(row('cover.png'), { phone: true, onViewImage });
+    expect(within(closed.element).queryByRole('button', { name: 'VIEW' })).toBeNull();
+    closed.unmount();
+
+    const open = renderRow(row('cover.png'), { phone: true, detailsVisible: true, onViewImage });
+    await open.user.click(within(open.element).getByRole('button', { name: 'VIEW' }));
+    expect(onViewImage.mock.calls).toEqual([[{ name: 'cover.png', url: 'https://example.com/files/cover.png' }]]);
+    expect(open.onToggleDetails).not.toHaveBeenCalled();
+  });
+
   test('on a phone, a row is its name until its details show, and a tap on it shows or hides them; elsewhere a click on it does nothing', async () => {
     const { row } = await filesystemRows(DOWNLOADS);
     const LONG = 'Coin-OpCollection/Distribution-MiSTerFPGA';

@@ -60,6 +60,8 @@ test('missing FILTER param uses the database default, clear returns to that defa
 
   assert.equal(app.view.heading, 'filter_smoke');
   assert.equal(app.filter, 'a');
+  // The default filters what the page shows from the start.
+  assertShown(app.view.files, ['file_a.rbf', 'plain.rbf', 'essential.rbf'], ['file_b.rbf']);
   await app.pause();
   assert.equal(app.hash, `#db=${remoteUrl}`);
 
@@ -73,6 +75,12 @@ test('missing FILTER param uses the database default, clear returns to that defa
   assert.equal(app.filter, '');
   assert.equal(app.view.summary, 'Showing the full database: 7 files, 7 folders, 1 archives.');
   assert.equal(app.hash, `#db=${remoteUrl}&filter=`);
+
+  // An emptied FILTER can be cleared back to the default too.
+  assert.equal(app.canResetFilter, true);
+  await app.clearFilter();
+  assert.equal(app.filter, 'a');
+  assert.equal(app.hash, `#db=${remoteUrl}`);
 });
 
 test('manual FILTER survives uploads and direct URL fetches of other databases', async () => {

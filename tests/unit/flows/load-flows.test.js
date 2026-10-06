@@ -163,6 +163,8 @@ describe('INI list picker', () => {
     });
     await app.fetch(listUrl);
 
+    // Its picker opens by itself.
+    assert.equal(app.state.choicePickerOpen, true);
     assert.equal(app.view.choice.title, 'Choose databases from this list');
     assert.equal(app.view.choice.description, `${listUrl} contains 2 entries.`);
     assert.equal(app.hash, `#db=${listUrl}`);
@@ -174,16 +176,42 @@ describe('INI list picker', () => {
     await app.pause();
     assert.equal(app.hash, `#db=${ENTRY_WITHOUT_FILTER_URL}`);
   });
+
+  test('an entry that is the loaded database asks only before replacing FILTER', async () => {
+    const listUrl = 'https://example.com/flows-list.ini';
+    app = await openApp('/', {
+      routes: { ...ROUTES, [listUrl]: { body: MULTI_ENTRY_INI, contentType: 'text/plain' } },
+    });
+    await app.fetch(ENTRY_WITH_FILTER_URL);
+    await app.typeFilter('manual !keep');
+    await app.fetch(listUrl);
+    await openOnly('WithFilter');
+
+    // Opening it closes no other database, so there is no question about combining.
+    assert.equal(app.prompt.kind, 'filterOverride');
+    await app.answer('filterOverride', true);
+    assert.equal(app.prompt, null);
+    assert.equal(app.view.heading, 'with_filter_db');
+    assert.equal(app.filter, 'arcade ini-list-default');
+  });
 });
 
 describe('remote loading', () => {
   test('reports a loop when a single-entry list links back to itself', async () => {
     const loopUrl = 'https://example.com/flows-loop.ini';
     app = await openApp('/', {
-      routes: { [loopUrl]: { body: `[Loop]\ndb_url=${loopUrl}\n`, contentType: 'text/plain' } },
+      routes: { ...ROUTES, [loopUrl]: { body: `[Loop]\ndb_url=${loopUrl}\n`, contentType: 'text/plain' } },
     });
     await app.fetch(loopUrl);
 
+    assert.equal(app.errorMessage, `Detected a loop while following linked databases from ${loopUrl}.`);
+
+    // With a database loaded, the list is read first, then whether to combine is asked, then the
+    // loop is found.
+    await app.fetch(ENTRY_WITH_FILTER_URL);
+    assert.equal(app.errorMessage, '');
+    await app.fetch(loopUrl);
+    await app.loadAlone();
     assert.equal(app.errorMessage, `Detected a loop while following linked databases from ${loopUrl}.`);
   });
 
@@ -249,6 +277,8 @@ describe('links', () => {
     assert.equal(app.view.heading, 'with_filter_db');
 
     await app.openLink(`#db=${ENTRY_WITHOUT_FILTER_URL}&filter=arcade`);
+    // In the page, without loading it again.
+    assert.deepEqual(app.pageLoads, []);
     assert.equal(app.view.heading, 'without_filter_db');
     assert.equal(app.databaseUrl, ENTRY_WITHOUT_FILTER_URL);
     assert.equal(app.filter, 'arcade');

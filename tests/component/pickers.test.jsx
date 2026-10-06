@@ -7,7 +7,7 @@ import CatalogPickerModal from '../../src/components/modals/CatalogPickerModal.j
 import SourcePickerModal from '../../src/components/modals/SourcePickerModal.jsx';
 import { loadDatabaseSourceBytes } from '../../src/lib/database.js';
 import { UPDATE_ALL_DEFAULT_DATABASES, buildListChoice, buildUploadChoice } from '../../src/lib/selection.js';
-import { scanUploads } from '../../src/lib/uploads.js';
+import { hashContent, scanUploads } from '../../src/lib/uploads.js';
 import { text } from './support.js';
 
 const defaultUrl = (dbId) => UPDATE_ALL_DEFAULT_DATABASES.find((database) => database.dbId === dbId).dbUrl;
@@ -114,13 +114,34 @@ describe('the catalog picker', () => {
     expect(selectedNames(dialog)).toEqual([all[0], EDGE_NAME, ...all.slice(2)]);
   });
 
+  test('Close closes it without opening what is selected', async () => {
+    const { dialog, user, onClose, onOpenDatabases } = renderCatalog();
+    await user.click(within(dialog).getByRole('button', { name: 'Select Update All defaults' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Close', exact: true }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onOpenDatabases).not.toHaveBeenCalled();
+  });
+
+  test('reviewing the selection lists only the databases selected, until all entries show again', async () => {
+    const { dialog, user } = renderCatalog();
+    await user.click(within(dialog).getByRole('button', { name: 'Select Update All defaults' }));
+    const summary = dialog.querySelector('.modal-selected');
+    await user.click(within(summary).getByRole('button', { name: 'Review selected' }));
+    expect(text(dialog)).toContain('4 of 7 entries');
+    expect(dialog.querySelectorAll('.catalog-option')).toHaveLength(4);
+    await user.click(within(summary).getByRole('button', { name: 'Show all entries' }));
+    expect(text(dialog)).toContain('7 of 7 entries');
+  });
+
   test('marks loaded databases and approximate IDs, and counts the selection on its Open button', async () => {
     const { dialog, user } = renderCatalog({ loadedDatabases: [{ inspection: { source: { sourceLabel: ARCADE.dbUrl } } }] });
     const option = (title) => [...dialog.querySelectorAll('.catalog-option')].find((element) => text(element).includes(title));
 
     expect(text(option('Arcade ROMs Database'))).toContain('Loaded');
     expect(dialog.querySelectorAll('.catalog-loaded-badge')).toHaveLength(1);
+    expect(text(option('Extra'))).toContain('MultiDatabases/extra');
     expect(text(option('Extra'))).toContain('Approximate ID');
+    expect(text(option('Arcade ROMs Database'))).not.toContain('Approximate ID');
     expect(text(option('Extra').querySelector('[role="tooltip"]'))).toBe('The real database ID will be determined when the database is opened.');
     expect(text(dialog)).toContain('Entries marked “Approximate ID” use the folder from their database URL');
 
@@ -224,6 +245,21 @@ describe('the picker of uploaded files', () => {
 
     expect(text(dialog.querySelector('.catalog-option'))).toContain('From a.json');
     expect(selectedNames(dialog)).toEqual(['alpha (a.json)', 'beta (b.json)']);
+  });
+
+  test('marks the files whose content is loaded, and Close closes it', async () => {
+    const choice = buildUploadChoice(await scanUploads([file('a.json', database('alpha')), file('fork.json', database('alpha_fork'))]));
+    const loaded = { inspection: { source: { sourceKind: 'upload', sourceLabel: 'old.json', contentHash: await hashContent(strToU8(JSON.stringify(database('alpha')))) } } };
+    const onClose = vi.fn();
+    render(<SourcePickerModal choice={choice} loadedDatabases={[loaded]} onClose={onClose} onOpenDatabases={() => {}} />);
+    const dialog = screen.getByRole('dialog', { name: 'Choose databases from your files' });
+    const option = (name) => [...dialog.querySelectorAll('.catalog-option')].find((element) => text(element).includes(name));
+
+    expect(dialog.querySelectorAll('.catalog-loaded-badge')).toHaveLength(1);
+    expect(text(option('From a.json'))).toContain('Loaded');
+    expect(text(option('From fork.json'))).not.toContain('Loaded');
+    await userEvent.setup().click(within(dialog).getByRole('button', { name: 'Close', exact: true }));
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   test('names the list whose [mister] filter it offers', async () => {

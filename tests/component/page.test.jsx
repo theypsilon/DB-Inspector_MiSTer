@@ -1,8 +1,10 @@
+import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import App from '../../src/App.jsx';
+import { SEARCH_FLASH_MS } from '../../src/lib/rowFlash.js';
 import { NARROW_SCREEN_QUERY, PHONE_SCREEN_QUERY } from '../../src/lib/utils.js';
 import { text } from './support.js';
 
@@ -79,10 +81,16 @@ function stubScreen(width) {
   };
 }
 
+// The page as main.jsx renders it: in StrictMode, which mounts it twice and runs its effects twice,
+// in development builds only. The journeys run the production build, so this is where it is checked.
 function openPage(path, routes) {
   window.history.replaceState(null, '', path);
   serve(routes);
-  render(<App />);
+  render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  );
   return userEvent.setup();
 }
 
@@ -108,6 +116,11 @@ describe('the page and the app model', () => {
     await user.clear(filter);
     await user.type(filter, 'essential');
     await waitFor(() => expect(window.location.hash).toBe(`#db=${url}&filter=essential`), { timeout: 3000 });
+
+    // Clear brings back the default, which the link leaves out.
+    await user.click(within(document.getElementById('section-filter')).getByRole('button', { name: 'Clear' }));
+    expect(filter.value).toBe('arcade');
+    await waitFor(() => expect(window.location.hash).toBe(`#db=${url}`), { timeout: 3000 });
   });
 
   test('the rows of a tree draw one outline around the list: each line once, rounded at its outer corners', async () => {
@@ -158,11 +171,22 @@ describe('the page and the app model', () => {
     await user.clear(urlBox);
     await user.type(urlBox, beta);
     await user.click(screen.getByRole('button', { name: 'Fetch database' }));
+    // Cancel leaves the loaded database as it was.
+    await user.click(within(await screen.findByRole('dialog', { name: 'Combine with the loaded databases?' })).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByRole('heading', { name: 'alpha' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: /combined databases/ })).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'Fetch database' }));
     const question = await screen.findByRole('dialog', { name: 'Combine with the loaded databases?' });
     await user.click(within(question).getByRole('button', { name: 'Combine' }));
 
     expect(await screen.findByRole('heading', { name: '2 combined databases' })).toBeTruthy();
     await waitFor(() => expect(window.location.hash).toBe(`#db=${alpha}&db=${beta}`));
+
+    // Their shared FILTER filters both, and reaches the link.
+    await user.type(screen.getByLabelText('FILTER', { exact: true }), 'arcade');
+    await waitFor(() => expect(window.location.hash).toBe(`#db=${alpha}&db=${beta}&filter=arcade`), { timeout: 3000 });
   });
 
   test('Escape on a db_id question in the catalog closes only the question', async () => {
@@ -201,8 +225,28 @@ describe('the page and the app model', () => {
     const search = await screen.findByRole('search', { name: 'Find in tree' });
     expect(within(search).getByLabelText('Search text').value).toBe('essential');
     await waitFor(() => expect(text(search.querySelector('.find-bar-count'))).toBe('1 of 2'));
+
+    // Enter jumps to the tree's match, whose row flashes until its time is up.
+    const timers = vi.spyOn(window, 'setTimeout');
+    const row = () => document.getElementById('row-database:file:cores/essential.rbf');
+    const flashing = () => [...document.querySelectorAll('.tree-entry-highlighted')].map((element) => element.id);
+    await user.keyboard('{Enter}');
+    expect(text(search.querySelector('.find-bar-count'))).toBe('2 of 2');
+    await waitFor(() => expect(flashing()).toEqual([row().id]));
+    const flashEnds = timers.mock.calls.findLast(([, delay]) => delay === SEARCH_FLASH_MS)[0];
+    act(() => flashEnds());
+    expect(flashing()).toEqual([]);
+
+    // Escape ends a flash, and closing search right after a jump leaves no row flashing.
+    await user.keyboard('{Enter}{Enter}');
+    await waitFor(() => expect(flashing()).toEqual([row().id]));
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('search')).toBeNull();
+    expect(flashing()).toEqual([]);
+    await user.click(screen.getByRole('button', { name: 'essential' }));
+    await user.keyboard('{Enter}{Escape}');
+    await act(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    expect(flashing()).toEqual([]);
   });
 
   test('Escape in the theme menu closes only the menu, and the find bar stays open', async () => {
@@ -349,6 +393,139 @@ describe('the page and the app model', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Detailed toggle' }).getAttribute('aria-pressed')).toBe('true'));
     expect(window.location.hash).toBe(`#db=${url}&detailed`);
     await waitFor(() => expect(text(document.querySelector('#section-files'))).toContain('MD5 HASH'));
+
+    await user.click(screen.getByRole('button', { name: 'Detailed toggle' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Detailed toggle' }).getAttribute('aria-pressed')).toBe('false'));
+    expect(window.location.hash).toBe(`#db=${url}`);
+    await waitFor(() => expect(text(document.querySelector('#section-files'))).not.toContain('MD5 HASH'));
+  });
+
+  test('a row’s link icon puts it in the address, and showing its details does not', async () => {
+    const url = 'https://example.com/row-link.json';
+    const user = openPage(`/#db=${url}`, { [url]: { body: database('row_link_db') } });
+    expect(await screen.findByRole('heading', { name: 'row_link_db' })).toBeTruthy();
+    const row = await waitFor(() => {
+      const found = document.getElementById('row-database:file:cores/essential.rbf');
+      expect(found).toBeTruthy();
+      return found;
+    });
+
+    await user.click(within(row).getByRole('button', { name: 'Show details' }));
+    expect(window.location.hash).toBe(`#db=${url}`);
+    await user.click(row.querySelector('.copy-link-button'));
+    expect(window.location.hash).toBe(`#db=${url}&at=files:cores/essential.rbf`);
+  });
+
+  test('the cluster size changes the size estimate', async () => {
+    const url = 'https://example.com/cluster.json';
+    const user = openPage(`/#db=${url}`, { [url]: { body: database('cluster_db') } });
+    expect(await screen.findByRole('heading', { name: 'cluster_db' })).toBeTruthy();
+    const size = () => text(document.querySelector('.disk-usage-value'));
+
+    const before = size();
+    await user.selectOptions(screen.getByLabelText('Cluster size'), '4096');
+    expect(size()).not.toBe(before);
+  });
+
+  test('the catalog marks the loaded database, and opening, combining and clearing ask about the loaded ones', async () => {
+    const [alpha, beta, gamma] = ['alpha', 'beta', 'gamma'].map((dbId) => `https://example.com/${dbId}.json`);
+    const user = openPage(`/#db=${alpha}`, {
+      [RUNTIME_CATALOG_URL]: {
+        contentType: 'text/plain',
+        body: ['alpha', 'beta', 'gamma'].map((dbId) => `self.${dbId.toUpperCase()} = Database(db_id='${dbId}', db_url='https://example.com/${dbId}.json', title='${dbId} title')`).join('\n'),
+      },
+      [MULTIDATABASES_CATALOG_URL]: {
+        contentType: 'text/markdown',
+        body: `| [Extra](extra/) | Extra files | [Inspect](https://theypsilon.github.io/DB-Inspector_MiSTer/?database-url=${encodeURIComponent('https://example.com/extra/db.json')}) |\n`,
+      },
+      [alpha]: { body: database('alpha') },
+      [beta]: { body: database('beta') },
+      [gamma]: { body: database('gamma') },
+    });
+    expect(await screen.findByRole('heading', { name: 'alpha' })).toBeTruthy();
+    expect(await screen.findByText('4 entries available')).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Browse catalog' }));
+    let catalog = screen.getByRole('dialog', { name: 'Browse database catalog' });
+    const option = (title) => [...catalog.querySelectorAll('.catalog-option')].find((element) => text(element).includes(title));
+    expect(text(option('alpha title'))).toContain('Loaded');
+    await user.click(within(catalog).getByRole('checkbox', { name: 'beta title (beta)' }));
+    await user.click(within(catalog).getByRole('checkbox', { name: 'gamma title (gamma)' }));
+    await user.click(within(catalog).getByRole('button', { name: 'Open 2 selected databases' }));
+    const question = await screen.findByRole('dialog', { name: 'Combine with the loaded databases?' });
+    expect(text(question)).toContain('Load the 2 selected databases alone to replace it');
+    await user.click(within(question).getByRole('button', { name: 'Combine' }));
+    expect(await screen.findByRole('heading', { name: '3 combined databases' })).toBeTruthy();
+
+    await user.click(within(document.querySelector('.overview-header')).getByRole('button', { name: 'Clear databases' }));
+    const clear = screen.getByRole('dialog', { name: 'Clear the loaded databases?' });
+    expect(text(clear)).toContain('This closes the 3 loaded databases');
+    await user.click(within(clear).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByRole('heading', { name: '3 combined databases' })).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Browse catalog' }));
+    catalog = screen.getByRole('dialog', { name: 'Browse database catalog' });
+    await user.click(within(catalog).getByRole('button', { name: 'Close', exact: true }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  test('chosen files offer their databases in a picker, which closes to a panel and opens them', async () => {
+    const user = openPage('/', {});
+    const upload = (dbId) => new File([JSON.stringify(database(dbId))], `${dbId}.json`, { type: 'application/json' });
+    await user.upload(document.getElementById('database-file-input'), [upload('alpha'), upload('beta')]);
+
+    let picker = await screen.findByRole('dialog', { name: 'Choose databases from your files' });
+    await user.click(within(picker).getByRole('button', { name: 'Close', exact: true }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByText('Found 2 databases in 2 files. Choose the ones you want to open.')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Browse entries' }));
+    picker = screen.getByRole('dialog', { name: 'Choose databases from your files' });
+    await user.click(within(picker).getByRole('button', { name: 'Open 2 selected databases' }));
+    expect(await screen.findByRole('heading', { name: '2 combined databases' })).toBeTruthy();
+  });
+
+  test('a list entry with its own filter asks before replacing FILTER, and each answer does what it says', async () => {
+    const other = 'https://example.com/other.json';
+    const withFilter = 'https://example.com/with-filter.json';
+    const list = 'https://example.com/list.ini';
+    const user = openPage(`/#db=${other}`, {
+      [other]: { body: database('other_db') },
+      [withFilter]: { body: database('with_filter_db') },
+      [list]: { contentType: 'text/plain', body: `[MiSTer]\nfilter=ini-list-default\n\n[WithFilter]\ndb_url=${withFilter}\nfilter=arcade [mister]\n\n[Other]\ndb_url=${other}\n` },
+    });
+    expect(await screen.findByRole('heading', { name: 'other_db' })).toBeTruthy();
+    await user.type(screen.getByLabelText('FILTER'), 'manual');
+    const urlBox = screen.getByLabelText('URL');
+    const fetchList = async () => {
+      await user.clear(urlBox);
+      await user.type(urlBox, list);
+      await user.click(screen.getByRole('button', { name: 'Fetch database' }));
+      return screen.findByRole('dialog', { name: 'Choose databases from this list' });
+    };
+    const openWithFilter = async () => {
+      const picker = await fetchList();
+      await user.click(within(picker).getByRole('button', { name: 'Select none' }));
+      await user.click(within(picker).getByRole('checkbox', { name: 'WithFilter' }));
+      await user.click(within(picker).getByRole('button', { name: 'Open selected database' }));
+    };
+
+    // Closed, the list's picker leaves a panel that names it.
+    await user.click(within(await fetchList()).getByRole('button', { name: 'Close', exact: true }));
+    expect(screen.getByText(`${list} contains 2 entries. Choose the ones you want to open.`)).toBeTruthy();
+
+    await openWithFilter();
+    await user.click(within(await screen.findByRole('dialog', { name: 'Combine with the loaded databases?' })).getByRole('button', { name: 'Load alone' }));
+    let question = await screen.findByRole('dialog', { name: 'Replace the current filter?' });
+    await user.click(within(question).getByRole('button', { name: 'Keep current' }));
+    expect(await screen.findByRole('heading', { name: 'with_filter_db' })).toBeTruthy();
+    expect(screen.getByLabelText('FILTER').value).toBe('manual');
+
+    // The entry is loaded now, so only the FILTER question comes.
+    await openWithFilter();
+    question = await screen.findByRole('dialog', { name: 'Replace the current filter?' });
+    await user.click(within(question).getByRole('button', { name: 'Replace filter' }));
+    await waitFor(() => expect(screen.getByLabelText('FILTER').value).toBe('arcade ini-list-default'));
   });
 
   test('an anchor to an archive of combined databases opens at its row', async () => {
@@ -589,6 +766,11 @@ describe('the page and the app model', () => {
     expect(within(dialog).getByRole('img', { name: 'Preview of cover.png' }).getAttribute('src')).toBe('https://example.com/view_db/docs/cover.png');
     expect(window.location.hash).toBe(`#db=${url}`);
     await user.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.activeElement).toBe(view);
+    // Escape closes it too, and gives the focus back as well.
+    await user.click(view);
+    await user.keyboard('{Escape}');
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(document.activeElement).toBe(view);
 
