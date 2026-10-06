@@ -3,9 +3,10 @@ import { STATUS_CODES } from 'node:http';
 // A browser for the app model under Node: an address bar with history (back and forward fire
 // popstate, and so does a new # typed in the address bar; pages loaded are recorded), timers on a
 // clock the test moves, and fetch answered from routes. Routes map a URL to
-// { status, body, contentType } (or are a function from URL to that); a body that is not a string or
-// bytes is sent as JSON. Unknown URLs fail as a blocked request would. Requests ({ url, init }) are
-// recorded in order.
+// { status, body, contentType } (or are a function from URL to that), or to a promise of it, which
+// holds the response back until the test settles it; a body that is not a string or bytes is sent
+// as JSON. Unknown URLs fail as a blocked request would. Requests ({ url, init }) are recorded in
+// order.
 
 function createClock() {
   let now = 0;
@@ -160,7 +161,11 @@ function createFetch(routes, requests) {
     // Responses arrive in a later task, as they do from the network.
     await new Promise((resolve) => setTimeout(resolve, 0));
     const url = String(input);
-    const route = typeof routes === 'function' ? routes(url) : routes[url];
+    let route = typeof routes === 'function' ? routes(url) : routes[url];
+    // A route that is a promise answers once the test settles it.
+    if (typeof route?.then === 'function') {
+      route = await route;
+    }
     if (!route) {
       throw new TypeError('Failed to fetch');
     }

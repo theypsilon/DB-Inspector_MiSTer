@@ -50,6 +50,40 @@ const ROUTES = {
   [ENTRY_WITHOUT_FILTER_URL]: { body: buildDatabase('without_filter_db') },
 };
 
+// The catalog, where a fork shares a db_id with the database before it.
+const RUNTIME_CATALOG_URL =
+  'https://raw.githubusercontent.com/theypsilon/Update_All_MiSTer/master/src/update_all/databases.py';
+const MULTIDATABASES_CATALOG_URL = 'https://raw.githubusercontent.com/theypsilon/MultiDatabases_MiSTer/main/README.md';
+const FORK_URL = 'https://example.com/flows-fork.json';
+const BROKEN_URL = 'https://example.com/flows-broken.json';
+const README_ONLY_URL = 'https://raw.githubusercontent.com/theypsilon/MultiDatabases_MiSTer/db/readme-only/db.json';
+const CATALOG_ROUTES = {
+  ...ROUTES,
+  [FORK_URL]: { body: buildDatabase('with_filter_db') },
+  [RUNTIME_CATALOG_URL]: {
+    body: `
+self.with_filter = Database(db_id='with_filter_db', db_url='${ENTRY_WITH_FILTER_URL}', title='With filter')
+self.fork = Database(db_id='with_filter_db', db_url='${FORK_URL}', title='With filter: fork')
+self.without_filter = Database(db_id='Without_Filter_DB', db_url='${ENTRY_WITHOUT_FILTER_URL}', title='Without filter')
+self.broken = Database(db_id='broken_db', db_url='${BROKEN_URL}', title='Broken')
+`,
+    contentType: 'text/plain; charset=utf-8',
+  },
+  [MULTIDATABASES_CATALOG_URL]: {
+    body: `| [README only](readme-only/) | Only here | [Inspect](https://theypsilon.github.io/DB-Inspector_MiSTer/#db=${README_ONLY_URL}) |`,
+    contentType: 'text/markdown; charset=utf-8',
+  },
+};
+
+// The catalog's routes, with the answers to `urls` held back until `answer(url)`.
+function heldBack(...urls) {
+  const held = new Map(urls.map((url) => [url, Promise.withResolvers()]));
+  return {
+    routes: (url) => (held.has(url) ? held.get(url).promise.then(() => CATALOG_ROUTES[url]) : CATALOG_ROUTES[url]),
+    answer: (url) => held.get(url).resolve(),
+  };
+}
+
 let app;
 afterEach(() => app?.close());
 
@@ -222,6 +256,186 @@ describe('links', () => {
     await app.back();
     assert.equal(app.view.heading, 'with_filter_db');
     assert.equal(app.filter, '');
+  });
+
+  test('a link written by hand can name a database of the catalog by its db_id, which the link then names by its URL', async () => {
+    app = await openApp('/#db=With_Filter_DB&filter=arcade', { routes: CATALOG_ROUTES });
+
+    // The first database of the catalog with that db_id, letter case aside, fetched once found.
+    assert.equal(app.view.heading, 'with_filter_db');
+    assert.deepEqual(
+      app.browser.requests.map(({ url }) => url),
+      [RUNTIME_CATALOG_URL, MULTIDATABASES_CATALOG_URL, ENTRY_WITH_FILTER_URL],
+    );
+    assert.equal(app.hash, `#db=${ENTRY_WITH_FILTER_URL}&filter=arcade`);
+    assert.equal(app.historyLength, 1);
+    assert.equal(app.databaseUrl, ENTRY_WITH_FILTER_URL);
+    assert.equal(app.filter, 'arcade');
+    assert.equal(app.state.loadingMessage, '');
+    assert.equal(app.errorMessage, '');
+
+    // The page writes its URL from then on.
+    await app.typeFilter('arcade !cheats');
+    assert.equal(app.hash, `#db=${ENTRY_WITH_FILTER_URL}&filter=arcade+!cheats`);
+    await app.reload();
+    assert.equal(app.view.heading, 'with_filter_db');
+    assert.equal(app.filter, 'arcade !cheats');
+
+    // A database the catalog lists only from MultiDatabases has the db_id the catalog shows.
+    app.close();
+    app = await openApp('/#db=MultiDatabases/readme-only', {
+      routes: { ...CATALOG_ROUTES, [README_ONLY_URL]: { body: buildDatabase('MultiDatabases/readme-only') } },
+    });
+    assert.equal(app.view.heading, 'MultiDatabases/readme-only');
+    assert.equal(app.hash, `#db=${README_ONLY_URL}`);
+
+    // A link naming URLs alone fetches its database before the catalog, as it always has.
+    app.close();
+    app = await openApp(`/#db=${ENTRY_WITH_FILTER_URL}`, { routes: CATALOG_ROUTES });
+    assert.deepEqual(
+      app.browser.requests.map(({ url }) => url),
+      [ENTRY_WITH_FILTER_URL, RUNTIME_CATALOG_URL, MULTIDATABASES_CATALOG_URL],
+    );
+  });
+
+  test('combined databases can be named by db_id among URLs, keeping their own filters', async () => {
+    app = await openApp(
+      `/#db=without_filter_db&db=${ENTRY_WITH_FILTER_URL}&filter=arcade&filter.without_filter_db=!arcade`,
+      { routes: CATALOG_ROUTES },
+    );
+
+    assert.equal(app.view.heading, '2 combined databases');
+    assert.deepEqual(app.view.cards, ['without_filter_db', 'with_filter_db']);
+    assert.equal(app.sharedFilter, 'arcade');
+    assert.equal(app.ownFilter('without_filter_db'), '!arcade');
+    assert.equal(
+      app.hash,
+      `#db=${ENTRY_WITHOUT_FILTER_URL}&db=${ENTRY_WITH_FILTER_URL}&filter=arcade&filter.without_filter_db=!arcade`,
+    );
+    assert.equal(app.historyLength, 1);
+    assert.equal(app.state.loadingMessage, '');
+  });
+
+  test('a db_id the catalog does not have fails to open, as a database that cannot be loaded does', async () => {
+    app = await openApp('/#db=missing_db', { routes: CATALOG_ROUTES });
+    assert.equal(app.errorMessage, 'The catalog has no database with db_id missing_db.');
+    assert.equal(app.view.heading, null);
+    assert.equal(app.hash, '#db=missing_db');
+    assert.equal(app.state.loadingMessage, '');
+    assert.deepEqual(app.browser.requests.map(({ url }) => url), [RUNTIME_CATALOG_URL, MULTIDATABASES_CATALOG_URL]);
+
+    // Among others, the others open.
+    app.close();
+    app = await openApp(`/#db=without_filter_db&db=missing_db&db=${ENTRY_WITH_FILTER_URL}`, { routes: CATALOG_ROUTES });
+    assert.equal(app.view.heading, '2 combined databases');
+    assert.deepEqual(app.view.cards, ['without_filter_db', 'with_filter_db']);
+    assert.equal(app.errorMessage, 'The catalog has no database with db_id missing_db.');
+    assert.equal(app.hash, `#db=${ENTRY_WITHOUT_FILTER_URL}&db=${ENTRY_WITH_FILTER_URL}`);
+
+    // One the catalog has, whose database cannot be loaded, fails as its URL does, which the Fetch
+    // box then holds.
+    app.close();
+    app = await openApp(`/#db=${BROKEN_URL}`, { routes: CATALOG_ROUTES });
+    const brokenError = app.errorMessage;
+    assert.ok(brokenError);
+    app.close();
+    app = await openApp('/#db=broken_db', { routes: CATALOG_ROUTES });
+    assert.equal(app.errorMessage, brokenError);
+    assert.equal(app.databaseUrl, BROKEN_URL);
+    assert.equal(app.hash, `#db=${BROKEN_URL}`);
+
+    // Without the catalog, no db_id is found.
+    app.close();
+    app = await openApp('/#db=without_filter_db', { routes: ROUTES });
+    assert.equal(app.catalog.status, 'error');
+    assert.equal(
+      app.errorMessage,
+      'The catalog could not be loaded, so the database with db_id without_filter_db could not be found.',
+    );
+    assert.equal(app.view.heading, null);
+    assert.equal(app.hash, '#db=without_filter_db');
+  });
+
+  test('a db_id typed in the address bar of the open page opens its database, and back returns', async () => {
+    app = await openApp(`/#db=${ENTRY_WITH_FILTER_URL}`, { routes: CATALOG_ROUTES });
+    assert.equal(app.view.heading, 'with_filter_db');
+
+    await app.openLink('#db=without_filter_db&filter=arcade');
+    assert.equal(app.view.heading, 'without_filter_db');
+    assert.equal(app.hash, `#db=${ENTRY_WITHOUT_FILTER_URL}&filter=arcade`);
+    assert.equal(app.historyLength, 2);
+    assert.equal(app.databaseUrl, ENTRY_WITHOUT_FILTER_URL);
+    assert.equal(app.filter, 'arcade');
+
+    await app.back();
+    assert.equal(app.view.heading, 'with_filter_db');
+    assert.equal(app.filter, '');
+    await app.forward();
+    assert.equal(app.view.heading, 'without_filter_db');
+    assert.equal(app.hash, `#db=${ENTRY_WITHOUT_FILTER_URL}&filter=arcade`);
+
+    // One the catalog does not have takes the loaded database away, as a failed load does.
+    await app.openLink('#db=missing_db');
+    assert.equal(app.view.heading, null);
+    assert.equal(app.errorMessage, 'The catalog has no database with db_id missing_db.');
+    assert.equal(app.hash, '#db=missing_db');
+  });
+
+  test('a link waiting for the catalog says so, and gives way to a link opened meanwhile', async () => {
+    let catalog = heldBack(RUNTIME_CATALOG_URL);
+    app = await openApp('/', { routes: catalog.routes });
+    await app.openLink('#db=without_filter_db');
+    assert.equal(app.state.loadingMessage, 'Finding without_filter_db in the catalog...');
+    assert.equal(app.view.heading, null);
+
+    // Back on the start page, it no longer waits, and once the catalog arrives nothing opens.
+    await app.back();
+    assert.equal(app.state.loadingMessage, '');
+    catalog.answer(RUNTIME_CATALOG_URL);
+    await app.settle();
+    assert.equal(app.state.loadingMessage, '');
+    assert.equal(app.view.heading, null);
+    assert.equal(app.hash, '');
+    assert.ok(!app.browser.requests.some(({ url }) => url === ENTRY_WITHOUT_FILTER_URL));
+
+    // Forward finds it in the catalog, fetched once, and its history entry names its URL.
+    await app.forward();
+    assert.equal(app.view.heading, 'without_filter_db');
+    assert.equal(app.hash, `#db=${ENTRY_WITHOUT_FILTER_URL}`);
+    assert.equal(app.historyLength, 2);
+    assert.equal(app.browser.requests.filter(({ url }) => url === RUNTIME_CATALOG_URL).length, 1);
+
+    // A shared link waiting for it gives way to a database opened meanwhile, which stays as it is.
+    app.close();
+    catalog = heldBack(RUNTIME_CATALOG_URL);
+    app = await openApp('/#db=without_filter_db&db=with_filter_db', { routes: catalog.routes });
+    assert.equal(app.state.loadingMessage, 'Finding 2 databases in the catalog...');
+    await app.fetch(ENTRY_WITH_FILTER_URL);
+    assert.equal(app.view.heading, 'with_filter_db');
+    catalog.answer(RUNTIME_CATALOG_URL);
+    await app.settle();
+    assert.equal(app.view.heading, 'with_filter_db');
+    assert.equal(app.hash, `#db=${ENTRY_WITH_FILTER_URL}`);
+    assert.equal(app.state.loadingMessage, '');
+    assert.deepEqual(
+      app.browser.requests.map(({ url }) => url).filter((url) => url.startsWith('https://example.com/')),
+      [ENTRY_WITH_FILTER_URL],
+    );
+
+    // Leaving it for another link takes its message away, but not the message of a database the
+    // page is loading meanwhile.
+    app.close();
+    catalog = heldBack(RUNTIME_CATALOG_URL, ENTRY_WITH_FILTER_URL);
+    app = await openApp('/#db=without_filter_db', { routes: catalog.routes });
+    await app.fetch(ENTRY_WITH_FILTER_URL);
+    assert.equal(app.state.loadingMessage, `Fetching ${ENTRY_WITH_FILTER_URL}...`);
+    await app.openLink('#');
+    assert.equal(app.state.loadingMessage, `Fetching ${ENTRY_WITH_FILTER_URL}...`);
+    catalog.answer(ENTRY_WITH_FILTER_URL);
+    catalog.answer(RUNTIME_CATALOG_URL);
+    await app.settle();
+    assert.equal(app.view.heading, 'with_filter_db');
+    assert.equal(app.state.loadingMessage, '');
   });
 
   test('Clear asks first, then loads the start page: the address without its link', async () => {

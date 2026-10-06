@@ -5,7 +5,7 @@ import {
   mergeRuntimeDatabaseCatalogEntries,
   parseMultiDatabasesCatalog,
 } from '../../src/lib/database.js';
-import { mergeCatalogEntries, mergeCustomCatalogEntries } from '../../src/lib/catalog.js';
+import { findCatalogDatabaseUrl, mergeCatalogEntries, mergeCustomCatalogEntries } from '../../src/lib/catalog.js';
 
 const EXISTING_DATABASE_URL =
   'https://raw.githubusercontent.com/theypsilon/MultiDatabases_MiSTer/db/existing-db/db.json';
@@ -226,6 +226,20 @@ test('reloading a session entry updates it in place of adding a duplicate', () =
   const sessionEntries = mergeCustomCatalogEntries([reload], [unrelated, firstLoad]);
 
   assert.deepEqual(summarize(sessionEntries), ['reload: New title', 'unrelated: Unrelated']);
+});
+
+test('a db_id finds the first catalog database with it, ignoring letter case', () => {
+  const entries = [
+    ...RUNTIME_ENTRIES,
+    { key: 'readme', dbId: 'MultiDatabases/readme-only', dbIdApproximate: true, dbUrl: 'https://example.com/readme-only.json', title: 'README' },
+  ];
+
+  assert.equal(findCatalogDatabaseUrl(entries, 'distribution_mister'), 'https://example.com/primary.json');
+  assert.equal(findCatalogDatabaseUrl(entries, ' Other_DB '), 'https://example.com/other.json');
+  assert.equal(findCatalogDatabaseUrl(entries, 'multidatabases/README-ONLY'), 'https://example.com/readme-only.json');
+  assert.equal(findCatalogDatabaseUrl(entries, 'missing_db'), '');
+  assert.equal(findCatalogDatabaseUrl(entries, ''), '');
+  assert.equal(findCatalogDatabaseUrl([], 'other_db'), '');
 });
 
 function buildInspectUrl(databaseUrl) {

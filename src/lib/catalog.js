@@ -176,6 +176,13 @@ export function normalizeCatalogDbId(dbId) {
   return String(dbId || '').trim().toLowerCase();
 }
 
+// The URL of the first catalog entry with `dbId`, ignoring letter case, or '': what a link that
+// names a database by its db_id opens.
+export function findCatalogDatabaseUrl(entries, dbId) {
+  const wanted = normalizeCatalogDbId(dbId);
+  return (wanted && entries.find((entry) => normalizeCatalogDbId(entry.dbId) === wanted)?.dbUrl) || '';
+}
+
 export function mergeCatalogEntry(incomingEntry, existingEntry, { preferExistingTitle = false } = {}) {
   return {
     ...incomingEntry,

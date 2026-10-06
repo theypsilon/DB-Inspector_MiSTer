@@ -19,7 +19,7 @@ These are the main references that shaped the implementation.
 - `src/lib/combine.js` and `src/lib/combinedFilters.js`
   - Combining several databases' filtered views and finding their path collisions; the filters of combined databases.
 - `src/lib/catalog.js`
-  - Session catalog entries and their merge over the runtime catalog.
+  - Session catalog entries and their merge over the runtime catalog, and the catalog database a link names by `db_id`.
 - `src/lib/selection.js` and `src/components/modals/DatabasePickerModal.jsx`
   - Choosing several databases at once: one per `db_id`, the Update All defaults, and the picker shared by the catalog, database lists, and uploads.
 - `src/lib/uploads.js`

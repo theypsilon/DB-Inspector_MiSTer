@@ -4,7 +4,13 @@ import {
   loadRuntimeDatabaseCatalog,
   normalizeComparableUrl,
 } from '../lib/database.js';
-import { createCatalogEntriesFromLoadedSource, getLoadedSourceUrl, mergeCatalogEntries, mergeCustomCatalogEntries } from '../lib/catalog.js';
+import {
+  createCatalogEntriesFromLoadedSource,
+  findCatalogDatabaseUrl,
+  getLoadedSourceUrl,
+  mergeCatalogEntries,
+  mergeCustomCatalogEntries,
+} from '../lib/catalog.js';
 import {
   NO_FILTER_DEFAULTS,
   buildListEntryFilterDefaults,
@@ -40,11 +46,13 @@ import {
 } from '../lib/uploads.js';
 import {
   isCombinedLink,
+  isLinkedDbId,
   linkedDatabaseUrl,
   openStartPage,
   readLink,
   rewriteOldLink,
   writeLinkDatabase,
+  writeLinkDatabases,
   writeLinkFilter,
   writeLinkSession,
 } from '../lib/urlState.js';
@@ -152,6 +160,10 @@ export function createAppModel() {
   const uploadedFiles = new Map();
   let pendingPrompt = null;
   let promptCount = 0;
+  // The runtime catalog's load, once started, and the message of a link waiting for it to find its
+  // db_ids.
+  let runtimeCatalogLoad = null;
+  let linkLookupMessage = '';
   let started = false;
   let connected = false;
 
@@ -629,7 +641,7 @@ export function createAppModel() {
     setState({ loadingMessage: `Fetching ${count}...`, errorMessage: '' });
     clearLoadedSource();
 
-    const results = await Promise.allSettled(requested.map((url) => loadDatabaseSourceUrl(url)));
+    const results = await Promise.allSettled(requested.map((url) => readLinkedDatabase(url)));
     const loaded = [];
     const errors = [];
     results.forEach((result, index) => {
@@ -1192,9 +1204,83 @@ export function createAppModel() {
     });
   }
 
+  // A link written by hand can name databases of the catalog by their db_id rather than their URL
+  // (#db=jtcores). Once the catalog has loaded, each becomes the URL of the first database of the
+  // catalog with that db_id, ignoring letter case, in the link too, without a new history entry:
+  // the page writes links with URLs only. Then `open` opens the link, unless it changed meanwhile
+  // (another link was opened, or the page opened something else). A db_id the catalog does not
+  // have stays, and fails to open (missingDbIdMessage).
+  function openLink(link, open) {
+    endLinkLookup();
+    const dbIds = link.databases.filter(isLinkedDbId);
+    if (!dbIds.length) {
+      open(link);
+      return;
+    }
+
+    void openLinkDbIds(link, dbIds, open);
+  }
+
+  // Takes away the message of the link waiting for the catalog, unless something else replaced it.
+  function endLinkLookup() {
+    const message = linkLookupMessage;
+    linkLookupMessage = '';
+    if (message) {
+      setState((current) => (current.loadingMessage === message ? { loadingMessage: '' } : {}));
+    }
+  }
+
+  async function openLinkDbIds(link, dbIds, open) {
+    linkLookupMessage = `Finding ${dbIds.length === 1 ? dbIds[0] : `${dbIds.length} databases`} in the catalog...`;
+    setState({ loadingMessage: linkLookupMessage });
+    await loadRuntimeCatalog();
+    endLinkLookup();
+    const { databases } = readLink();
+    if (databases.length !== link.databases.length || databases.some((value, index) => value !== link.databases[index])) {
+      return;
+    }
+
+    const { entries } = state.runtimeCatalog;
+    writeLinkDatabases(databases.map((value) => (isLinkedDbId(value) && findCatalogDatabaseUrl(entries, value)) || value));
+    const resolved = readLink();
+    setState({ databaseUrl: linkedDatabaseUrl(resolved) });
+    open(resolved);
+  }
+
+  // A db_id left in a link is one the catalog does not have.
+  function missingDbIdMessage(dbId) {
+    return state.runtimeCatalog.status === 'error'
+      ? `The catalog could not be loaded, so the database with db_id ${dbId} could not be found.`
+      : `The catalog has no database with db_id ${dbId}.`;
+  }
+
+  // Reads one of the databases a link combines.
+  async function readLinkedDatabase(url) {
+    if (isLinkedDbId(url)) {
+      throw new Error(missingDbIdMessage(url));
+    }
+
+    return loadDatabaseSourceUrl(url);
+  }
+
+  // Opens the database a link shows alone.
+  function loadLinkedDatabase(url) {
+    if (!isLinkedDbId(url)) {
+      void loadRemoteSource(INITIAL_CTX, url, { syncLink: false });
+      return;
+    }
+
+    // As a database that cannot be loaded.
+    clearLoadedSource();
+    setState({ errorMessage: missingDbIdMessage(url) });
+  }
+
   // Back/forward navigation: opens what the link names, as when the page was first opened.
   function handlePopState() {
-    const link = readLink();
+    openLink(readLink(), openNavigatedLink);
+  }
+
+  function openNavigatedLink(link) {
     if (isCombinedLink(link)) {
       void loadCombinedSession(INITIAL_CTX, link);
       return;
@@ -1209,7 +1295,7 @@ export function createAppModel() {
     });
 
     if (sharedDatabaseUrl) {
-      void loadRemoteSource(INITIAL_CTX, sharedDatabaseUrl, { syncLink: false });
+      loadLinkedDatabase(sharedDatabaseUrl);
       return;
     }
 
@@ -1233,6 +1319,10 @@ export function createAppModel() {
       setState({ errorMessage: link.error });
     }
 
+    openLink(link, openSharedLink);
+  }
+
+  function openSharedLink(link) {
     if (isCombinedLink(link)) {
       void loadCombinedSession(INITIAL_CTX, link);
       return;
@@ -1240,23 +1330,28 @@ export function createAppModel() {
 
     const sharedDatabaseUrl = linkedDatabaseUrl(link);
     if (sharedDatabaseUrl) {
-      void loadRemoteSource(INITIAL_CTX, sharedDatabaseUrl, { syncLink: false });
+      loadLinkedDatabase(sharedDatabaseUrl);
     }
   }
 
-  // Known databases fetched at runtime from the Update_All and MultiDatabases sources.
-  async function loadRuntimeCatalog() {
-    try {
-      const entries = await loadRuntimeDatabaseCatalog();
-      setState({ runtimeCatalog: { entries, status: 'ready', error: '' } });
-    } catch (loadError) {
-      setState({ runtimeCatalog: { entries: [], status: 'error', error: loadError.message } });
-    }
+  // Known databases fetched at runtime from the Update_All and MultiDatabases sources, once: a
+  // link's db_ids wait for them.
+  function loadRuntimeCatalog() {
+    runtimeCatalogLoad ??= (async () => {
+      try {
+        const entries = await loadRuntimeDatabaseCatalog();
+        setState({ runtimeCatalog: { entries, status: 'ready', error: '' } });
+      } catch (loadError) {
+        setState({ runtimeCatalog: { entries: [], status: 'error', error: loadError.message } });
+      }
+    })();
+    return runtimeCatalogLoad;
   }
 
   // Starts the model on the page, after the reactions of the first render: a shared link opens, and
-  // the catalog loads (after the link, so its request starts first). Returns what stops it: back
-  // and forward navigation are no longer followed, and uploads' object URLs are released.
+  // the catalog loads (after the link, so its request starts first, unless the link waits for the
+  // catalog to find its db_ids). Returns what stops it: back and forward navigation are no longer
+  // followed, and uploads' object URLs are released.
   function connect() {
     if (!started) {
       started = true;

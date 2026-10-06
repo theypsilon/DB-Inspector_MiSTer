@@ -5,7 +5,8 @@ import { Inflate, deflateSync } from 'fflate';
 // %XX an escape), and written in this order:
 //
 // - db=<url>: a database, one per database, in the order they were opened. A single one is shown
-//   alone, unless the link gives it its own filter (see isCombinedLink).
+//   alone, unless the link gives it its own filter (see isCombinedLink). A link written by hand can
+//   name a database of the catalog by its db_id instead (see isLinkedDbId); the page writes URLs.
 // - filter=<terms>: FILTER of a database shown alone, or the shared ([mister]) filter of combined
 //   databases. Without it defaults apply; empty, nothing is filtered.
 // - filter.<db_id>=<terms>: a combined database's own filter.
@@ -178,6 +179,17 @@ export function linkedDatabaseUrl(link) {
   return isCombinedLink(link) ? '' : link.databases[0] ?? '';
 }
 
+// Whether a link's `db` names a database by its db_id (#db=jtcores) rather than by its URL: any
+// value that is not a web address does.
+export function isLinkedDbId(value) {
+  try {
+    const { protocol } = new URL(value);
+    return protocol !== 'http:' && protocol !== 'https:';
+  } catch {
+    return true;
+  }
+}
+
 // The page's address with `link`; other addresses than the app's keep their query.
 function linkPath(link) {
   const base = window.location.pathname + window.location.search;
@@ -224,6 +236,11 @@ function writeLink(changes, { pushHistory = false } = {}) {
 // and keeps FILTER unless `preserveFilter` is false.
 export function writeLinkDatabase(url, { pushHistory = false, preserveFilter = true } = {}) {
   writeLink({ databases: url ? [url] : [], overrides: {}, ...(preserveFilter ? {} : { filter: UNSET }) }, { pushHistory });
+}
+
+// Replaces the link's databases and nothing else, in place: the URLs of the db_ids it named.
+export function writeLinkDatabases(databases) {
+  writeLink({ databases });
 }
 
 export function writeLinkFilter(value, { isPresent = true } = {}) {

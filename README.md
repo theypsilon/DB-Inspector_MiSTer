@@ -23,6 +23,10 @@ Link to a database by putting its URL after `#db=`:
 
 https://theypsilon.github.io/DB-Inspector_MiSTer/#db=https://raw.githubusercontent.com/MiSTer-devel/Distribution_MiSTer/main/db.json.zip
 
+A database of the catalog can be named by its `db_id` instead, which is shorter to write by hand. When several databases of the catalog share that `db_id`, the first one opens:
+
+https://theypsilon.github.io/DB-Inspector_MiSTer/#db=jtcores
+
 The address follows what you see (the databases, the filter, and the section or row you link to), so you can copy it from the address bar to share the view. Links from older versions, `?database-url=<url>`, still open their database.
 
 ## Code Quality

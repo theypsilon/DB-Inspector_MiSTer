@@ -11,6 +11,7 @@ import {
   buildNodeAnchor,
   formatLink,
   isCombinedLink,
+  isLinkedDbId,
   linkedDatabaseUrl,
   parseExplorerAnchor,
   parseLink,
@@ -20,6 +21,7 @@ import {
   rewriteOldLink,
   writeLinkAnchor,
   writeLinkDatabase,
+  writeLinkDatabases,
   writeLinkDetailed,
   writeLinkFilter,
   writeLinkSession,
@@ -187,6 +189,17 @@ test('one database is shown alone unless the link gives it its own filter; sever
   assert.equal(linkedDatabaseUrl(parseLink('filter=arcade')), '');
 });
 
+test('a database named by anything but a web address is named by its db_id', () => {
+  for (const url of ['https://example.com/db.json', 'http://example.com/db.json', ' HTTPS://Example.com/db.json.zip ']) {
+    assert.equal(isLinkedDbId(url), false, url);
+  }
+
+  // db_ids can hold a slash or a colon; nothing else the page could fetch is a URL.
+  for (const dbId of ['jtcores', 'Coin-OpCollection/Distribution-MiSTerFPGA', 'MultiDatabases/sonic-mania', 'odd:id', 'example.com/db.json', 'ftp://example.com/db.json']) {
+    assert.equal(isLinkedDbId(dbId), true, dbId);
+  }
+});
+
 const ROW_ANCHORS = [
   [{ type: 'archive', id: 'archive:cheats_folder_nes' }, 'archives:cheats_folder_nes'],
   [{ type: 'node', id: 'archive:cheats_folder_nes:file:Cheats/NES/a b.zip' }, 'archives:cheats_folder_nes:files:Cheats/NES/a b.zip'],
@@ -349,6 +362,17 @@ test('writing the link changes only what it says, in a new history entry only wh
     writeLinkDatabase('');
     assert.equal(window.location.href, 'https://example.com/app/?ref=chat');
     assert.equal(window.history.length, 4);
+  });
+});
+
+test('the databases a link names can be replaced in place, keeping everything else it says', () => {
+  withBrowser('https://example.com/app/#db=jtcores&db=https://example.com/b.json&filter=arcade&filter.beta=console&detailed&at=issues', (window) => {
+    writeLinkDatabases(['https://example.com/jtcores.json', 'https://example.com/b.json']);
+    assert.equal(
+      window.location.hash,
+      '#db=https://example.com/jtcores.json&db=https://example.com/b.json&filter=arcade&filter.beta=console&detailed&at=issues',
+    );
+    assert.equal(window.history.length, 1);
   });
 });
 
